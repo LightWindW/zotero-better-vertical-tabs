@@ -1,5 +1,5 @@
 menuitem-label = 插件模板: 帮助工具样例
-menupopup-label = Normalize
+menupopup-label = Better Vertical Tabs
 menuitem-submenulabel = 插件模板：子菜单
 
 menuitem-submenulabel-1 = 作者
@@ -22,7 +22,7 @@ menuitem-submenulabel-5 = 使用帮助
 
 
 menuitem-filemenulabel = 插件模板: 文件菜单
-prefs-title = Normalize
+prefs-title = Better Vertical Tabs
 prefs-table-title = 标题
 prefs-table-detail = 详情
 tabpanel-lib-tab-label = 库标签
@@ -58,7 +58,7 @@ dialog-confirm = 确认
 dialog-cancel = 取消
 
 # 弹窗：帮助说明
-dialog-help-title = Normalize 使用说明
+dialog-help-title = Better Vertical Tabs 使用说明
 dialog-help-heading = 使用说明
 dialog-help-content = 插件功能旨在实现批量、手动修改条目数据。请注意Zotero作者双栏格式为姓+名，单栏模式为名+空格+姓。<br><br>功能包括：<br><br>-1. 作者栏错乱修改<br><br>&nbsp;&nbsp;&nbsp;&nbsp;-1.1 作者姓名拆分合并<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- 请针对中文英文文献选择使用不同的处理方式<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;双栏模式姓前名后，单栏模式在中文里保持了姓前名后的阅读习惯，英文里保持名前姓后阅读习惯<br><br>&nbsp;&nbsp;&nbsp;&nbsp;-1.2 交换作者姓名功能（建议在双栏模式下使用，单栏模式则默认使用第一个空格分隔姓和名，中文自动识别常见姓） <br><br>&nbsp;&nbsp;&nbsp;&nbsp;-1.3 当所有作者处于同一行时进行修改 <br><br>&nbsp;&nbsp;&nbsp;&nbsp;-1.4 删除名里的短横线（建议在双栏模式下使用，单栏模式则默认使用最后一个空格分隔姓和名） <br><br>&nbsp;&nbsp;&nbsp;&nbsp;-1.5 手动输入所有作者，并自定义是双栏还是单栏<br><br>-2. 批量修改时间为ISO的YYYY-MM-DD格式<br><br>-3. 批量修改文献语言，也可以自定义<br><br>-4. 批量清空Extra字段，为了方便给条目进行注释
 dialog-close = 关闭

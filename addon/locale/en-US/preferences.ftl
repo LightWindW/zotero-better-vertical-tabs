@@ -1,4 +1,4 @@
-pref-title = Enable or Disable Normalize
+pref-title = Better Vertical Tabs Settings
 pref-enable =
     .label = Enable
 pref-vertical-tabs-enabled =

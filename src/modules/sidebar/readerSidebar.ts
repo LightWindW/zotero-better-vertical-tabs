@@ -224,9 +224,9 @@ function inject(doc: Document): void {
   btn.setAttribute("role", "tab");
   btn.setAttribute("tabindex", "-1");
   btn.setAttribute("aria-selected", "false");
-  btn.title = "垂直标签页 (Normalize)";
+  btn.title = "垂直标签页 (BVT)";
   btn.style.cssText = "display:flex;align-items:center;justify-content:center;";
-  btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="#6C6C6C"/><text x="8" y="12" text-anchor="middle" fill="#fff" font-size="11" font-weight="700" font-family="sans-serif">N</text></svg>`;
+  btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="#6C6C6C"/><text x="8" y="12" text-anchor="middle" fill="#fff" font-size="11" font-weight="700" font-family="sans-serif">V</text></svg>`;
 
   // ── VT panel with header ──
   const panel = doc.createElementNS(
