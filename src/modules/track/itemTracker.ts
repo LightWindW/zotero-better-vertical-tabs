@@ -6,7 +6,6 @@ import {
   getTrackedItems,
 } from "./categoryManager";
 import type { TrackedItemInfo } from "./dataStore";
-import { initReaderSidebar } from "../sidebar/readerSidebar";
 
 export interface OpenedPDF {
   itemId: number;
@@ -16,7 +15,6 @@ export interface OpenedPDF {
   type: string;
   title: string;
   openedAt: number;
-  vtPinned?: boolean;
 }
 
 function vtLog(msg: string): void {
@@ -75,7 +73,6 @@ function updateOpenedAtForTab(tabId: string): void {
       parentItemId: pdf.parentItemId,
       parentItemType: pdf.parentItemType,
       openedAt: now,
-      vtPinned: pdf.vtPinned, // preserve across restart
     });
   }
 }
@@ -85,17 +82,6 @@ async function handleTabAdded(tabId: string): Promise<void> {
   const ztabs = getZoteroTabs();
   const tabInfo = ztabs?.getTabInfo(tabId);
   if (!tabInfo) return;
-
-  // Init reader sidebar injection for reader tabs (before any early return)
-  if (tabInfo.type?.startsWith("reader")) {
-    const vtEnabled = Zotero.Prefs.get(
-      `${config.prefsPrefix}.verticalTabs.enabled`,
-      true,
-    ) as boolean;
-    if (vtEnabled) {
-      initReaderSidebar(tabId);
-    }
-  }
 
   // Track all tab types: reader (PDF), note, etc.
   // Try to get itemId from multiple sources
@@ -151,7 +137,6 @@ async function handleTabAdded(tabId: string): Promise<void> {
     // ignore
   }
 
-  // Carry over vtPinned from persisted tracked data (if any)
   const tracked = getTrackedItems();
   const existingTracked = tracked[itemId];
 
@@ -163,7 +148,6 @@ async function handleTabAdded(tabId: string): Promise<void> {
     type: tabInfo.type,
     title: tabInfo.title || "",
     openedAt: Date.now(),
-    vtPinned: existingTracked?.vtPinned,
   });
 
   // Persist to JSON for restart recovery (only if feature enabled)
@@ -174,7 +158,6 @@ async function handleTabAdded(tabId: string): Promise<void> {
       parentItemId,
       parentItemType,
       openedAt: Date.now(),
-      vtPinned: existingTracked?.vtPinned, // preserve from previous session
     });
   }
 
@@ -222,17 +205,6 @@ export function startTracking(): void {
             _selectedTabId = tabId;
             updateOpenedAtForTab(tabId);
             dispatchPDFsChanged(); // re-render to update active highlight
-            setTimeout(() => {
-              const vtEnabled = Zotero.Prefs.get(
-                `${config.prefsPrefix}.verticalTabs.enabled`,
-                true,
-              ) as boolean;
-              if (!vtEnabled) return;
-              const ti = getZoteroTabs()?.getTabInfo(tabId);
-              if (ti?.type?.startsWith("reader")) {
-                initReaderSidebar(tabId);
-              }
-            }, 500);
           }
         } else if (event === "close") {
           for (const id of ids) {
@@ -398,7 +370,6 @@ export function restoreDormantItems(): void {
       type: info.type,
       title: info.title,
       openedAt: info.openedAt,
-      vtPinned: info.vtPinned,
     });
   }
   if (Object.keys(tracked).length > 0) dispatchPDFsChanged();

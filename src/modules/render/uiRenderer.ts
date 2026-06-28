@@ -16,16 +16,12 @@ import {
   getSelectedTabId,
 } from "../track/itemTracker";
 import { dispatchVtEvent } from "../core/events";
-import { getReaderIconHtml, isDataUri } from "./itemIcons";
-import { bindReaderItemDrag } from "../drag/readerDrag";
 import {
   lightToDark,
   isDarkMode,
   watchDarkMode,
   getContextMenuColors,
 } from "./colorUtils";
-
-const _readerDocLogged = new WeakSet<Document>();
 
 interface ItemInfo {
   title: string;
@@ -159,30 +155,10 @@ function createItemElement(
       };
 
   const row = createEl(doc, "div");
-  const isReaderDoc = doc.URL?.startsWith("resource://zotero/reader/");
   row.className =
     "vertical-tabs-item" +
     (pdf.tabId && pdf.tabId === getSelectedTabId() ? " active" : "");
-  // Reader sandbox uses manual mouse drag; HTML5 DnD draggable would steal events.
-  row.draggable = !isReaderDoc;
-  if (isReaderDoc) {
-    bindReaderItemDrag(row);
-    if (!_readerDocLogged.has(doc)) {
-      _readerDocLogged.add(doc);
-      try {
-        Zotero.logError(
-          new Error(
-            "[BVT] render reader item docURL=" +
-              doc.URL +
-              " draggable=" +
-              row.draggable,
-          ),
-        );
-      } catch {
-        // ignore
-      }
-    }
-  }
+  row.draggable = true;
   row.dataset.itemId = String(pdf.itemId);
   row.dataset.tabId = pdf.tabId;
   row.dataset.tabType = pdf.type;
@@ -192,51 +168,16 @@ function createItemElement(
   const isNote = pdf.type === "note" || pdf.type?.startsWith("note");
   const iconItemId = isNote ? pdf.itemId : (pdf.parentItemId ?? pdf.itemId);
 
-  if (isReaderDoc) {
-    // Reader sandbox: chrome://zotero/skin/ icons blocked by CSP
-    // → use local inline SVG icons from itemIcons module.
-    // Priority: pre-cached parentItemType → item already in memory → empty
-    let itemType = isNote ? "note" : pdf.parentItemType || "";
-    if (!itemType && item) {
-      itemType = (item as Zotero.Item).itemType;
-    }
-    const iconHtml = getReaderIconHtml(itemType);
-    if (iconHtml) {
-      if (isDataUri(iconHtml)) {
-        // Cached native Zotero icon → render as <img> (data: URI, CSP-safe)
-        const imgEl = createEl(doc, "img") as HTMLImageElement;
-        imgEl.className = "vertical-tabs-item-icon";
-        imgEl.src = iconHtml;
-        row.appendChild(imgEl);
-      } else {
-        // Inline SVG fallback → render as div.innerHTML
-        const iconWrapper = createEl(doc, "div");
-        iconWrapper.className = "vertical-tabs-item-icon";
-        iconWrapper.innerHTML = iconHtml;
-        row.appendChild(iconWrapper);
-      }
-    } else {
-      // Unknown type: inline text fallback (never load chrome:// img)
-      const fb = createEl(doc, "div");
-      fb.className = "vertical-tabs-item-icon-fallback";
-      fb.textContent = isNote ? "N" : "P";
-      fb.style.cssText =
-        "width:16px;height:16px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;background:" +
-        (isNote ? "#f39c12" : "#e74c3c");
-      row.appendChild(fb);
-    }
+  if (!isNote && !pdf.parentItemId) {
+    // Standalone PDF attachment without a parent item → red "P" fallback
+    const fb = createEl(doc, "div");
+    fb.className = "vertical-tabs-item-icon-fallback";
+    fb.textContent = "P";
+    fb.style.cssText =
+      "width:16px;height:16px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;background:#e74c3c";
+    row.appendChild(fb);
   } else {
-    if (!isNote && !pdf.parentItemId) {
-      // Standalone PDF attachment without a parent item → red "P" fallback
-      const fb = createEl(doc, "div");
-      fb.className = "vertical-tabs-item-icon-fallback";
-      fb.textContent = "P";
-      fb.style.cssText =
-        "width:16px;height:16px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;background:#e74c3c";
-      row.appendChild(fb);
-    } else {
-      renderIconWithFallback(doc, row, iconItemId, isNote);
-    }
+    renderIconWithFallback(doc, row, iconItemId, isNote);
   }
 
   // ── Right: content block ──

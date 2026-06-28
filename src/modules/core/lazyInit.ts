@@ -33,8 +33,6 @@ import {
 } from "../render/uiRenderer";
 import { destroyAutoClose, initAutoClose } from "../track/autoClose";
 import { dispatchVtEvent } from "./events";
-import { destroyReaderSidebars } from "../sidebar/readerSidebar";
-import { preloadZoteroIcons } from "../render/itemIcons";
 
 function vtLog(msg: string): void {
   Zotero.logError(new Error("[BVT] " + msg));
@@ -76,9 +74,6 @@ export async function initVerticalTabs(
     true,
   ) as boolean;
   const visible = enabled && mainPageEnabled;
-
-  // Pre-load Zotero native icons in background (for reader sidebar)
-  void preloadZoteroIcons();
 
   startTracking();
   await initCategoryManager(win.document);
@@ -131,7 +126,6 @@ export async function initVerticalTabs(
           } else {
             stopTracking();
             destroySidebar(w.document);
-            destroyReaderSidebars();
             ws.visible = false;
             Zotero.Prefs.set(
               `${PREF_NAMESPACE}.verticalTabs.mainPageEnabled`,
@@ -264,7 +258,6 @@ export function destroyVerticalTabs(win: Window): void {
   if (!state.initialized) return;
 
   destroyAutoClose();
-  destroyReaderSidebars();
 
   unsubscribeFromRenderEvents(win.document);
   destroyHoverCard(win.document);
