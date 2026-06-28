@@ -1,5 +1,5 @@
 {
-  "extends": "zotero-types/entries/sandbox/",
+  "extends": "./node_modules/zotero-types/entries/sandbox/tsconfig.json",
   "include": ["src", "typings"],
   "exclude": ["build", "addon"]
 }
