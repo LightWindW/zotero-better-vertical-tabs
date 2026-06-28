@@ -4,30 +4,152 @@
 <groupbox
   onload="Zotero.__addonInstance__.hooks.onPrefsEvent('load', { window })"
 >
-  <label><html:h2 data-l10n-id="pref-title"></html:h2></label>
+  <label><html:h2 data-l10n-id="pref-vertical-tabs-section-title" /></label>
+
   <checkbox
-    id="zotero-prefpane-__addonRef__-enable"
-    preference="enable"
-    data-l10n-id="pref-enable"
+    id="zotero-prefpane-__addonRef__-vertical-tabs-enabled"
+    preference="verticalTabs.enabled"
+    data-l10n-id="pref-vertical-tabs-enabled"
   />
-  <hbox>
-    <html:label
-      for="zotero-prefpane-__addonRef__-input"
-      data-l10n-id="pref-input"
-    ></html:label>
+
+  <checkbox
+    id="zotero-prefpane-__addonRef__-main-page-enabled"
+    preference="verticalTabs.mainPageEnabled"
+    data-l10n-id="pref-vertical-tabs-main-page-enabled"
+    style="margin-left: 2em"
+  />
+
+  <checkbox
+    id="zotero-prefpane-__addonRef__-remember-categories"
+    preference="verticalTabs.rememberCategories"
+    data-l10n-id="pref-vertical-tabs-remember-categories"
+  />
+
+  <checkbox
+    id="zotero-prefpane-__addonRef__-show-extra"
+    preference="verticalTabs.showExtra"
+    data-l10n-id="pref-vertical-tabs-show-extra"
+  />
+
+  <html:div
+    style="display: flex; align-items: center; gap: 6px; margin-top: 4px"
+  >
+    <checkbox
+      id="zotero-prefpane-__addonRef__-auto-close-enabled"
+      preference="verticalTabs.autoCloseEnabled"
+      data-l10n-id="pref-vertical-tabs-auto-close-enabled"
+    />
     <html:input
-      type="text"
-      id="zotero-prefpane-__addonRef__-input"
-      preference="input"
-    ></html:input>
-  </hbox>
-  <hbox class="virtualized-table-container" flex="1" height="300px">
-    <html:div id="__addonRef__-table-container" />
-  </hbox>
+      type="number"
+      id="__addonRef__-auto-close-days"
+      preference="verticalTabs.autoCloseDays"
+      min="1"
+      max="365"
+      style="width: 60px"
+    />
+    <html:label
+      for="__addonRef__-auto-close-days"
+      data-l10n-id="pref-vertical-tabs-auto-close-days-label"
+    />
+  </html:div>
+
+  <html:div style="margin-top: 8px">
+    <html:label
+      style="font-weight: 600"
+      data-l10n-id="pref-vertical-tabs-category-colors"
+    />
+    <html:div
+      style="font-size: 11px; color: #888; margin-top: 2px"
+      data-l10n-id="pref-vertical-tabs-category-colors-hint"
+    />
+    <html:table style="margin-top: 4px; border-collapse: collapse">
+      <html:tr>
+        <html:td style="padding: 3px 6px; font-size: 12px">1</html:td>
+        <html:td>
+          <html:div
+            style="
+              width: 40px;
+              height: 20px;
+              background: #f2f2f2;
+              border: 1px solid #999;
+              border-radius: 3px;
+            "
+          ></html:div>
+        </html:td>
+        <html:td
+          style="padding: 3px 6px; font-size: 12px; color: #888"
+          data-l10n-id="pref-vertical-tabs-category-colors-default"
+        />
+      </html:tr>
+      <html:tr>
+        <html:td style="padding: 3px 6px; font-size: 12px">2</html:td>
+        <html:td>
+          <html:input
+            type="text"
+            id="__addonRef__-cat-color-2"
+            style="width: 80px"
+            value="#BCD5C7"
+          />
+        </html:td>
+      </html:tr>
+      <html:tr>
+        <html:td style="padding: 3px 6px; font-size: 12px">3</html:td>
+        <html:td>
+          <html:input
+            type="text"
+            id="__addonRef__-cat-color-3"
+            style="width: 80px"
+            value="#C0D0D0"
+          />
+        </html:td>
+      </html:tr>
+      <html:tr>
+        <html:td style="padding: 3px 6px; font-size: 12px">4</html:td>
+        <html:td>
+          <html:input
+            type="text"
+            id="__addonRef__-cat-color-4"
+            style="width: 80px"
+            value="#E0DBD7"
+          />
+        </html:td>
+      </html:tr>
+      <html:tr>
+        <html:td style="padding: 3px 6px; font-size: 12px">5</html:td>
+        <html:td>
+          <html:input
+            type="text"
+            id="__addonRef__-cat-color-5"
+            style="width: 80px"
+            value="#DEBFAE"
+          />
+        </html:td>
+      </html:tr>
+      <html:tr>
+        <html:td style="padding: 3px 6px; font-size: 12px">6</html:td>
+        <html:td>
+          <html:input
+            type="text"
+            id="__addonRef__-cat-color-6"
+            style="width: 80px"
+            value="#E3C1C5"
+          />
+        </html:td>
+      </html:tr>
+    </html:table>
+  </html:div>
+
+  <html:div style="margin-top: 16px">
+    <html:label
+      style="font-weight: 600"
+      data-l10n-id="pref-vertical-tabs-debug"
+    />
+    <html:div style="margin-top: 4px">
+      <html:button
+        id="__addonRef__-clear-vt-data"
+        data-l10n-id="pref-vertical-tabs-clear-data"
+        style="padding: 4px 12px; cursor: pointer"
+      />
+    </html:div>
+  </html:div>
 </groupbox>
-<vbox>
-  <html:label
-    data-l10n-id="pref-help"
-    data-l10n-args='{"time": "__buildTime__","name": "__addonName__","version":"__buildVersion__"}'
-  ></html:label>
-</vbox>

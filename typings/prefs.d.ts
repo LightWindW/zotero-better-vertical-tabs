@@ -7,8 +7,14 @@
 declare namespace _ZoteroTypes {
   interface Prefs {
     PluginPrefsMap: {
-      "enable": boolean;
-      "input": string;
+      "verticalTabs.enabled": boolean;
+      "verticalTabs.mainPageEnabled": boolean;
+      "verticalTabs.collapsed": boolean;
+      "verticalTabs.categoryColors": string;
+      "verticalTabs.rememberCategories": boolean;
+      "verticalTabs.showExtra": boolean;
+      "verticalTabs.autoCloseEnabled": boolean;
+      "verticalTabs.autoCloseDays": number;
     };
   }
 }

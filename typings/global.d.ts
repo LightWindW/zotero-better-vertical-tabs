@@ -15,4 +15,8 @@ declare const rootURI: string;
 
 declare const addon: import("../src/addon").default;
 
+declare const Zotero_Tabs: _ZoteroTypes.Zotero_Tabs;
+
+declare function dump(msg: string): void;
+
 declare const __env__: "production" | "development";

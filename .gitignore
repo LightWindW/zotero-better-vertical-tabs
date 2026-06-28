@@ -14,3 +14,9 @@ tsconfig.tsbuildinfo
 .scaffold
 build
 logs
+
+#Claude
+.claude/
+CLAUDE.md
+memory-bank/
+other/
