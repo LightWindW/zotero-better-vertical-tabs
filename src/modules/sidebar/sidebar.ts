@@ -5,6 +5,8 @@ import {
   removeStyles,
   SIDEBAR_ID,
   TOGGLE_BTN_ID,
+  WRAPPER_ID,
+  SPLITTER_ID,
 } from "../render/styles";
 import { dispatchVtEvent } from "../core/events";
 
@@ -15,6 +17,7 @@ const MAX_WIDTH = 800;
 const RESIZE_HANDLE_CLASS = "vertical-tabs-resize-handle";
 const HOVER_STRIP_CLASS = "vertical-tabs-hover-strip";
 const PIN_BTN_CLASS = "vertical-tabs-pin-btn";
+const HOVER_STRIP_WIDTH = 24;
 type TimerHandle = ReturnType<typeof setTimeout>;
 
 const HOVER_DELAY_MS = 300;
@@ -55,30 +58,89 @@ export function setPinned(pinned: boolean): void {
 }
 
 /**
- * Insert sidebar right BEFORE #zotero-collections-pane inside its parent.
- * This puts the sidebar to the LEFT of the collections pane.
+ * Create or retrieve the wrapper <vbox> and <splitter> inside
+ * <hbox id="browser">, placed before <deck id="tabs-deck">.
+ * This makes the VT appear above both the main page and the reader page.
  */
-function findInsertBeforeCollections(
+function findOrCreateWrapper(
   doc: Document,
-): { container: Node; before: Node } | null {
-  const collectionsPane = doc.getElementById("zotero-collections-pane");
-  if (!collectionsPane || !collectionsPane.parentNode) return null;
-  return {
-    container: collectionsPane.parentNode,
-    before: collectionsPane,
+): { wrapper: HTMLElement; splitter: HTMLElement } | null {
+  let wrapper = doc.getElementById(WRAPPER_ID) as HTMLElement | null;
+  let splitter = doc.getElementById(SPLITTER_ID) as HTMLElement | null;
+  if (wrapper && splitter) {
+    return { wrapper, splitter };
+  }
+
+  const browser = doc.getElementById("browser");
+  const tabsDeck = doc.getElementById("tabs-deck");
+
+  vtLog(
+    "findOrCreateWrapper: browser=" +
+      (browser ? browser.tagName : "null") +
+      " tabsDeck=" +
+      (tabsDeck ? tabsDeck.tagName : "null") +
+      " tabsDeckParent=" +
+      (tabsDeck?.parentNode
+        ? (tabsDeck.parentNode as Element).tagName || "#document"
+        : "null"),
+  );
+
+  if (!browser || !tabsDeck) {
+    return null;
+  }
+
+  const xulNS = "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul";
+  const createXul = (tag: string): HTMLElement => {
+    const create = (doc as any).createXULElement as
+      | ((tag: string) => HTMLElement)
+      | undefined;
+    if (create) {
+      return create.call(doc, tag);
+    }
+    return doc.createElementNS(xulNS, tag) as HTMLElement;
   };
+
+  function safeInsert(node: Node, before: Node | null): void {
+    if (before && before.parentNode) {
+      before.parentNode.insertBefore(node, before);
+    } else if (browser) {
+      browser.appendChild(node);
+    }
+  }
+
+  if (!wrapper) {
+    wrapper = createXul("vbox");
+    wrapper.id = WRAPPER_ID;
+    wrapper.setAttribute("flex", "0");
+    wrapper.style.position = "relative";
+    wrapper.style.overflow = "visible";
+    wrapper.style.flexShrink = "0";
+    safeInsert(wrapper, tabsDeck);
+  }
+
+  if (!splitter) {
+    splitter = createXul("splitter");
+    splitter.id = SPLITTER_ID;
+    splitter.setAttribute("collapse", "none");
+    splitter.style.flexShrink = "0";
+    safeInsert(splitter, tabsDeck);
+  }
+
+  return { wrapper, splitter };
 }
 
-function ensurePositionedContainer(container: HTMLElement): void {
-  const ownerDoc = container.ownerDocument;
-  if (!ownerDoc) return;
-  const view = ownerDoc.defaultView;
-  if (!view) return;
-  const style = view.getComputedStyle(container);
-  if (!style) return;
-  if (style.position === "static") {
-    container.style.position = "relative";
-  }
+function getWrapper(doc: Document): HTMLElement | null {
+  return doc.getElementById(WRAPPER_ID) as HTMLElement | null;
+}
+
+function getSplitter(doc: Document): HTMLElement | null {
+  return doc.getElementById(SPLITTER_ID) as HTMLElement | null;
+}
+
+function removeWrapper(doc: Document): void {
+  getWrapper(doc)?.remove();
+  getSplitter(doc)?.remove();
+  clearWidthObserver(doc);
 }
 
 function getHoverStrip(doc: Document): HTMLElement | null {
@@ -113,10 +175,9 @@ function createHoverStrip(doc: Document): HTMLElement {
   icon.style.height = "16px";
   strip.appendChild(icon);
 
-  const target = findInsertBeforeCollections(doc);
+  const target = findOrCreateWrapper(doc);
   if (target) {
-    ensurePositionedContainer(target.container as HTMLElement);
-    target.container.insertBefore(strip, target.before);
+    target.wrapper.appendChild(strip);
   } else {
     const pane = doc.getElementById("zotero-pane") || doc.body;
     if (pane) {
@@ -153,6 +214,7 @@ interface DocState {
   searchFocused: boolean;
   waitMouseMoveAfterInput: boolean;
   inputPositionCleanup: (() => void) | null;
+  widthObserverCleanup: (() => void) | null;
 }
 
 function getDocState(doc: Document): DocState {
@@ -167,6 +229,7 @@ function getDocState(doc: Document): DocState {
       searchFocused: false,
       waitMouseMoveAfterInput: false,
       inputPositionCleanup: null,
+      widthObserverCleanup: null,
     };
     (doc as any)[key] = state;
   }
@@ -206,6 +269,52 @@ function clearInputPositionListener(doc: Document): void {
     state.inputPositionCleanup();
     state.inputPositionCleanup = null;
   }
+}
+
+function clearWidthObserver(doc: Document): void {
+  const state = getDocState(doc);
+  if (state.widthObserverCleanup) {
+    state.widthObserverCleanup();
+    state.widthObserverCleanup = null;
+  }
+}
+
+function setupWidthObserver(doc: Document, wrapper: HTMLElement): void {
+  clearWidthObserver(doc);
+  const win = doc.defaultView;
+  if (!win) return;
+
+  let lastWidth = wrapper.clientWidth;
+  const save = () => {
+    const w = wrapper.clientWidth;
+    if (w > 0 && w !== lastWidth) {
+      lastWidth = w;
+      saveWidth(w);
+    }
+  };
+
+  const RO = (win as any).ResizeObserver as
+    | (new (cb: () => void) => {
+        disconnect: () => void;
+        observe: (el: Element) => void;
+      })
+    | undefined;
+  if (RO) {
+    const ro = new RO(save);
+    ro.observe(wrapper);
+    getDocState(doc).widthObserverCleanup = () => ro.disconnect();
+    return;
+  }
+
+  // Fallback: poll width every 500ms when wrapper is connected
+  const timer = setInterval(() => {
+    if (!wrapper.isConnected) {
+      clearWidthObserver(doc);
+      return;
+    }
+    save();
+  }, 500);
+  getDocState(doc).widthObserverCleanup = () => clearInterval(timer);
 }
 
 function isMouseOverVt(
@@ -398,9 +507,9 @@ export function createSidebar(doc: Document): HTMLElement {
     ],
   }) as HTMLElement;
 
-  // Apply saved width
-  const savedWidth = getSavedWidth();
-  sidebar.style.width = `${savedWidth}px`;
+  // Width is set by renderSidebarMode depending on pinned/floating mode.
+  // Floating: explicit pixel width; Pinned: fills wrapper (100%).
+  sidebar.style.width = `${getSavedWidth()}px`;
 
   // Search input: dispatch filter event on input
   const searchInput = sidebar.querySelector(
@@ -507,15 +616,10 @@ export function createSidebar(doc: Document): HTMLElement {
     doc.addEventListener("mouseup", onMouseUp);
   });
 
-  // Insert into the layout — BEFORE collections pane (left side)
-  const target = findInsertBeforeCollections(doc);
+  // Insert into the wrapper vbox inside #browser (before #tabs-deck)
+  const target = findOrCreateWrapper(doc);
   if (target) {
-    try {
-      ensurePositionedContainer(target.container as HTMLElement);
-      target.container.insertBefore(sidebar, target.before);
-    } catch (e) {
-      doc.body?.appendChild(sidebar);
-    }
+    target.wrapper.appendChild(sidebar);
   } else {
     const pane = doc.getElementById("zotero-pane") || doc.body;
     if (pane) {
@@ -607,6 +711,44 @@ export function collapseFloatingSidebar(doc: Document): void {
   performCollapse(doc);
 }
 
+function setResizeHandleVisible(doc: Document, visible: boolean): void {
+  const sidebar = getSidebar(doc);
+  if (!sidebar) return;
+  const handle = sidebar.querySelector(
+    `.${RESIZE_HANDLE_CLASS}`,
+  ) as HTMLElement | null;
+  if (!handle) return;
+  handle.style.display = visible ? "" : "none";
+}
+
+function setWrapperAndSplitter(
+  doc: Document,
+  mode: "pinned" | "floating",
+): void {
+  const target = findOrCreateWrapper(doc);
+  if (!target) return;
+  const { wrapper, splitter } = target;
+  const savedWidth = getSavedWidth();
+
+  if (mode === "pinned") {
+    wrapper.style.width = `${savedWidth}px`;
+    wrapper.style.minWidth = `${MIN_WIDTH}px`;
+    wrapper.style.maxWidth = `${MAX_WIDTH}px`;
+    wrapper.removeAttribute("hidden");
+    splitter.removeAttribute("hidden");
+    splitter.style.display = "";
+    setupWidthObserver(doc, wrapper);
+  } else {
+    wrapper.style.width = `${HOVER_STRIP_WIDTH}px`;
+    wrapper.style.minWidth = `${HOVER_STRIP_WIDTH}px`;
+    wrapper.style.maxWidth = `${HOVER_STRIP_WIDTH}px`;
+    wrapper.removeAttribute("hidden");
+    splitter.setAttribute("hidden", "true");
+    splitter.style.display = "none";
+    clearWidthObserver(doc);
+  }
+}
+
 export function renderSidebarMode(doc: Document): HTMLElement | null {
   const mainPageEnabled = Zotero.Prefs.get(
     `${PREF_NAMESPACE}.verticalTabs.mainPageEnabled`,
@@ -635,13 +777,19 @@ export function renderSidebarMode(doc: Document): HTMLElement | null {
     sidebar.classList.remove("vertical-tabs-sidebar-expanded");
     sidebar.removeAttribute("hidden");
     sidebar.style.display = "";
+    sidebar.style.width = "100%";
     setFloatingExpanded(doc, false);
+    setResizeHandleVisible(doc, false);
+    setWrapperAndSplitter(doc, "pinned");
   } else {
     applySidebarClasses(sidebar, "floating");
     sidebar.classList.remove("vertical-tabs-sidebar-expanded");
     sidebar.removeAttribute("hidden");
     sidebar.style.display = "";
+    sidebar.style.width = `${getSavedWidth()}px`;
     setFloatingExpanded(doc, false);
+    setResizeHandleVisible(doc, true);
+    setWrapperAndSplitter(doc, "floating");
     createHoverStrip(doc);
   }
 
@@ -690,10 +838,12 @@ export function destroySidebar(doc: Document): void {
   clearHoverTimer(doc);
   clearLeaveTimer(doc);
   clearInputPositionListener(doc);
+  clearWidthObserver(doc);
   setWaitMouseMoveAfterInput(doc, false);
   const sidebar = getSidebar(doc);
   if (sidebar) sidebar.remove();
   removeHoverStrip(doc);
+  removeWrapper(doc);
   removeStyles(doc);
 }
 

@@ -3,6 +3,8 @@ import { config } from "../../../package.json";
 const PANEL_WIDTH = "260px";
 const TOGGLE_BTN_ID = `${config.addonRef}-vertical-tabs-toggle`;
 const SIDEBAR_ID = `${config.addonRef}-vertical-tabs-sidebar`;
+const WRAPPER_ID = `${config.addonRef}-vertical-tabs-wrapper`;
+const SPLITTER_ID = `${config.addonRef}-vertical-tabs-splitter`;
 const STYLE_ID = `${config.addonRef}-vertical-tabs-styles`;
 
 export function injectStyles(doc: Document): void {
@@ -44,6 +46,8 @@ export function getStyles(): string {
 
     #${SIDEBAR_ID}.vertical-tabs-sidebar-pinned {
       position: relative;
+      width: 100% !important;
+      height: 100%;
       flex-shrink: 0;
     }
 
@@ -539,20 +543,37 @@ export function getStyles(): string {
       }
     }
 
-    /* Reader sidebar context: override structural styles
-       #sidebarContainer is Zotero's reader sidebar wrapper.
-       When the VT panel is inserted inside the reader sidebar,
-       it should fill the available space, not use the main-sidebar width. */
-    #sidebarContainer #${SIDEBAR_ID} {
-      width: 100%;
-      height: 100%;
-      flex-shrink: 1;
-      min-width: 0;
-      max-width: none;
-      border-right: none;
-      position: static;
+    /* Wrapper and splitter: VT sits in a vbox inside #browser, before #tabs-deck */
+    #${WRAPPER_ID} {
+      flex-shrink: 0;
+      overflow: visible;
+      position: relative;
+    }
+
+    #${WRAPPER_ID}[hidden] {
+      display: none !important;
+    }
+
+    #${SPLITTER_ID} {
+      width: 4px;
+      min-width: 4px;
+      background: var(--material-border, #ccc);
+      cursor: col-resize;
+      border-right: 1px solid var(--material-border, #ccc);
+      flex-shrink: 0;
+    }
+
+    #${SPLITTER_ID}[hidden] {
+      display: none !important;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      #${SPLITTER_ID} {
+        background: var(--material-border, #555);
+        border-right-color: var(--material-border, #555);
+      }
     }
   `;
 }
 
-export { SIDEBAR_ID, TOGGLE_BTN_ID };
+export { SIDEBAR_ID, TOGGLE_BTN_ID, WRAPPER_ID, SPLITTER_ID };
