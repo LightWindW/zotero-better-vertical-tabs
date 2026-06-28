@@ -2,6 +2,7 @@ import { config } from "../../../package.json";
 import { getString } from "../../utils/locale";
 import { getItemInfo } from "../render/uiRenderer";
 import { isDarkMode, watchDarkMode } from "../render/colorUtils";
+import { SIDEBAR_ID } from "../sidebar/sidebar";
 
 const CARD_ID = "vertical-tabs-hover-card";
 const SHOW_DELAY_MS = 150;
@@ -215,6 +216,11 @@ function handleItemHover(event: Event): void {
   const target = event.target as HTMLElement;
   const doc = target.ownerDocument;
   if (!doc) return;
+
+  const sidebar = doc.getElementById(SIDEBAR_ID);
+  if (!sidebar?.classList.contains("vertical-tabs-sidebar-expanded")) {
+    return;
+  }
 
   _currentTarget = target;
 

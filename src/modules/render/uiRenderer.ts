@@ -724,6 +724,18 @@ export function renderCategories(
   data: VerticalTabsData,
   pdfs: OpenedPDF[],
 ): void {
+  // Preserve per-category collapsed state across re-renders so that
+  // VT expand/collapse does not reset category folding.
+  const previousStates = new Map<string, boolean>();
+  container
+    .querySelectorAll(".vertical-tabs-category")
+    .forEach((el: Element) => {
+      const categoryId = (el as HTMLElement).dataset.categoryId;
+      if (categoryId) {
+        previousStates.set(categoryId, el.classList.contains("collapsed"));
+      }
+    });
+
   container.innerHTML = "";
 
   // Match by tabId (for independent cloned tabs), fallback to itemId
@@ -777,7 +789,10 @@ export function renderCategories(
     const items =
       categorizedPdfs.find((entry) => entry.category.id === category.id)
         ?.items || [];
-    container.appendChild(createCategoryElement(doc, category, items, false));
+    const collapsed = previousStates.get(category.id) ?? false;
+    container.appendChild(
+      createCategoryElement(doc, category, items, collapsed),
+    );
   }
 
   if (uncategorizedPdfs.length > 0) {
