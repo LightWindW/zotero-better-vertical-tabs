@@ -1,6 +1,13 @@
 import { config } from "../../../package.json";
 import { getString } from "../../utils/locale";
-import { getCategoriesContainer } from "../sidebar/sidebar";
+import {
+  collapseFloatingSidebar,
+  getCategoriesContainer,
+  HOVER_STRIP_CLASS,
+  scheduleCollapse,
+  setContextMenuOpen,
+  SIDEBAR_ID,
+} from "../sidebar/sidebar";
 import type { Category, VerticalTabsData } from "../track/dataStore";
 import type { OpenedPDF } from "../track/itemTracker";
 import {
@@ -675,6 +682,8 @@ export function showItemContextMenu(
     });
     el.addEventListener("click", () => {
       menu.remove();
+      setContextMenuOpen(doc, false);
+      scheduleCollapse(doc);
       action();
     });
     menu.appendChild(el);
@@ -734,21 +743,36 @@ export function showItemContextMenu(
   });
 
   doc.documentElement?.appendChild(menu);
+  setContextMenuOpen(doc, true);
 
   const menuId = menu.id;
-  const closeMenu = (e: MouseEvent) => {
-    if (!menu.isConnected) {
-      doc.removeEventListener("mousedown", closeMenu, true);
-      for (const w of Zotero.getMainWindows())
-        w.document.removeEventListener("mousedown", closeMenu, true);
-      return;
-    }
-    // Don't close if clicking inside the menu
-    if ((e.target as HTMLElement).closest(`#${menuId}`)) return;
-    menu.remove();
+  const cleanup = () => {
     doc.removeEventListener("mousedown", closeMenu, true);
     for (const w of Zotero.getMainWindows())
       w.document.removeEventListener("mousedown", closeMenu, true);
+  };
+  const closeMenu = (e: MouseEvent) => {
+    if (!menu.isConnected) {
+      cleanup();
+      return;
+    }
+    const target = e.target as HTMLElement;
+    // Don't close if clicking inside the menu
+    if (target.closest(`#${menuId}`)) return;
+    // Click inside VT (e.g. right-click another item) → close menu, keep VT open
+    if (
+      target.closest(`#${SIDEBAR_ID}`) ||
+      target.closest(`.${HOVER_STRIP_CLASS}`)
+    ) {
+      menu.remove();
+      setContextMenuOpen(doc, false);
+      cleanup();
+      return;
+    }
+    menu.remove();
+    setContextMenuOpen(doc, false);
+    scheduleCollapse(doc);
+    cleanup();
   };
   setTimeout(() => {
     doc.addEventListener("mousedown", closeMenu, true);

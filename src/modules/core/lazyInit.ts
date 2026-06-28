@@ -9,7 +9,14 @@ import {
   populateCategoryTabIds,
 } from "../track/categoryManager";
 import { destroyHoverCard, initHoverCard } from "../ui/hoverCard";
-import { destroySidebar, setSidebarVisibility } from "../sidebar/sidebar";
+import {
+  destroySidebar,
+  setSidebarVisibility,
+  renderSidebarMode,
+  expandFloatingSidebar,
+  collapseFloatingSidebar,
+  isPinned,
+} from "../sidebar/sidebar";
 import {
   getOpenedPDFs,
   refreshOpenedPDFs,
@@ -39,6 +46,7 @@ const PREF_NAMESPACE = config.prefsPrefix;
 let _prefsObserverID: symbol | null = null;
 let _showExtraObserverID: symbol | null = null;
 let _mainPageObserverID: symbol | null = null;
+let _pinnedObserverID: symbol | null = null;
 
 interface WindowState {
   initialized: boolean;
@@ -51,22 +59,6 @@ function getWindowState(win: Window): WindowState {
   const state: WindowState = { initialized: false, visible: false };
   (win as any)[WINDOW_STATE_KEY] = state;
   return state;
-}
-
-function isCollapsed(): boolean {
-  return (
-    (Zotero.Prefs.get(`${PREF_NAMESPACE}.verticalTabs.collapsed`, false) as
-      | boolean
-      | undefined) ?? false
-  );
-}
-
-function setCollapsed(collapsed: boolean): void {
-  Zotero.Prefs.set(
-    `${PREF_NAMESPACE}.verticalTabs.collapsed`,
-    collapsed,
-    false,
-  );
 }
 
 export async function initVerticalTabs(
@@ -83,8 +75,7 @@ export async function initVerticalTabs(
     `${PREF_NAMESPACE}.verticalTabs.mainPageEnabled`,
     true,
   ) as boolean;
-  const collapsed = isCollapsed();
-  const visible = enabled && mainPageEnabled && !collapsed;
+  const visible = enabled && mainPageEnabled;
 
   // Pre-load Zotero native icons in background (for reader sidebar)
   void preloadZoteroIcons();
@@ -108,8 +99,8 @@ export async function initVerticalTabs(
     getOpenedPDFs,
   );
 
-  if (enabled && mainPageEnabled) {
-    const sidebar = setSidebarVisibility(win.document, visible);
+  if (visible) {
+    setSidebarVisibility(win.document, true);
   }
 
   state.initialized = true;
@@ -131,7 +122,6 @@ export async function initVerticalTabs(
               false,
             );
             setSidebarVisibility(w.document, true);
-            setCollapsed(false);
             ws.visible = true;
             // Re-scan existing tabs to re-inject reader VT
             scanOpenedTabs();
@@ -182,7 +172,6 @@ export async function initVerticalTabs(
           ) as boolean;
           if (globallyEnabled && value) {
             setSidebarVisibility(w.document, true);
-            setCollapsed(false);
             ws.visible = true;
             dispatchVtEvent(w.document, "vertical-tabs:visibility-changed", {
               visible: true,
@@ -197,28 +186,51 @@ export async function initVerticalTabs(
     );
   }
 
+  // Register preference observer for pinned toggle
+  if (!_pinnedObserverID) {
+    _pinnedObserverID = Zotero.Prefs.registerObserver(
+      `${PREF_NAMESPACE}.verticalTabs.pinned`,
+      () => {
+        for (const w of Zotero.getMainWindows()) {
+          const ws = getWindowState(w);
+          if (!ws.initialized) continue;
+          const globallyEnabled = Zotero.Prefs.get(
+            `${PREF_NAMESPACE}.verticalTabs.enabled`,
+            true,
+          ) as boolean;
+          const mainPageEnabled = Zotero.Prefs.get(
+            `${PREF_NAMESPACE}.verticalTabs.mainPageEnabled`,
+            true,
+          ) as boolean;
+          if (globallyEnabled && mainPageEnabled) {
+            setSidebarVisibility(w.document, true);
+            dispatchVtEvent(w.document, "vertical-tabs:visibility-changed", {
+              visible: true,
+            });
+          }
+        }
+      },
+    );
+  }
+
   // Bind collapse / expand events on the document
   win.document.addEventListener("vertical-tabs:collapse", () => {
-    const mainOk = Zotero.Prefs.get(
-      `${PREF_NAMESPACE}.verticalTabs.mainPageEnabled`,
-      true,
-    ) as boolean;
-    if (mainOk) {
-      setSidebarVisibility(win.document, false);
-    } else {
+    if (isPinned()) {
+      // In pinned mode, collapse is not used; treat as hide for compatibility
       destroySidebar(win.document);
+      state.visible = false;
+    } else {
+      collapseFloatingSidebar(win.document);
     }
-    setCollapsed(true);
-    state.visible = false;
   });
 
   win.document.addEventListener("vertical-tabs:expand", () => {
-    setSidebarVisibility(win.document, true);
-    setCollapsed(false);
-    state.visible = true;
-    dispatchVtEvent(win.document, "vertical-tabs:visibility-changed", {
-      visible: true,
-    });
+    if (isPinned()) {
+      setSidebarVisibility(win.document, true);
+      state.visible = true;
+    } else {
+      expandFloatingSidebar(win.document);
+    }
   });
 
   // Scan existing tabs (immediate attempt — clears and re-scans)
@@ -277,6 +289,10 @@ export function destroyVerticalTabs(win: Window): void {
     if (_mainPageObserverID) {
       Zotero.Prefs.unregisterObserver(_mainPageObserverID);
       _mainPageObserverID = null;
+    }
+    if (_pinnedObserverID) {
+      Zotero.Prefs.unregisterObserver(_pinnedObserverID);
+      _pinnedObserverID = null;
     }
   }
 

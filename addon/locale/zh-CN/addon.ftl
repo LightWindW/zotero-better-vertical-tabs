@@ -81,6 +81,8 @@ vertical-tabs-days-ago = { $count } 天前
 
 vertical-tabs-collapse = 折叠侧边栏
 vertical-tabs-expand = 展开侧边栏
+vertical-tabs-pin = 固定侧边栏
+vertical-tabs-unpin = 取消固定
 vertical-tabs-rename = 重命名
 vertical-tabs-delete = 删除
 vertical-tabs-add-category = 添加分类
