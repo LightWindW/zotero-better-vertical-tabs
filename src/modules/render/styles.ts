@@ -1,7 +1,6 @@
 import { config } from "../../../package.json";
 
 const PANEL_WIDTH = "260px";
-const TOGGLE_BTN_ID = `${config.addonRef}-vertical-tabs-toggle`;
 const SIDEBAR_ID = `${config.addonRef}-vertical-tabs-sidebar`;
 const WRAPPER_ID = `${config.addonRef}-vertical-tabs-wrapper`;
 const SPLITTER_ID = `${config.addonRef}-vertical-tabs-splitter`;
@@ -52,22 +51,19 @@ export function getStyles(): string {
     }
 
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating {
-      position: absolute;
-      left: 0;
-      top: 0;
+      position: relative;
+      width: 35px;
+      min-width: 35px;
       height: 100%;
       z-index: 100000;
       flex-shrink: 0;
       box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
-      transform: translateX(-100%);
-      opacity: 0;
-      pointer-events: none;
-      transition: transform 0.2s ease, opacity 0.2s ease;
+      overflow: hidden;
+      transition: width 0.2s ease;
     }
 
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating.vertical-tabs-sidebar-expanded {
-      transform: translateX(0);
-      opacity: 1;
+      width: ${PANEL_WIDTH};
       pointer-events: auto;
     }
 
@@ -403,6 +399,61 @@ export function getStyles(): string {
       outline-offset: -1px;
     }
 
+    /* Collapsed (floating, not expanded): icon-only layout */
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-header {
+      padding: 8px 0;
+      justify-content: center;
+    }
+
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-search,
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-add-btn {
+      display: none;
+    }
+
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-pin-btn {
+      margin: 0;
+      padding: 4px;
+    }
+
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-category-header {
+      padding: 6px 0;
+      justify-content: center;
+      gap: 0;
+    }
+
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-category-name,
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-count {
+      display: none;
+    }
+
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-item {
+      padding: 6px 0;
+      justify-content: center;
+      gap: 0;
+    }
+
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-item-content,
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-item-close {
+      display: none;
+    }
+
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-resize-handle {
+      display: none;
+    }
+
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-empty {
+      padding: 12px 4px;
+      font-size: 10px;
+    }
+
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-drop-zone {
+      min-height: 20px;
+    }
+
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-separator {
+      margin: 4px 6px;
+    }
+
     /* Resize handle: draggable right edge */
     #${SIDEBAR_ID} .vertical-tabs-resize-handle {
       position: absolute;
@@ -419,28 +470,6 @@ export function getStyles(): string {
     #${SIDEBAR_ID} .vertical-tabs-resize-handle:hover,
     #${SIDEBAR_ID} .vertical-tabs-resize-handle.active {
       background: rgba(128, 128, 128, 0.5);
-    }
-
-    /* Hover strip: shown when sidebar is unpinned/collapsed.
-       Inserted as a relative element to the left of the collections pane. */
-    #${TOGGLE_BTN_ID} {
-      position: relative;
-      flex-shrink: 0;
-      width: 24px;
-      height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      opacity: 0.5;
-      transition: opacity 0.15s, background 0.15s;
-      border-right: 1px solid #DBDBDB;
-      background: var(--material-sidepane, #f5f5f5);
-    }
-
-    #${TOGGLE_BTN_ID}:hover {
-      opacity: 1;
-      background: var(--material-hover, rgba(0, 0, 0, 0.04));
     }
 
     @media (prefers-color-scheme: dark) {
@@ -529,15 +558,6 @@ export function getStyles(): string {
         color: var(--material-text-muted, #aaa);
       }
 
-      #${TOGGLE_BTN_ID} {
-        background: var(--material-button, #3a3a3a);
-        border-color: var(--material-border, #555);
-      }
-
-      #${TOGGLE_BTN_ID}:hover {
-        background: var(--material-button-hover, #4a4a4a);
-      }
-
       #${SIDEBAR_ID}.vertical-tabs-sidebar-floating {
         box-shadow: 2px 0 8px rgba(0, 0, 0, 0.4);
       }
@@ -576,4 +596,4 @@ export function getStyles(): string {
   `;
 }
 
-export { SIDEBAR_ID, TOGGLE_BTN_ID, WRAPPER_ID, SPLITTER_ID };
+export { SIDEBAR_ID, WRAPPER_ID, SPLITTER_ID };
