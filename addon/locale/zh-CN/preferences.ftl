@@ -1,4 +1,4 @@
-pref-title = 开启或关闭 Normalize
+pref-title = Better Vertical Tabs 设置
 pref-enable =
     .label = 开启
 pref-vertical-tabs-enabled =
