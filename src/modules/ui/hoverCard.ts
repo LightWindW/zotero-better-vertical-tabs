@@ -2,7 +2,7 @@ import { config } from "../../../package.json";
 import { getString } from "../../utils/locale";
 import { getItemInfo } from "../render/uiRenderer";
 import { isDarkMode, watchDarkMode } from "../render/colorUtils";
-import { SIDEBAR_ID } from "../sidebar/sidebar";
+import { isExpandAnimating, SIDEBAR_ID } from "../sidebar/sidebar";
 
 const CARD_ID = "vertical-tabs-hover-card";
 const SHOW_DELAY_MS = 150;
@@ -28,10 +28,12 @@ function createCard(doc: Document): HTMLElement {
     display: none;
     opacity: 0;
     width: 320px;
-    background: ${dark ? "#2a2a2a" : "var(--material-background, #fff)"};
-    border: 1px solid ${dark ? "#555" : "var(--material-border, #ccc)"};
+    background: ${dark ? "rgba(42, 42, 42, 0.5)" : "rgba(242, 242, 242, 0.5)"};
+    border: 1px solid ${dark ? "rgba(85, 85, 85, 0.5)" : "rgba(182, 182, 182, 0.5)"};
     border-radius: 6px;
     box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     z-index: 100001;
     padding: 12px;
     font-size: 13px;
@@ -50,10 +52,12 @@ function createCard(doc: Document): HTMLElement {
  */
 function applyCardDarkMode(card: HTMLElement, isDark: boolean): void {
   card.style.background = isDark
-    ? "#2a2a2a"
-    : "var(--material-background, #fff)";
+    ? "rgba(42, 42, 42, 0.5)"
+    : "rgba(242, 242, 242, 0.5)";
   card.style.color = isDark ? "#eee" : "var(--material-text, #222)";
-  card.style.borderColor = isDark ? "#555" : "var(--material-border, #ccc)";
+  card.style.borderColor = isDark
+    ? "rgba(85, 85, 85, 0.5)"
+    : "rgba(182, 182, 182, 0.5)";
 
   // Update label colors inside the card
   const labels = card.querySelectorAll<HTMLElement>(
@@ -206,22 +210,17 @@ let _showTimeout: ReturnType<typeof setTimeout> | null = null;
 let _hideTimeout: ReturnType<typeof setTimeout> | null = null;
 let _currentTarget: HTMLElement | null = null;
 let _currentItemId: number | null = null;
+let _pendingItemId: number | null = null;
+let _pendingTabId: string | null = null;
 
-function handleItemHover(event: Event): void {
-  const customEvent = event as CustomEvent;
-  const { itemId, tabId } = customEvent.detail as {
-    itemId: number;
-    tabId: string;
-  };
-  const target = event.target as HTMLElement;
-  const doc = target.ownerDocument;
-  if (!doc) return;
-
-  const sidebar = doc.getElementById(SIDEBAR_ID);
-  if (!sidebar?.classList.contains("vertical-tabs-sidebar-expanded")) {
-    return;
-  }
-
+function showHoverCard(
+  doc: Document,
+  target: HTMLElement,
+  itemId: number,
+  tabId: string,
+  mouseX?: number,
+  mouseY?: number,
+): void {
   _currentTarget = target;
 
   if (_hideTimeout) {
@@ -245,12 +244,11 @@ function handleItemHover(event: Event): void {
       await renderCard(doc, itemId);
     }
 
-    const mouseEvent = customEvent as unknown as MouseEvent;
     positionCard(
       card,
       target,
-      mouseEvent.clientX ?? rectCenterX(target),
-      mouseEvent.clientY ?? rectCenterY(target),
+      mouseX ?? rectCenterX(target),
+      mouseY ?? rectCenterY(target),
     );
   };
 
@@ -260,6 +258,44 @@ function handleItemHover(event: Event): void {
   } else {
     _showTimeout = setTimeout(() => void doShow(), SHOW_DELAY_MS);
   }
+}
+
+function handleItemHover(event: Event): void {
+  const customEvent = event as CustomEvent;
+  const { itemId, tabId } = customEvent.detail as {
+    itemId: number;
+    tabId: string;
+  };
+  const target = event.target as HTMLElement;
+  const doc = target.ownerDocument;
+  if (!doc) return;
+
+  const sidebar = doc.getElementById(SIDEBAR_ID);
+  if (!sidebar?.classList.contains("vertical-tabs-sidebar-expanded")) {
+    // VT not expanded yet: remember this item and show card once expansion completes.
+    _pendingItemId = itemId;
+    _pendingTabId = tabId;
+    return;
+  }
+  // Wait for the VT expand width animation to finish before showing hover card.
+  if (isExpandAnimating(doc)) {
+    _pendingItemId = itemId;
+    _pendingTabId = tabId;
+    return;
+  }
+
+  _pendingItemId = null;
+  _pendingTabId = null;
+
+  const mouseEvent = customEvent as unknown as MouseEvent;
+  showHoverCard(
+    doc,
+    target,
+    itemId,
+    tabId,
+    mouseEvent.clientX,
+    mouseEvent.clientY,
+  );
 }
 
 function rectCenterX(element: HTMLElement): number {
@@ -282,6 +318,9 @@ function handleItemHoverEnd(event: Event): void {
     _showTimeout = null;
   }
 
+  _pendingItemId = null;
+  _pendingTabId = null;
+
   _hideTimeout = setTimeout(() => {
     const card = doc.getElementById(CARD_ID) as HTMLElement | null;
     if (card) {
@@ -296,9 +335,33 @@ function handleItemHoverEnd(event: Event): void {
   }, HIDE_DELAY_MS);
 }
 
+function handleExpandAnimationComplete(event: Event): void {
+  const doc = (event.target as Node).ownerDocument ?? (event.target as Document);
+  if (!doc) return;
+
+  const pendingItemId = _pendingItemId;
+  const pendingTabId = _pendingTabId;
+  _pendingItemId = null;
+  _pendingTabId = null;
+
+  if (!pendingItemId) return;
+
+  // Find the current DOM element for the pending item.
+  const item = doc.querySelector(
+    `.vertical-tabs-item[data-item-id="${pendingItemId}"]`,
+  ) as HTMLElement | null;
+  if (!item) return;
+
+  showHoverCard(doc, item, pendingItemId, pendingTabId || "");
+}
+
 export function initHoverCard(doc: Document): void {
   doc.addEventListener("vertical-tabs:item-hover", handleItemHover);
   doc.addEventListener("vertical-tabs:item-hover-end", handleItemHoverEnd);
+  doc.addEventListener(
+    "vertical-tabs:expand-animation-complete",
+    handleExpandAnimationComplete,
+  );
 
   // Watch dark mode switch to update card colors in real time
   const existing = (doc as any).__vtHoverDarkCleanup as
@@ -316,6 +379,10 @@ export function initHoverCard(doc: Document): void {
 export function destroyHoverCard(doc: Document): void {
   doc.removeEventListener("vertical-tabs:item-hover", handleItemHover);
   doc.removeEventListener("vertical-tabs:item-hover-end", handleItemHoverEnd);
+  doc.removeEventListener(
+    "vertical-tabs:expand-animation-complete",
+    handleExpandAnimationComplete,
+  );
 
   const cleanup = (doc as any).__vtHoverDarkCleanup as (() => void) | undefined;
   if (cleanup) {
@@ -331,4 +398,6 @@ export function destroyHoverCard(doc: Document): void {
   _hideTimeout = null;
   _currentTarget = null;
   _currentItemId = null;
+  _pendingItemId = null;
+  _pendingTabId = null;
 }

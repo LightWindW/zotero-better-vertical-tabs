@@ -44,6 +44,7 @@ interface CategoryHandlers {
   rename: EventListener;
   delete: EventListener;
   color: EventListener;
+  toggleCollapse: EventListener;
 }
 
 const HANDLERS_KEY = "__vtCategoryHandlers";
@@ -389,6 +390,24 @@ function handleReorderItem(event: Event): void {
   void persist(doc);
 }
 
+function handleToggleCollapsed(event: Event): void {
+  const { categoryId, collapsed } = (event as CustomEvent).detail as {
+    categoryId: string;
+    collapsed: boolean;
+  };
+  if (!_data) return;
+  _data = {
+    ..._data,
+    categories: _data.categories.map((cat) =>
+      cat.id === categoryId ? { ...cat, collapsed } : cat,
+    ),
+  };
+  // Persist without dispatching data-changed: the UI already toggled the
+  // collapsed class in place, and re-rendering the whole container would
+  // destroy the DOM element and kill the CSS transition.
+  void saveData(_data);
+}
+
 function cleanupOldCategoryHandlers(doc: Document): void {
   const old = (doc as any)[HANDLERS_KEY] as CategoryHandlers | undefined;
   if (!old) return;
@@ -400,6 +419,10 @@ function cleanupOldCategoryHandlers(doc: Document): void {
   doc.removeEventListener("vertical-tabs:category-context-delete", old.delete);
   doc.removeEventListener("vertical-tabs:category-context-color", old.color);
   doc.removeEventListener("vertical-tabs:reorder-categories", old.reorderCat);
+  doc.removeEventListener(
+    "vertical-tabs:category-toggle-collapsed",
+    old.toggleCollapse,
+  );
   delete (doc as any)[HANDLERS_KEY];
 }
 
@@ -465,6 +488,7 @@ export async function initCategoryManager(doc: Document): Promise<void> {
     rename: renameHandler,
     delete: deleteHandler,
     color: colorHandler,
+    toggleCollapse: handleToggleCollapsed,
   };
 
   doc.addEventListener("vertical-tabs:add-category", handlers.add);
@@ -481,6 +505,10 @@ export async function initCategoryManager(doc: Document): Promise<void> {
   );
   doc.addEventListener("vertical-tabs:category-context-color", handlers.color);
   doc.addEventListener("vertical-tabs:reorder-categories", handlers.reorderCat);
+  doc.addEventListener(
+    "vertical-tabs:category-toggle-collapsed",
+    handlers.toggleCollapse,
+  );
 
   doc.addEventListener("vertical-tabs:native-order-changed", ((
     e: CustomEvent,
