@@ -15,7 +15,12 @@ const MIN_WIDTH = 160;
 const MAX_WIDTH = 800;
 const RESIZE_HANDLE_CLASS = "vertical-tabs-resize-handle";
 const PIN_BTN_CLASS = "vertical-tabs-pin-btn";
+const PIN_ICON_CLASS = "vertical-tabs-pin-icon";
 const HOVER_STRIP_WIDTH = 35;
+
+function pinIconUrl(filled: boolean): string {
+  return `chrome://${config.addonRef}/content/icons/${filled ? "pin-fill" : "pin"}.svg`;
+}
 type TimerHandle = ReturnType<typeof setTimeout>;
 
 const HOVER_DELAY_MS = 300;
@@ -377,9 +382,18 @@ export function createSidebar(doc: Document): HTMLElement {
                 isPinned() ? "vertical-tabs-unpin" : "vertical-tabs-pin",
               ),
             },
-            properties: {
-              textContent: isPinned() ? "📌" : "📍",
-            },
+            children: [
+              {
+                tag: "img",
+                classList: [PIN_ICON_CLASS],
+                attributes: {
+                  src: pinIconUrl(isPinned()),
+                  width: "16",
+                  height: "16",
+                  alt: "",
+                },
+              },
+            ],
             listeners: [
               {
                 type: "click",
@@ -476,7 +490,12 @@ export function createSidebar(doc: Document): HTMLElement {
       pinBtn.title = getString(
         isPinned() ? "vertical-tabs-unpin" : "vertical-tabs-pin",
       );
-      pinBtn.textContent = isPinned() ? "📌" : "📍";
+      const icon = pinBtn.querySelector(
+        `.${PIN_ICON_CLASS}`,
+      ) as HTMLImageElement | null;
+      if (icon) {
+        icon.src = pinIconUrl(isPinned());
+      }
     }
   };
   (sidebar as any).__updatePinBtn = updatePinBtn;

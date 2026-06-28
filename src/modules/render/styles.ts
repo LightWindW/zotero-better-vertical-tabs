@@ -57,23 +57,28 @@ export function getStyles(): string {
       height: 100%;
       z-index: 100000;
       flex-shrink: 0;
-      box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
+      border-right: 1px solid #DBDBDB;
+      box-shadow: none;
       overflow: hidden;
-      transition: width 0.2s ease;
+      transition: width 0.2s ease-out, border-color 0.2s ease-out, box-shadow 0.2s ease-out;
     }
 
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating.vertical-tabs-sidebar-expanded {
       width: ${PANEL_WIDTH};
+      border-right-color: transparent;
+      box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
       pointer-events: auto;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-header {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      padding: 8px 12px;
+      justify-content: flex-start;
+      min-height: 55px;
+      padding: 8px 12px 8px 5px;
       border-bottom: 1px solid var(--material-border, #ccc);
       font-weight: 600;
+      transition: padding 0.2s linear, gap 0.2s linear;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-search {
@@ -102,11 +107,19 @@ export function getStyles(): string {
       background: transparent;
       border: none;
       cursor: pointer;
-      font-size: 14px;
-      line-height: 1;
-      padding: 2px 4px;
-      color: #6C6C6C;
+      padding: 4px;
       margin-right: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: padding 0.2s linear, margin 0.2s linear, background 0.2s ease-out;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-pin-icon {
+      width: 16px;
+      height: 16px;
+      object-fit: contain;
+      display: block;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-pin-btn:hover {
@@ -153,9 +166,11 @@ export function getStyles(): string {
     #${SIDEBAR_ID} .vertical-tabs-category-header {
       display: flex;
       align-items: center;
-      padding: 6px 12px;
+      min-height: 28px;
+      padding: 6px 12px 6px 10px;
       cursor: pointer;
       gap: 6px;
+      transition: padding 0.2s linear, gap 0.2s linear;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category-header:hover {
@@ -191,7 +206,7 @@ export function getStyles(): string {
       text-align: center;
       color: #6C6C6C;
       display: inline-block;
-      transition: transform 0.15s ease;
+      transition: transform 0.15s ease-out, margin 0.2s linear;
       transform: rotate(-90deg);
     }
 
@@ -230,10 +245,12 @@ export function getStyles(): string {
       display: flex;
       flex-direction: row;
       align-items: center;
-      padding: 6px 12px;
+      min-height: 44px;
+      padding: 6px 12px 6px 9px;
       cursor: pointer;
       gap: 8px;
       position: relative;
+      transition: padding 0.2s linear, gap 0.2s linear;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-item:hover {
@@ -315,6 +332,11 @@ export function getStyles(): string {
       height: 16px;
       flex-shrink: 0;
       object-fit: contain;
+      transition: margin 0.2s linear;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-item-icon-fallback {
+      transition: margin 0.2s linear;
     }
 
     /* Content block (right of icon) */
@@ -402,7 +424,6 @@ export function getStyles(): string {
     /* Collapsed (floating, not expanded): icon-only layout */
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-header {
       padding: 8px 0;
-      justify-content: center;
     }
 
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-search,
@@ -411,13 +432,12 @@ export function getStyles(): string {
     }
 
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-pin-btn {
-      margin: 0;
-      padding: 4px;
+      margin-left: 5px;
+      margin-right: 5px;
     }
 
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-category-header {
       padding: 6px 0;
-      justify-content: center;
       gap: 0;
     }
 
@@ -426,15 +446,25 @@ export function getStyles(): string {
       display: none;
     }
 
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-chevron {
+      margin-left: 10px;
+      margin-right: 10px;
+    }
+
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-item {
       padding: 6px 0;
-      justify-content: center;
       gap: 0;
     }
 
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-item-content,
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-item-close {
       display: none;
+    }
+
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-item-icon,
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-item-icon-fallback {
+      margin-left: 9px;
+      margin-right: 9px;
     }
 
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-resize-handle {
@@ -559,6 +589,12 @@ export function getStyles(): string {
       }
 
       #${SIDEBAR_ID}.vertical-tabs-sidebar-floating {
+        border-right-color: #555;
+        box-shadow: none;
+      }
+
+      #${SIDEBAR_ID}.vertical-tabs-sidebar-floating.vertical-tabs-sidebar-expanded {
+        border-right-color: transparent;
         box-shadow: 2px 0 8px rgba(0, 0, 0, 0.4);
       }
     }
