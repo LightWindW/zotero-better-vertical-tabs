@@ -1,109 +1,12 @@
 import { config } from "../../package.json";
-import { getString } from "../utils/locale";
 
 export async function registerPrefsScripts(_window: Window) {
   // This function is called when the prefs window is opened
-  // See addon/content/preferences.xhtml onpaneload
-  if (!addon.data.prefs) {
-    addon.data.prefs = {
-      window: _window,
-      columns: [
-        {
-          dataKey: "title",
-          label: getString("prefs-table-title"),
-          fixedWidth: true,
-          width: 100,
-        },
-        {
-          dataKey: "detail",
-          label: getString("prefs-table-detail"),
-        },
-      ],
-      rows: [
-        {
-          title: "Orange",
-          detail: "It's juicy",
-        },
-        {
-          title: "Banana",
-          detail: "It's sweet",
-        },
-        {
-          title: "Apple",
-          detail: "I mean the fruit APPLE",
-        },
-      ],
-    };
-  } else {
-    addon.data.prefs.window = _window;
-  }
-  updatePrefsUI();
+  // See addon/content/preferences.xhtml onload
+  addon.data.prefs = {
+    window: _window,
+  };
   bindPrefEvents();
-}
-
-async function updatePrefsUI() {
-  // You can initialize some UI elements on prefs window
-  // with addon.data.prefs.window.document
-  // Or bind some events to the elements
-  const renderLock = ztoolkit.getGlobal("Zotero").Promise.defer();
-  if (addon.data.prefs?.window == undefined) return;
-  const tableHelper = new ztoolkit.VirtualizedTable(addon.data.prefs?.window)
-    .setContainerId(`${config.addonRef}-table-container`)
-    .setProp({
-      id: `${config.addonRef}-prefs-table`,
-      // Do not use setLocale, as it modifies the Zotero.Intl.strings
-      // Set locales directly to columns
-      columns: addon.data.prefs?.columns,
-      showHeader: true,
-      multiSelect: true,
-      staticColumns: true,
-      disableFontSizeScaling: true,
-    })
-    .setProp("getRowCount", () => addon.data.prefs?.rows.length || 0)
-    .setProp(
-      "getRowData",
-      (index) =>
-        addon.data.prefs?.rows[index] || {
-          title: "no data",
-          detail: "no data",
-        },
-    )
-    // Show a progress window when selection changes
-    .setProp("onSelectionChange", (selection) => {
-      new ztoolkit.ProgressWindow(config.addonName)
-        .createLine({
-          text: `Selected line: ${addon.data.prefs?.rows
-            .filter((v, i) => selection.isSelected(i))
-            .map((row) => row.title)
-            .join(",")}`,
-          progress: 100,
-        })
-        .show();
-    })
-    // When pressing delete, delete selected line and refresh table.
-    // Returning false to prevent default event.
-    .setProp("onKeyDown", (event: KeyboardEvent) => {
-      if (event.key == "Delete" || (Zotero.isMac && event.key == "Backspace")) {
-        addon.data.prefs!.rows =
-          addon.data.prefs?.rows.filter(
-            (v, i) => !tableHelper.treeInstance.selection.isSelected(i),
-          ) || [];
-        tableHelper.render();
-        return false;
-      }
-      return true;
-    })
-    // For find-as-you-type
-    .setProp(
-      "getRowString",
-      (index) => addon.data.prefs?.rows[index].title || "",
-    )
-    // Render the table.
-    .render(-1, () => {
-      renderLock.resolve();
-    });
-  await renderLock.promise;
-  ztoolkit.log("Preference table rendered!");
 }
 
 function bindPrefEvents() {
@@ -113,19 +16,194 @@ function bindPrefEvents() {
     )
     ?.addEventListener("command", (e: Event) => {
       ztoolkit.log(e);
-      addon.data.prefs!.window.alert(
-        `Successfully changed to ${(e.target as XUL.Checkbox).checked}!`,
-      );
     });
 
-  addon.data
-    .prefs!.window.document?.querySelector(
-      `#zotero-prefpane-${config.addonRef}-input`,
-    )
-    ?.addEventListener("change", (e: Event) => {
-      ztoolkit.log(e);
-      addon.data.prefs!.window.alert(
-        `Successfully changed to ${(e.target as HTMLInputElement).value}!`,
+  const vtCheckbox = addon.data.prefs!.window.document?.querySelector(
+    `#zotero-prefpane-${config.addonRef}-vertical-tabs-enabled`,
+  );
+  if (vtCheckbox) {
+    vtCheckbox.addEventListener("command", (e: Event) => {
+      const checked = (e.target as XUL.Checkbox).checked;
+      Zotero.Prefs.set(
+        `${config.prefsPrefix}.verticalTabs.enabled`,
+        checked,
+        false,
+      );
+      // Auto-sync mainPageEnabled checkbox when global VT is toggled
+      const mainPageCheckbox = addon.data.prefs!.window.document?.querySelector(
+        `#zotero-prefpane-${config.addonRef}-main-page-enabled`,
+      ) as XUL.Checkbox | null;
+      if (mainPageCheckbox) {
+        mainPageCheckbox.checked = checked;
+        Zotero.Prefs.set(
+          `${config.prefsPrefix}.verticalTabs.mainPageEnabled`,
+          checked,
+          false,
+        );
+      }
+    });
+  }
+
+  // showExtra checkbox: manually fire Zotero.Prefs.set to trigger observers
+  const showExtraCheckbox = addon.data.prefs!.window.document?.querySelector(
+    `#zotero-prefpane-${config.addonRef}-show-extra`,
+  );
+  if (showExtraCheckbox) {
+    showExtraCheckbox.addEventListener("command", (e: Event) => {
+      Zotero.Prefs.set(
+        `${config.prefsPrefix}.verticalTabs.showExtra`,
+        (e.target as XUL.Checkbox).checked,
+        false,
       );
     });
+  }
+
+  // mainPageEnabled checkbox
+  const mainPageCheckbox = addon.data.prefs!.window.document?.querySelector(
+    `#zotero-prefpane-${config.addonRef}-main-page-enabled`,
+  );
+  if (mainPageCheckbox) {
+    mainPageCheckbox.addEventListener("command", (e: Event) => {
+      Zotero.Prefs.set(
+        `${config.prefsPrefix}.verticalTabs.mainPageEnabled`,
+        (e.target as XUL.Checkbox).checked,
+        false,
+      );
+    });
+  }
+
+  // autoCloseEnabled checkbox
+  const autoCloseCheckbox = addon.data.prefs!.window.document?.querySelector(
+    `#zotero-prefpane-${config.addonRef}-auto-close-enabled`,
+  );
+  if (autoCloseCheckbox) {
+    autoCloseCheckbox.addEventListener("command", (e: Event) => {
+      Zotero.Prefs.set(
+        `${config.prefsPrefix}.verticalTabs.autoCloseEnabled`,
+        (e.target as XUL.Checkbox).checked,
+        false,
+      );
+    });
+  }
+
+  // autoCloseDays input: clamp to 1-365 and set pref
+  const autoCloseDaysInput = addon.data.prefs!.window.document?.getElementById(
+    `${config.addonRef}-auto-close-days`,
+  ) as HTMLInputElement | null;
+  if (autoCloseDaysInput) {
+    autoCloseDaysInput.addEventListener("change", () => {
+      let days = parseInt(autoCloseDaysInput.value, 10);
+      if (Number.isNaN(days)) days = 7;
+      days = Math.max(1, Math.min(365, days));
+      autoCloseDaysInput.value = String(days);
+      Zotero.Prefs.set(
+        `${config.prefsPrefix}.verticalTabs.autoCloseDays`,
+        days,
+        false,
+      );
+    });
+  }
+
+  // Category color inputs (2-6)
+  const colorInputs: HTMLInputElement[] = [];
+  for (let i = 2; i <= 6; i++) {
+    const input = addon.data.prefs!.window.document?.getElementById(
+      `${config.addonRef}-cat-color-${i}`,
+    ) as HTMLInputElement | null;
+    if (input) {
+      // Load saved value
+      const saved = Zotero.Prefs.get(
+        `${config.prefsPrefix}.verticalTabs.categoryColors`,
+      ) as string | undefined;
+      if (saved) {
+        const parts = saved.split(",").map((s) => s.trim());
+        if (parts[i - 2]) input.value = parts[i - 2];
+      }
+      input.addEventListener("change", () => {
+        colorInputs[i - 2] = input;
+        const values = colorInputs.map((inp) => inp?.value || "").join(",");
+        if (values.split(",").filter(Boolean).length === 5) {
+          Zotero.Prefs.set(
+            `${config.prefsPrefix}.verticalTabs.categoryColors`,
+            values,
+            false,
+          );
+        }
+      });
+      colorInputs[i - 2] = input;
+    }
+  }
+
+  // Clear VT data button
+  const clearBtn = addon.data.prefs!.window.document?.getElementById(
+    `${config.addonRef}-clear-vt-data`,
+  ) as HTMLButtonElement | null;
+  if (clearBtn) {
+    clearBtn.addEventListener("click", async () => {
+      try {
+        const storageDir = Zotero.getStorageDirectory();
+        const dataPath = PathUtils.join(
+          storageDir.path,
+          `BVT-vertical-tabs.json`,
+        );
+
+        // Read existing data to preserve trackedItems
+        let trackedItems = {};
+        if (await IOUtils.exists(dataPath)) {
+          try {
+            const raw = await IOUtils.readUTF8(dataPath);
+            const parsed = JSON.parse(raw);
+            trackedItems = parsed.trackedItems || {};
+          } catch {
+            // ignore
+          }
+        }
+
+        // Get native tab order (skip library tab at index 0)
+        const uncategorizedOrder: string[] = [];
+        try {
+          const win = Zotero.getMainWindows()[0] as any;
+          const ztabs = win?.Zotero_Tabs;
+          const internalTabs = ztabs?._tabs as any[] | undefined;
+          if (internalTabs) {
+            for (let i = 1; i < internalTabs.length; i++) {
+              const tid = String(internalTabs[i]?.id ?? "");
+              if (tid) uncategorizedOrder.push(tid);
+            }
+          }
+        } catch {
+          // ignore
+        }
+
+        await IOUtils.writeUTF8(
+          dataPath,
+          JSON.stringify(
+            {
+              version: 2,
+              categories: [],
+              trackedItems,
+              uncategorizedOrder,
+            },
+            null,
+            2,
+          ),
+        );
+
+        // Force reload VT data from JSON
+        for (const win of Zotero.getMainWindows()) {
+          const doc = win.document;
+          const event = doc.createEvent("CustomEvent");
+          event.initCustomEvent(
+            "vertical-tabs:force-reload",
+            true,
+            false,
+            null,
+          );
+          doc.dispatchEvent(event);
+        }
+      } catch {
+        // ignore
+      }
+    });
+  }
 }

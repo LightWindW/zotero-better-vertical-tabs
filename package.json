@@ -1,24 +1,24 @@
 {
-  "name": "zotero-plugin-template",
+  "name": "Zotero-Better-Vertical-Tabs",
   "type": "module",
-  "version": "3.1.0",
-  "description": "Zotero Plugin Template",
+  "version": "0.1.0",
+  "description": "Light vertical tabs, clear and fluent",
   "config": {
-    "addonName": "Zotero Plugin Template",
-    "addonID": "addontemplate@euclpts.com",
-    "addonRef": "addontemplate",
-    "addonInstance": "AddonTemplate",
-    "prefsPrefix": "extensions.zotero.addontemplate"
+    "addonName": "Better Vertical Tabs",
+    "addonID": "better-vertical-tabs@euclpts.com",
+    "addonRef": "better-vertical-tabs",
+    "addonInstance": "better-vertical-tabs",
+    "prefsPrefix": "extensions.zotero.better-vertical-tabs"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/windingwind/zotero-plugin-template.git"
+    "url": "git+https://github.com/LightWindW/zotero-better-vertical-tabs.git"
   },
-  "author": "windingwind",
+  "author": "LightWindW",
   "bugs": {
-    "url": "https://github.com/windingwind/zotero-plugin-template/issues"
+    "url": "git+https://github.com/LightWindW/zotero-better-vertical-tabs.git"
   },
-  "homepage": "https://github.com/windingwind/zotero-plugin-template#readme",
+  "homepage": "https://github.com/LightWindW/zotero-better-vertical-tabs#readme",
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "start": "zotero-plugin serve",
@@ -30,20 +30,20 @@
     "update-deps": "npm update --save"
   },
   "dependencies": {
-    "zotero-plugin-toolkit": "^5.1.0-beta.13"
+    "zotero-plugin-toolkit": "^5.1.2"
   },
   "devDependencies": {
-    "@types/chai": "^5.2.3",
+    "@types/chai": "^5.2.2",
     "@types/mocha": "^10.0.10",
-    "@types/node": "^24.10.0",
+    "@types/node": "^24.2.0",
     "@zotero-plugin/eslint-config": "^0.6.7",
-    "chai": "^6.2.1",
-    "eslint": "^9.39.2",
-    "mocha": "^11.7.5",
-    "prettier": "^3.7.4",
-    "typescript": "^5.9.3",
-    "zotero-plugin-scaffold": "^0.8.2",
-    "zotero-types": "^4.1.0-beta.4"
+    "chai": "^5.2.1",
+    "eslint": "^9.32.0",
+    "mocha": "^11.7.1",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.2",
+    "zotero-plugin-scaffold": "^0.8.6",
+    "zotero-types": "^4.1.2"
   },
   "prettier": {
     "printWidth": 80,
