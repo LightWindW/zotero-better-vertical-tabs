@@ -10,6 +10,7 @@ declare namespace _ZoteroTypes {
       "verticalTabs.enabled": boolean;
       "verticalTabs.mainPageEnabled": boolean;
       "verticalTabs.collapsed": boolean;
+      "verticalTabs.pinned": boolean;
       "verticalTabs.categoryColors": string;
       "verticalTabs.rememberCategories": boolean;
       "verticalTabs.showExtra": boolean;

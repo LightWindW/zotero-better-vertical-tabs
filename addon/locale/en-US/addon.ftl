@@ -80,6 +80,8 @@ vertical-tabs-days-ago = { $count } days ago
 
 vertical-tabs-collapse = Collapse Sidebar
 vertical-tabs-expand = Expand Sidebar
+vertical-tabs-pin = Pin Sidebar
+vertical-tabs-unpin = Unpin Sidebar
 vertical-tabs-rename = Rename
 vertical-tabs-delete = Delete
 vertical-tabs-add-category = Add Category

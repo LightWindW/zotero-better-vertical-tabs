@@ -91,6 +91,7 @@ export type FluentMessageId =
   | 'vertical-tabs-journal'
   | 'vertical-tabs-just-now'
   | 'vertical-tabs-minutes-ago'
+  | 'vertical-tabs-pin'
   | 'vertical-tabs-remove-from-category'
   | 'vertical-tabs-rename'
   | 'vertical-tabs-search-placeholder'
@@ -99,4 +100,5 @@ export type FluentMessageId =
   | 'vertical-tabs-thumbnail-error'
   | 'vertical-tabs-title'
   | 'vertical-tabs-university'
+  | 'vertical-tabs-unpin'
   | 'vertical-tabs-year';

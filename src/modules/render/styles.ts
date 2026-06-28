@@ -42,6 +42,31 @@ export function getStyles(): string {
       display: none !important;
     }
 
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-pinned {
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating {
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      z-index: 100000;
+      flex-shrink: 0;
+      box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
+      transform: translateX(-100%);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating.vertical-tabs-sidebar-expanded {
+      transform: translateX(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+
     #${SIDEBAR_ID} .vertical-tabs-header {
       display: flex;
       align-items: center;
@@ -73,7 +98,7 @@ export function getStyles(): string {
       border-color: #DBDBDB;
     }
 
-    #${SIDEBAR_ID} .vertical-tabs-collapse-btn {
+    #${SIDEBAR_ID} .vertical-tabs-pin-btn {
       background: transparent;
       border: none;
       cursor: pointer;
@@ -84,7 +109,7 @@ export function getStyles(): string {
       margin-right: 4px;
     }
 
-    #${SIDEBAR_ID} .vertical-tabs-collapse-btn:hover {
+    #${SIDEBAR_ID} .vertical-tabs-pin-btn:hover {
       background: var(--material-button-hover, rgba(0, 0, 0, 0.06));
       border-radius: 4px;
       color: #999;
@@ -392,9 +417,8 @@ export function getStyles(): string {
       background: rgba(128, 128, 128, 0.5);
     }
 
-    /* Toggle button: shown when sidebar is hidden.
-       Positioned inline at the left edge, inside the library pane layout,
-       so it never appears on Reader pages. */
+    /* Hover strip: shown when sidebar is unpinned/collapsed.
+       Inserted as a relative element to the left of the collections pane. */
     #${TOGGLE_BTN_ID} {
       position: relative;
       flex-shrink: 0;
@@ -405,7 +429,7 @@ export function getStyles(): string {
       justify-content: center;
       cursor: pointer;
       opacity: 0.5;
-      transition: opacity 0.15s;
+      transition: opacity 0.15s, background 0.15s;
       border-right: 1px solid #DBDBDB;
       background: var(--material-sidepane, #f5f5f5);
     }
@@ -436,7 +460,7 @@ export function getStyles(): string {
         border-color: #6C6C6C;
       }
 
-      #${SIDEBAR_ID} .vertical-tabs-collapse-btn:hover,
+      #${SIDEBAR_ID} .vertical-tabs-pin-btn:hover,
       #${SIDEBAR_ID} .vertical-tabs-add-btn:hover {
         background: var(--material-button-hover, rgba(255, 255, 255, 0.08));
       }
@@ -508,6 +532,10 @@ export function getStyles(): string {
 
       #${TOGGLE_BTN_ID}:hover {
         background: var(--material-button-hover, #4a4a4a);
+      }
+
+      #${SIDEBAR_ID}.vertical-tabs-sidebar-floating {
+        box-shadow: 2px 0 8px rgba(0, 0, 0, 0.4);
       }
     }
 

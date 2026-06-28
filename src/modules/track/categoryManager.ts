@@ -23,6 +23,12 @@ import {
   isDarkMode,
 } from "../render/colorUtils";
 import { getOpenedPDFs, syncTabOrderToNative } from "./itemTracker";
+import {
+  HOVER_STRIP_CLASS,
+  scheduleCollapse,
+  setContextMenuOpen,
+  SIDEBAR_ID,
+} from "../sidebar/sidebar";
 
 const PREF_NAMESPACE_CAT = config.prefsPrefix;
 
@@ -117,6 +123,8 @@ function showContextMenu(
     `;
     swatch.addEventListener("click", () => {
       menu.remove();
+      setContextMenuOpen(doc, false);
+      scheduleCollapse(doc);
       const cat = _data?.categories.find((cat) => cat.id === categoryId);
       if (cat && _data) {
         _data = {
@@ -149,6 +157,8 @@ function showContextMenu(
   });
   renameItem.addEventListener("click", async () => {
     menu.remove();
+    setContextMenuOpen(doc, false);
+    scheduleCollapse(doc);
     const cat = _data?.categories.find((c) => c.id === categoryId);
     const dialogData: { [key: string]: any } = {
       inputValue: cat?.name ?? "",
@@ -204,23 +214,41 @@ function showContextMenu(
   });
   deleteItem.addEventListener("click", () => {
     menu.remove();
+    setContextMenuOpen(doc, false);
+    scheduleCollapse(doc);
     _data = deleteCategory(_data!, categoryId);
     void persist(doc);
   });
   menu.appendChild(deleteItem);
 
   doc.documentElement?.appendChild(menu);
+  setContextMenuOpen(doc, true);
 
+  const cleanup = () => {
+    doc.removeEventListener("mousedown", closeMenu, true);
+  };
   const closeMenu = (e: MouseEvent) => {
     if (!menu.isConnected) {
-      doc.removeEventListener("mousedown", closeMenu, true);
+      cleanup();
       return;
     }
+    const target = e.target as HTMLElement;
     // Don't close if clicking inside the menu
-    if ((e.target as HTMLElement).closest("#vertical-tabs-context-menu"))
+    if (target.closest("#vertical-tabs-context-menu")) return;
+    // Click inside VT (e.g. right-click another element) → close menu, keep VT open
+    if (
+      target.closest(`#${SIDEBAR_ID}`) ||
+      target.closest(`.${HOVER_STRIP_CLASS}`)
+    ) {
+      menu.remove();
+      setContextMenuOpen(doc, false);
+      cleanup();
       return;
+    }
     menu.remove();
-    doc.removeEventListener("mousedown", closeMenu, true);
+    setContextMenuOpen(doc, false);
+    scheduleCollapse(doc);
+    cleanup();
   };
   setTimeout(() => doc.addEventListener("mousedown", closeMenu, true), 150);
 }
