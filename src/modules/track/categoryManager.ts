@@ -24,7 +24,6 @@ import {
 } from "../render/colorUtils";
 import { getOpenedPDFs, syncTabOrderToNative } from "./itemTracker";
 import {
-  HOVER_STRIP_CLASS,
   scheduleCollapse,
   setContextMenuOpen,
   SIDEBAR_ID,
@@ -236,10 +235,7 @@ function showContextMenu(
     // Don't close if clicking inside the menu
     if (target.closest("#vertical-tabs-context-menu")) return;
     // Click inside VT (e.g. right-click another element) → close menu, keep VT open
-    if (
-      target.closest(`#${SIDEBAR_ID}`) ||
-      target.closest(`.${HOVER_STRIP_CLASS}`)
-    ) {
+    if (target.closest(`#${SIDEBAR_ID}`)) {
       menu.remove();
       setContextMenuOpen(doc, false);
       cleanup();

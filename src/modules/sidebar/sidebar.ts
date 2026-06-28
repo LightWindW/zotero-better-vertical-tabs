@@ -4,7 +4,6 @@ import {
   injectStyles,
   removeStyles,
   SIDEBAR_ID,
-  TOGGLE_BTN_ID,
   WRAPPER_ID,
   SPLITTER_ID,
 } from "../render/styles";
@@ -15,9 +14,8 @@ const DEFAULT_WIDTH = 260;
 const MIN_WIDTH = 160;
 const MAX_WIDTH = 800;
 const RESIZE_HANDLE_CLASS = "vertical-tabs-resize-handle";
-const HOVER_STRIP_CLASS = "vertical-tabs-hover-strip";
 const PIN_BTN_CLASS = "vertical-tabs-pin-btn";
-const HOVER_STRIP_WIDTH = 24;
+const HOVER_STRIP_WIDTH = 35;
 type TimerHandle = ReturnType<typeof setTimeout>;
 
 const HOVER_DELAY_MS = 300;
@@ -143,67 +141,6 @@ function removeWrapper(doc: Document): void {
   clearWidthObserver(doc);
 }
 
-function getHoverStrip(doc: Document): HTMLElement | null {
-  return doc.querySelector(`.${HOVER_STRIP_CLASS}`) as HTMLElement | null;
-}
-
-function removeHoverStrip(doc: Document): void {
-  const strip = getHoverStrip(doc);
-  if (strip) strip.remove();
-}
-
-function createHoverStrip(doc: Document): HTMLElement {
-  let strip = getHoverStrip(doc);
-  if (strip) return strip;
-
-  injectStyles(doc);
-
-  strip = doc.createElementNS(
-    "http://www.w3.org/1999/xhtml",
-    "div",
-  ) as HTMLElement;
-  strip.className = HOVER_STRIP_CLASS;
-  strip.id = TOGGLE_BTN_ID;
-  strip.title = getString("vertical-tabs-expand");
-
-  const icon = doc.createElementNS(
-    "http://www.w3.org/1999/xhtml",
-    "img",
-  ) as HTMLImageElement;
-  icon.src = `chrome://${config.addonRef}/content/icons/favicon.png`;
-  icon.style.width = "16px";
-  icon.style.height = "16px";
-  strip.appendChild(icon);
-
-  const target = findOrCreateWrapper(doc);
-  if (target) {
-    target.wrapper.appendChild(strip);
-  } else {
-    const pane = doc.getElementById("zotero-pane") || doc.body;
-    if (pane) {
-      pane.insertBefore(strip, pane.firstChild);
-    }
-  }
-
-  // Hover to expand
-  strip.addEventListener("mouseenter", () => {
-    clearLeaveTimer(doc);
-    if (getHoverTimer(doc)) return;
-    const timer = setTimeout(() => {
-      setHoverTimer(doc, null);
-      expandFloatingSidebar(doc);
-    }, HOVER_DELAY_MS);
-    setHoverTimer(doc, timer);
-  });
-
-  strip.addEventListener("mouseleave", () => {
-    clearHoverTimer(doc);
-    scheduleCollapse(doc);
-  });
-
-  return strip;
-}
-
 // ── Per-document timers ──
 
 interface DocState {
@@ -323,30 +260,14 @@ function isMouseOverVt(
   clientY: number,
 ): boolean {
   const sidebar = getSidebar(doc);
-  if (sidebar) {
-    const rect = sidebar.getBoundingClientRect();
-    if (
-      clientX >= rect.left &&
-      clientX <= rect.right &&
-      clientY >= rect.top &&
-      clientY <= rect.bottom
-    ) {
-      return true;
-    }
-  }
-  const strip = getHoverStrip(doc);
-  if (strip) {
-    const rect = strip.getBoundingClientRect();
-    if (
-      clientX >= rect.left &&
-      clientX <= rect.right &&
-      clientY >= rect.top &&
-      clientY <= rect.bottom
-    ) {
-      return true;
-    }
-  }
-  return false;
+  if (!sidebar) return false;
+  const rect = sidebar.getBoundingClientRect();
+  return (
+    clientX >= rect.left &&
+    clientX <= rect.right &&
+    clientY >= rect.top &&
+    clientY <= rect.bottom
+  );
 }
 
 function setupInputPositionListener(doc: Document): void {
@@ -508,8 +429,7 @@ export function createSidebar(doc: Document): HTMLElement {
   }) as HTMLElement;
 
   // Width is set by renderSidebarMode depending on pinned/floating mode.
-  // Floating: explicit pixel width; Pinned: fills wrapper (100%).
-  sidebar.style.width = `${getSavedWidth()}px`;
+  // Pinned: fills wrapper (100%). Floating: collapsed 35px or expanded savedWidth.
 
   // Search input: dispatch filter event on input
   const searchInput = sidebar.querySelector(
@@ -561,7 +481,18 @@ export function createSidebar(doc: Document): HTMLElement {
   };
   (sidebar as any).__updatePinBtn = updatePinBtn;
 
-  // Mouse leave to collapse (only when floating / unpinned)
+  // Mouse enter to expand, mouse leave to collapse (only when floating / unpinned)
+  sidebar.addEventListener("mouseenter", () => {
+    clearLeaveTimer(doc);
+    if (isPinned() || isFloatingExpanded(doc)) return;
+    if (getHoverTimer(doc)) return;
+    const timer = setTimeout(() => {
+      setHoverTimer(doc, null);
+      expandFloatingSidebar(doc);
+    }, HOVER_DELAY_MS);
+    setHoverTimer(doc, timer);
+  });
+
   sidebar.addEventListener("mouseleave", (e: MouseEvent) => {
     if (isPinned() || !isFloatingExpanded(doc)) return;
     if (isWaitingMouseMoveAfterInput(doc)) {
@@ -574,10 +505,6 @@ export function createSidebar(doc: Document): HTMLElement {
       return;
     }
     scheduleCollapse(doc);
-  });
-
-  sidebar.addEventListener("mouseenter", () => {
-    clearLeaveTimer(doc);
   });
 
   // Create resize handle
@@ -665,7 +592,9 @@ export function expandFloatingSidebar(doc: Document): void {
   if (isPinned()) return;
   const sidebar = getSidebar(doc);
   if (!sidebar) return;
+  sidebar.style.width = `${getSavedWidth()}px`;
   sidebar.classList.add("vertical-tabs-sidebar-expanded");
+  setResizeHandleVisible(doc, true);
   setFloatingExpanded(doc, true);
   dispatchVtEvent(doc, "vertical-tabs:visibility-changed", { visible: true });
 }
@@ -681,7 +610,9 @@ function performCollapse(doc: Document): void {
   ) as HTMLInputElement | null;
   searchInput?.blur();
 
+  sidebar.style.width = `${HOVER_STRIP_WIDTH}px`;
   sidebar.classList.remove("vertical-tabs-sidebar-expanded");
+  setResizeHandleVisible(doc, false);
   setFloatingExpanded(doc, false);
   dispatchVtEvent(doc, "vertical-tabs:visibility-changed", { visible: false });
 }
@@ -698,13 +629,9 @@ export function collapseFloatingSidebar(doc: Document): void {
   if (!sidebar) return;
   if (!isFloatingExpanded(doc)) return;
 
-  // Check if mouse is currently over sidebar or hover strip — if so, don't collapse
+  // Check if mouse is currently over sidebar — if so, don't collapse
   const hovered = doc.querySelector(":hover");
-  if (
-    hovered &&
-    (hovered.closest(`#${SIDEBAR_ID}`) ||
-      hovered.closest(`.${HOVER_STRIP_CLASS}`))
-  ) {
+  if (hovered && hovered.closest(`#${SIDEBAR_ID}`)) {
     return;
   }
 
@@ -772,7 +699,6 @@ export function renderSidebarMode(doc: Document): HTMLElement | null {
   const sidebar = getSidebar(doc) ?? createSidebar(doc);
 
   if (pinned) {
-    removeHoverStrip(doc);
     applySidebarClasses(sidebar, "pinned");
     sidebar.classList.remove("vertical-tabs-sidebar-expanded");
     sidebar.removeAttribute("hidden");
@@ -786,11 +712,10 @@ export function renderSidebarMode(doc: Document): HTMLElement | null {
     sidebar.classList.remove("vertical-tabs-sidebar-expanded");
     sidebar.removeAttribute("hidden");
     sidebar.style.display = "";
-    sidebar.style.width = `${getSavedWidth()}px`;
+    sidebar.style.width = `${HOVER_STRIP_WIDTH}px`;
     setFloatingExpanded(doc, false);
     setResizeHandleVisible(doc, true);
     setWrapperAndSplitter(doc, "floating");
-    createHoverStrip(doc);
   }
 
   updatePinButtonVisual(doc);
@@ -831,7 +756,7 @@ export function getCategoriesContainer(doc: Document): HTMLElement | null {
 // ── Legacy toggle button helpers (kept for API compatibility) ──
 
 export function getToggleButton(doc: Document): HTMLElement | null {
-  return getHoverStrip(doc);
+  return getSidebar(doc);
 }
 
 export function destroySidebar(doc: Document): void {
@@ -842,9 +767,8 @@ export function destroySidebar(doc: Document): void {
   setWaitMouseMoveAfterInput(doc, false);
   const sidebar = getSidebar(doc);
   if (sidebar) sidebar.remove();
-  removeHoverStrip(doc);
   removeWrapper(doc);
   removeStyles(doc);
 }
 
-export { SIDEBAR_ID, TOGGLE_BTN_ID, HOVER_STRIP_CLASS };
+export { SIDEBAR_ID };

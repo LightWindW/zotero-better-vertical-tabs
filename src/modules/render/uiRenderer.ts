@@ -3,7 +3,6 @@ import { getString } from "../../utils/locale";
 import {
   collapseFloatingSidebar,
   getCategoriesContainer,
-  HOVER_STRIP_CLASS,
   scheduleCollapse,
   setContextMenuOpen,
   SIDEBAR_ID,
@@ -700,11 +699,8 @@ export function showItemContextMenu(
     const target = e.target as HTMLElement;
     // Don't close if clicking inside the menu
     if (target.closest(`#${menuId}`)) return;
-    // Click inside VT (e.g. right-click another item) → close menu, keep VT open
-    if (
-      target.closest(`#${SIDEBAR_ID}`) ||
-      target.closest(`.${HOVER_STRIP_CLASS}`)
-    ) {
+    // Click inside VT → close menu, keep VT open
+    if (target.closest(`#${SIDEBAR_ID}`)) {
       menu.remove();
       setContextMenuOpen(doc, false);
       cleanup();
