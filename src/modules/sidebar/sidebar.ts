@@ -17,6 +17,7 @@ const RESIZE_HANDLE_CLASS = "vertical-tabs-resize-handle";
 const PIN_BTN_CLASS = "vertical-tabs-pin-btn";
 const PIN_ICON_CLASS = "vertical-tabs-pin-icon";
 const HOVER_STRIP_WIDTH = 35;
+const COLLAPSE_FADE_START_WIDTH = 40;
 
 function pinIconUrl(filled: boolean): string {
   return `chrome://${config.addonRef}/content/icons/${filled ? "pin-fill" : "pin"}.svg`;
@@ -46,6 +47,61 @@ function saveWidth(width: number): void {
     Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, width)),
     false,
   );
+}
+
+function updateContentOpacity(sidebar: HTMLElement): void {
+  const width = sidebar.clientWidth;
+  const opacity = Math.max(
+    0,
+    Math.min(
+      1,
+      (width - HOVER_STRIP_WIDTH) /
+        (COLLAPSE_FADE_START_WIDTH - HOVER_STRIP_WIDTH),
+    ),
+  );
+  sidebar.style.setProperty("--vt-content-opacity", opacity.toFixed(3));
+}
+
+function attachWidthFadeTracker(sidebar: HTMLElement, doc: Document): void {
+  const win = doc.defaultView;
+  if (!win) return;
+
+  let rafId: number | null = null;
+  let safetyId: number | null = null;
+
+  const cleanup = () => {
+    if (rafId !== null) {
+      win.cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+    if (safetyId !== null) {
+      win.clearTimeout(safetyId);
+      safetyId = null;
+    }
+  };
+
+  const onEnd = (e?: TransitionEvent) => {
+    if (e && e.propertyName !== "width") return;
+    cleanup();
+    updateContentOpacity(sidebar);
+  };
+
+  const step = () => {
+    updateContentOpacity(sidebar);
+    rafId = win.requestAnimationFrame(step);
+  };
+
+  const onRun = (e: TransitionEvent) => {
+    if (e.propertyName !== "width") return;
+    cleanup();
+    rafId = win.requestAnimationFrame(step);
+    safetyId = win.setTimeout(cleanup, 500);
+  };
+
+  sidebar.addEventListener("transitionrun", onRun);
+  sidebar.addEventListener("transitionend", onEnd);
+  sidebar.addEventListener("transitioncancel", onEnd);
+  (sidebar as any).__vtFadeCleanup = cleanup;
 }
 
 export function isPinned(): boolean {
@@ -542,15 +598,17 @@ export function createSidebar(doc: Document): HTMLElement {
     const delta = e.clientX - startX;
     const newWidth = startWidth + delta;
     const clamped = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, newWidth));
-    sidebar.style.width = `${clamped}px`;
+    sidebar.style.setProperty("--vt-expanded-width", `${clamped}px`);
   }
 
   function onMouseUp(e: MouseEvent): void {
     resizeHandle.classList.remove("active");
+    sidebar.classList.remove("vertical-tabs-sidebar-resizing");
     doc.removeEventListener("mousemove", onMouseMove);
     doc.removeEventListener("mouseup", onMouseUp);
-    const finalWidth = parseInt(sidebar.style.width, 10);
+    const finalWidth = sidebar.offsetWidth;
     saveWidth(finalWidth);
+    sidebar.style.setProperty("--vt-content-opacity", "1");
   }
 
   resizeHandle.addEventListener("mousedown", (e: MouseEvent) => {
@@ -558,6 +616,7 @@ export function createSidebar(doc: Document): HTMLElement {
     startX = e.clientX;
     startWidth = sidebar.offsetWidth;
     resizeHandle.classList.add("active");
+    sidebar.classList.add("vertical-tabs-sidebar-resizing");
     doc.addEventListener("mousemove", onMouseMove);
     doc.addEventListener("mouseup", onMouseUp);
   });
@@ -572,6 +631,8 @@ export function createSidebar(doc: Document): HTMLElement {
       pane.insertBefore(sidebar, pane.firstChild);
     }
   }
+
+  attachWidthFadeTracker(sidebar, doc);
 
   return sidebar;
 }
@@ -607,14 +668,47 @@ function togglePinned(doc: Document): void {
   updatePinButtonVisual(doc);
 }
 
+function setExpandAnimating(doc: Document, animating: boolean): void {
+  (doc as any).__vtExpandAnimating = animating;
+}
+
+export function isExpandAnimating(doc: Document): boolean {
+  return (doc as any).__vtExpandAnimating ?? false;
+}
+
 export function expandFloatingSidebar(doc: Document): void {
   if (isPinned()) return;
   const sidebar = getSidebar(doc);
   if (!sidebar) return;
-  sidebar.style.width = `${getSavedWidth()}px`;
+  const savedWidth = getSavedWidth();
+  sidebar.style.setProperty("--vt-expanded-width", `${savedWidth}px`);
+  sidebar.style.width = "";
   sidebar.classList.add("vertical-tabs-sidebar-expanded");
+  updateContentOpacity(sidebar);
   setResizeHandleVisible(doc, true);
   setFloatingExpanded(doc, true);
+
+  // Block hover card until the width expand animation finishes.
+  setExpandAnimating(doc, true);
+  const onEnd = (e?: TransitionEvent) => {
+    if (e && e.propertyName !== "width") return;
+    sidebar.removeEventListener("transitionend", onEnd);
+    sidebar.removeEventListener("transitioncancel", onEnd);
+    if (!isExpandAnimating(doc)) return;
+    setExpandAnimating(doc, false);
+    dispatchVtEvent(doc, "vertical-tabs:expand-animation-complete", {});
+  };
+  sidebar.addEventListener("transitionend", onEnd);
+  sidebar.addEventListener("transitioncancel", onEnd);
+  // Safety net in case transition events don't fire.
+  setTimeout(() => {
+    if (!isExpandAnimating(doc)) return;
+    sidebar.removeEventListener("transitionend", onEnd);
+    sidebar.removeEventListener("transitioncancel", onEnd);
+    setExpandAnimating(doc, false);
+    dispatchVtEvent(doc, "vertical-tabs:expand-animation-complete", {});
+  }, 350);
+
   dispatchVtEvent(doc, "vertical-tabs:visibility-changed", { visible: true });
 }
 
@@ -629,10 +723,12 @@ function performCollapse(doc: Document): void {
   ) as HTMLInputElement | null;
   searchInput?.blur();
 
-  sidebar.style.width = `${HOVER_STRIP_WIDTH}px`;
+  sidebar.style.width = "";
   sidebar.classList.remove("vertical-tabs-sidebar-expanded");
+  updateContentOpacity(sidebar);
   setResizeHandleVisible(doc, false);
   setFloatingExpanded(doc, false);
+  setExpandAnimating(doc, false);
   dispatchVtEvent(doc, "vertical-tabs:visibility-changed", { visible: false });
 }
 
@@ -723,6 +819,7 @@ export function renderSidebarMode(doc: Document): HTMLElement | null {
     sidebar.removeAttribute("hidden");
     sidebar.style.display = "";
     sidebar.style.width = "100%";
+    sidebar.style.setProperty("--vt-content-opacity", "1");
     setFloatingExpanded(doc, false);
     setResizeHandleVisible(doc, false);
     setWrapperAndSplitter(doc, "pinned");
@@ -731,7 +828,8 @@ export function renderSidebarMode(doc: Document): HTMLElement | null {
     sidebar.classList.remove("vertical-tabs-sidebar-expanded");
     sidebar.removeAttribute("hidden");
     sidebar.style.display = "";
-    sidebar.style.width = `${HOVER_STRIP_WIDTH}px`;
+    sidebar.style.width = "";
+    sidebar.style.setProperty("--vt-content-opacity", "0");
     setFloatingExpanded(doc, false);
     setResizeHandleVisible(doc, true);
     setWrapperAndSplitter(doc, "floating");
@@ -785,7 +883,12 @@ export function destroySidebar(doc: Document): void {
   clearWidthObserver(doc);
   setWaitMouseMoveAfterInput(doc, false);
   const sidebar = getSidebar(doc);
-  if (sidebar) sidebar.remove();
+  if (sidebar) {
+    if ((sidebar as any).__vtFadeCleanup) {
+      (sidebar as any).__vtFadeCleanup();
+    }
+    sidebar.remove();
+  }
   removeWrapper(doc);
   removeStyles(doc);
 }

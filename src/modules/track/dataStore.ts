@@ -10,6 +10,7 @@ export interface Category {
   itemIds: number[];
   tabIds: string[];
   color?: string;
+  collapsed?: boolean;
 }
 
 export interface TrackedItemInfo {
@@ -62,6 +63,7 @@ export async function loadData(): Promise<VerticalTabsData> {
           itemIds: Array.isArray(cat.itemIds) ? cat.itemIds : [],
           tabIds: Array.isArray(cat.tabIds) ? cat.tabIds : [],
           color: cat.color || undefined,
+          collapsed: cat.collapsed ?? false,
         }))
       : [];
 
@@ -102,6 +104,7 @@ export function createCategory(data: VerticalTabsData, name: string): Category {
     order: maxOrder + 1,
     itemIds: [],
     tabIds: [],
+    collapsed: false,
   };
 }
 

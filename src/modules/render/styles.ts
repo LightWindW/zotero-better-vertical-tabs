@@ -37,6 +37,7 @@ export function getStyles(): string {
       font-size: 13px;
       color: var(--material-text, #222);
       user-select: none;
+      --vt-content-opacity: 1;
     }
 
     #${SIDEBAR_ID}[hidden] {
@@ -60,31 +61,33 @@ export function getStyles(): string {
       border-right: 1px solid #DBDBDB;
       box-shadow: none;
       overflow: hidden;
-      transition: width 0.2s ease-out, border-color 0.2s ease-out, box-shadow 0.2s ease-out;
+      transition: width 0.2s, border-color 0.2s, box-shadow 0.2s;
+      transition-timing-function: ease-out;
     }
 
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating.vertical-tabs-sidebar-expanded {
-      width: ${PANEL_WIDTH};
+      width: var(--vt-expanded-width, ${PANEL_WIDTH});
       border-right-color: transparent;
       box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
       pointer-events: auto;
+      transition-timing-function: ease-in;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-header {
       display: flex;
       align-items: center;
       justify-content: flex-start;
-      min-height: 55px;
-      padding: 8px 12px 8px 5px;
+      min-height: 38px;
+      padding: 6px 12px 6px 5px;
       border-bottom: 1px solid var(--material-border, #ccc);
       font-weight: 600;
-      transition: padding 0.2s linear, gap 0.2s linear;
+      transition: padding 0.2s ease-out, gap 0.2s ease-out;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-search {
       flex: 1;
       min-width: 0;
-      height: 24px;
+      height: 20px;
       padding: 2px 8px;
       border: 1.5px solid transparent;
       border-radius: 12px;
@@ -112,7 +115,7 @@ export function getStyles(): string {
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: padding 0.2s linear, margin 0.2s linear, background 0.2s ease-out;
+      transition: padding 0.2s ease-out, margin 0.2s ease-out, background 0.2s ease-out;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-pin-icon {
@@ -149,7 +152,7 @@ export function getStyles(): string {
       display: flex;
       flex-direction: column;
       overflow-y: auto;
-      padding: 4px 0;
+      padding: 2px 0;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category {
@@ -167,10 +170,10 @@ export function getStyles(): string {
       display: flex;
       align-items: center;
       min-height: 28px;
-      padding: 6px 12px 6px 10px;
+      padding: 4px 12px 4px 10px;
       cursor: pointer;
       gap: 6px;
-      transition: padding 0.2s linear, gap 0.2s linear;
+      transition: padding 0.2s ease-out, gap 0.2s ease-out;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category-header:hover {
@@ -206,7 +209,7 @@ export function getStyles(): string {
       text-align: center;
       color: #6C6C6C;
       display: inline-block;
-      transition: transform 0.15s ease-out, margin 0.2s linear;
+      transition: transform 0.15s ease-out, margin 0.2s ease-out;
       transform: rotate(-90deg);
     }
 
@@ -245,12 +248,12 @@ export function getStyles(): string {
       display: flex;
       flex-direction: row;
       align-items: center;
-      min-height: 44px;
-      padding: 6px 12px 6px 9px;
+      min-height: 36px;
+      padding: 4px 12px 4px 9px;
       cursor: pointer;
       gap: 8px;
       position: relative;
-      transition: padding 0.2s linear, gap 0.2s linear;
+      transition: padding 0.2s ease-out, gap 0.2s ease-out;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-item:hover {
@@ -332,11 +335,11 @@ export function getStyles(): string {
       height: 16px;
       flex-shrink: 0;
       object-fit: contain;
-      transition: margin 0.2s linear;
+      transition: margin 0.2s ease-out;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-item-icon-fallback {
-      transition: margin 0.2s linear;
+      transition: margin 0.2s ease-out;
     }
 
     /* Content block (right of icon) */
@@ -394,7 +397,7 @@ export function getStyles(): string {
     }
 
     #${SIDEBAR_ID} .vertical-tabs-empty {
-      padding: 20px 12px;
+      padding: 12px 12px;
       text-align: center;
       color: var(--material-text-muted, #888);
       font-size: 12px;
@@ -410,7 +413,7 @@ export function getStyles(): string {
     /* Drop zone: area below categories for removing items from categories */
     #${SIDEBAR_ID} .vertical-tabs-drop-zone {
       flex: 1;
-      min-height: 40px;
+      min-height: 32px;
       padding: 4px 0;
       transition: background 0.15s ease;
     }
@@ -423,12 +426,12 @@ export function getStyles(): string {
 
     /* Collapsed (floating, not expanded): icon-only layout */
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-header {
-      padding: 8px 0;
+      padding: 6px 0;
     }
 
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-search,
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-add-btn {
-      display: none;
+      pointer-events: none;
     }
 
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-pin-btn {
@@ -437,13 +440,8 @@ export function getStyles(): string {
     }
 
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-category-header {
-      padding: 6px 0;
+      padding: 4px 0;
       gap: 0;
-    }
-
-    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-category-name,
-    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-count {
-      display: none;
     }
 
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-chevron {
@@ -452,11 +450,14 @@ export function getStyles(): string {
     }
 
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-item {
-      padding: 6px 0;
+      padding: 4px 0;
       gap: 0;
     }
 
-    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-item-content,
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-item-content {
+      pointer-events: none;
+    }
+
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-item-close {
       display: none;
     }
@@ -482,6 +483,22 @@ export function getStyles(): string {
 
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-separator {
       margin: 4px 6px;
+    }
+
+    /* Fade right-side content during the last 5px of collapse (40px -> 35px) */
+    #${SIDEBAR_ID} .vertical-tabs-search,
+    #${SIDEBAR_ID} .vertical-tabs-add-btn,
+    #${SIDEBAR_ID} .vertical-tabs-category-name,
+    #${SIDEBAR_ID} .vertical-tabs-count,
+    #${SIDEBAR_ID} .vertical-tabs-item-content,
+    #${SIDEBAR_ID} .vertical-tabs-empty {
+      opacity: var(--vt-content-opacity, 1);
+    }
+
+    /* Disable transitions while dragging the resize handle */
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-resizing,
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-resizing * {
+      transition: none !important;
     }
 
     /* Resize handle: draggable right edge */

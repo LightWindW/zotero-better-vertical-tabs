@@ -498,7 +498,12 @@ function createCategoryElement(
   header.appendChild(count);
 
   header.addEventListener("click", () => {
+    const collapsed = !wrapper.classList.contains("collapsed");
     wrapper.classList.toggle("collapsed");
+    dispatchVtEvent(wrapper, "vertical-tabs:category-toggle-collapsed", {
+      categoryId: category.id,
+      collapsed,
+    });
   });
 
   header.addEventListener("contextmenu", (event: MouseEvent) => {
@@ -724,18 +729,8 @@ export function renderCategories(
   data: VerticalTabsData,
   pdfs: OpenedPDF[],
 ): void {
-  // Preserve per-category collapsed state across re-renders so that
-  // VT expand/collapse does not reset category folding.
-  const previousStates = new Map<string, boolean>();
-  container
-    .querySelectorAll(".vertical-tabs-category")
-    .forEach((el: Element) => {
-      const categoryId = (el as HTMLElement).dataset.categoryId;
-      if (categoryId) {
-        previousStates.set(categoryId, el.classList.contains("collapsed"));
-      }
-    });
-
+  // Categories are rendered from persisted data, including collapsed state.
+  // This avoids losing manual fold/unfold state when VT collapses/expands.
   container.innerHTML = "";
 
   // Match by tabId (for independent cloned tabs), fallback to itemId
@@ -789,7 +784,7 @@ export function renderCategories(
     const items =
       categorizedPdfs.find((entry) => entry.category.id === category.id)
         ?.items || [];
-    const collapsed = previousStates.get(category.id) ?? false;
+    const collapsed = category.collapsed ?? false;
     container.appendChild(
       createCategoryElement(doc, category, items, collapsed),
     );
@@ -903,7 +898,15 @@ export function subscribeToRenderEvents(
 
   doc.addEventListener("vertical-tabs:pdfs-changed", handler);
   doc.addEventListener("vertical-tabs:data-changed", handler);
-  doc.addEventListener("vertical-tabs:visibility-changed", handler);
+  // Collapse/expand should not rebuild the categories DOM: we want the
+  // existing content to be clipped by the width animation instead of
+  // vanishing instantly. Only render when becoming visible (initial load).
+  doc.addEventListener("vertical-tabs:visibility-changed", ((
+    e: CustomEvent,
+  ) => {
+    if (e.detail?.visible === false) return;
+    void handler();
+  }) as EventListener);
 
   // Search event
   doc.addEventListener("vertical-tabs:search", ((e: CustomEvent) => {
