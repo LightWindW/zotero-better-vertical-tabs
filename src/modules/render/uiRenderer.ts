@@ -263,8 +263,38 @@ function createItemElement(
         // ignore
       }
     }
+    // Hide hover card immediately so it doesn't linger after the tab is gone
+    const hc = doc.getElementById(
+      "vertical-tabs-hover-card",
+    ) as HTMLElement | null;
+    if (hc) {
+      hc.style.opacity = "0";
+      hc.style.display = "none";
+    }
   });
   row.appendChild(closeBtn);
+
+  // Middle-click to close tab
+  row.addEventListener("mousedown", (e: MouseEvent) => {
+    if (e.button !== 1 || !pdf.tabId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const tabs = getZoteroTabs();
+    if (tabs) {
+      try {
+        tabs.close(pdf.tabId);
+      } catch {
+        // ignore
+      }
+    }
+    const hc = doc.getElementById(
+      "vertical-tabs-hover-card",
+    ) as HTMLElement | null;
+    if (hc) {
+      hc.style.opacity = "0";
+      hc.style.display = "none";
+    }
+  });
 
   // ── Drag reorder (within category or uncategorized) ──
   const reorderCatId = categoryId || "__uncategorized__";

@@ -1,6 +1,7 @@
 import { getString } from "../../utils/locale";
 import { dispatchVtEvent } from "../core/events";
 import { isDarkMode } from "../render/colorUtils";
+import { setDialogOpen } from "../sidebar/sidebar";
 import {
   deleteSavedCategory,
   loadSavedCategories,
@@ -354,12 +355,14 @@ function closeImportDialog(doc: Document): void {
     if (e.target !== overlay) return;
     overlay.removeEventListener("animationend", onLeaveEnd);
     overlay.remove();
+    setDialogOpen(doc, false);
   };
   overlay.addEventListener("animationend", onLeaveEnd);
 }
 
 export async function showImportCategoryDialog(doc: Document): Promise<void> {
   closeImportDialog(doc);
+  setDialogOpen(doc, true);
 
   const collection = await loadSavedCategories();
   const colors = getThemeColors(doc);

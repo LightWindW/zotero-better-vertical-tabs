@@ -1,4 +1,5 @@
 import { getString } from "../../utils/locale";
+import { setDialogOpen } from "../sidebar/sidebar";
 import { markTabAsImported } from "../track/itemTracker";
 import {
   Category,
@@ -193,6 +194,7 @@ export async function showRestoreWarningDialog(
   doc: Document,
   result: RestoreResult,
 ): Promise<void> {
+  setDialogOpen(doc, true);
   const messages: string[] = [];
 
   if (result.missingItemIds.length > 0) {
@@ -211,7 +213,10 @@ export async function showRestoreWarningDialog(
     );
   }
 
-  if (messages.length === 0) return;
+  if (messages.length === 0) {
+    setDialogOpen(doc, false);
+    return;
+  }
 
   const dialogData: { [key: string]: any } = {};
 
@@ -244,5 +249,9 @@ export async function showRestoreWarningDialog(
     .setDialogData(dialogData)
     .open(getString("vertical-tabs-restore-warning-title"));
 
-  await dialogData.unloadLock.promise;
+  try {
+    await dialogData.unloadLock.promise;
+  } finally {
+    setDialogOpen(doc, false);
+  }
 }

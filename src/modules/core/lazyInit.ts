@@ -43,7 +43,6 @@ const PREF_NAMESPACE = config.prefsPrefix;
 
 let _prefsObserverID: symbol | null = null;
 let _showExtraObserverID: symbol | null = null;
-let _mainPageObserverID: symbol | null = null;
 let _pinnedObserverID: symbol | null = null;
 
 interface WindowState {
@@ -69,11 +68,7 @@ export async function initVerticalTabs(
     `${PREF_NAMESPACE}.verticalTabs.enabled`,
     true,
   ) as boolean;
-  const mainPageEnabled = Zotero.Prefs.get(
-    `${PREF_NAMESPACE}.verticalTabs.mainPageEnabled`,
-    true,
-  ) as boolean;
-  const visible = enabled && mainPageEnabled;
+  const visible = enabled;
 
   startTracking();
   await initCategoryManager(win.document);
@@ -111,11 +106,6 @@ export async function initVerticalTabs(
           if (!ws.initialized) continue;
           if (value) {
             startTracking();
-            Zotero.Prefs.set(
-              `${PREF_NAMESPACE}.verticalTabs.mainPageEnabled`,
-              true,
-              false,
-            );
             setSidebarVisibility(w.document, true);
             ws.visible = true;
             // Re-scan existing tabs to re-inject reader VT
@@ -127,11 +117,6 @@ export async function initVerticalTabs(
             stopTracking();
             destroySidebar(w.document);
             ws.visible = false;
-            Zotero.Prefs.set(
-              `${PREF_NAMESPACE}.verticalTabs.mainPageEnabled`,
-              false,
-              false,
-            );
           }
         }
       },
@@ -152,34 +137,6 @@ export async function initVerticalTabs(
     );
   }
 
-  // Register preference observer for mainPageEnabled toggle
-  if (!_mainPageObserverID) {
-    _mainPageObserverID = Zotero.Prefs.registerObserver(
-      `${PREF_NAMESPACE}.verticalTabs.mainPageEnabled`,
-      (value: boolean) => {
-        for (const w of Zotero.getMainWindows()) {
-          const ws = getWindowState(w);
-          if (!ws.initialized) continue;
-          const globallyEnabled = Zotero.Prefs.get(
-            `${PREF_NAMESPACE}.verticalTabs.enabled`,
-            true,
-          ) as boolean;
-          if (globallyEnabled && value) {
-            setSidebarVisibility(w.document, true);
-            ws.visible = true;
-            dispatchVtEvent(w.document, "vertical-tabs:visibility-changed", {
-              visible: true,
-            });
-          } else {
-            // mainPageEnabled off or global off → no sidebar, no N icon
-            destroySidebar(w.document);
-            ws.visible = false;
-          }
-        }
-      },
-    );
-  }
-
   // Register preference observer for pinned toggle
   if (!_pinnedObserverID) {
     _pinnedObserverID = Zotero.Prefs.registerObserver(
@@ -192,11 +149,7 @@ export async function initVerticalTabs(
             `${PREF_NAMESPACE}.verticalTabs.enabled`,
             true,
           ) as boolean;
-          const mainPageEnabled = Zotero.Prefs.get(
-            `${PREF_NAMESPACE}.verticalTabs.mainPageEnabled`,
-            true,
-          ) as boolean;
-          if (globallyEnabled && mainPageEnabled) {
+          if (globallyEnabled) {
             setSidebarVisibility(w.document, true);
             dispatchVtEvent(w.document, "vertical-tabs:visibility-changed", {
               visible: true,
@@ -278,10 +231,6 @@ export function destroyVerticalTabs(win: Window): void {
     if (_showExtraObserverID) {
       Zotero.Prefs.unregisterObserver(_showExtraObserverID);
       _showExtraObserverID = null;
-    }
-    if (_mainPageObserverID) {
-      Zotero.Prefs.unregisterObserver(_mainPageObserverID);
-      _mainPageObserverID = null;
     }
     if (_pinnedObserverID) {
       Zotero.Prefs.unregisterObserver(_pinnedObserverID);

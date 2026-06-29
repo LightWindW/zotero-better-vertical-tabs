@@ -1,9 +1,11 @@
 import { getString } from "../../utils/locale";
+import { setDialogOpen } from "../sidebar/sidebar";
 
 export async function promptOverwriteSavedCategory(
   doc: Document,
   name: string,
 ): Promise<boolean> {
+  setDialogOpen(doc, true);
   const dialogData: { [key: string]: any } = {};
 
   new ztoolkit.Dialog(1, 1)
@@ -21,6 +23,10 @@ export async function promptOverwriteSavedCategory(
     .setDialogData(dialogData)
     .open(getString("vertical-tabs-overwrite-title"));
 
-  await dialogData.unloadLock.promise;
-  return dialogData._lastButtonId === "confirm";
+  try {
+    await dialogData.unloadLock.promise;
+    return dialogData._lastButtonId === "confirm";
+  } finally {
+    setDialogOpen(doc, false);
+  }
 }
