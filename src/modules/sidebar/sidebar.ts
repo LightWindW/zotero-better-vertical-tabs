@@ -473,21 +473,13 @@ export function createSidebar(doc: Document): HTMLElement {
           },
           {
             tag: "button",
-            classList: ["vertical-tabs-add-btn"],
+            classList: ["vertical-tabs-more-btn"],
             attributes: {
-              title: getString("vertical-tabs-add-category"),
+              title: getString("vertical-tabs-more-menu"),
             },
             properties: {
-              textContent: "+",
+              textContent: "⋯",
             },
-            listeners: [
-              {
-                type: "click",
-                listener: () => {
-                  dispatchVtEvent(doc, "vertical-tabs:add-category");
-                },
-              },
-            ],
           },
         ],
       },
@@ -633,6 +625,30 @@ export function createSidebar(doc: Document): HTMLElement {
   }
 
   attachWidthFadeTracker(sidebar, doc);
+
+  const moreBtn = sidebar.querySelector(
+    ".vertical-tabs-more-btn",
+  ) as HTMLElement | null;
+  if (moreBtn) {
+    let hoverTimer: ReturnType<typeof setTimeout> | null = null;
+    const trigger = () => {
+      if (doc.getElementById("vertical-tabs-more-menu")) return;
+      dispatchVtEvent(doc, "vertical-tabs:show-more-menu");
+    };
+    moreBtn.addEventListener("mouseenter", () => {
+      if (hoverTimer) return;
+      hoverTimer = setTimeout(() => {
+        hoverTimer = null;
+        trigger();
+      }, 150);
+    });
+    moreBtn.addEventListener("mouseleave", () => {
+      if (hoverTimer) {
+        clearTimeout(hoverTimer);
+        hoverTimer = null;
+      }
+    });
+  }
 
   return sidebar;
 }

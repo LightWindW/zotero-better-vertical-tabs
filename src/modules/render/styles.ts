@@ -131,7 +131,7 @@ export function getStyles(): string {
       color: #999;
     }
 
-    #${SIDEBAR_ID} .vertical-tabs-add-btn {
+    #${SIDEBAR_ID} .vertical-tabs-more-btn {
       background: transparent;
       border: none;
       cursor: pointer;
@@ -141,7 +141,7 @@ export function getStyles(): string {
       color: #6C6C6C;
     }
 
-    #${SIDEBAR_ID} .vertical-tabs-add-btn:hover {
+    #${SIDEBAR_ID} .vertical-tabs-more-btn:hover {
       background: var(--material-button-hover, rgba(0, 0, 0, 0.06));
       border-radius: 4px;
       color: #999;
@@ -167,6 +167,7 @@ export function getStyles(): string {
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category-header {
+      position: relative;
       display: flex;
       align-items: center;
       min-height: 28px;
@@ -430,7 +431,7 @@ export function getStyles(): string {
     }
 
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-search,
-    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-add-btn {
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-more-btn {
       pointer-events: none;
     }
 
@@ -487,7 +488,7 @@ export function getStyles(): string {
 
     /* Fade right-side content during the last 5px of collapse (40px -> 35px) */
     #${SIDEBAR_ID} .vertical-tabs-search,
-    #${SIDEBAR_ID} .vertical-tabs-add-btn,
+    #${SIDEBAR_ID} .vertical-tabs-more-btn,
     #${SIDEBAR_ID} .vertical-tabs-category-name,
     #${SIDEBAR_ID} .vertical-tabs-count,
     #${SIDEBAR_ID} .vertical-tabs-item-content,
@@ -517,6 +518,145 @@ export function getStyles(): string {
     #${SIDEBAR_ID} .vertical-tabs-resize-handle:hover,
     #${SIDEBAR_ID} .vertical-tabs-resize-handle.active {
       background: rgba(128, 128, 128, 0.5);
+    }
+
+    /* More menu popup */
+    .vertical-tabs-more-menu {
+      transform-origin: top right;
+      animation: vt-more-menu-appear 0.15s ease-out;
+    }
+
+    .vertical-tabs-more-menu-leaving {
+      transform-origin: top right;
+      animation: vt-more-menu-leave 0.15s ease-out forwards;
+    }
+
+    .vertical-tabs-more-menu-item img {
+      display: block;
+    }
+
+    /* Save success animation */
+    .vt-save-success-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      pointer-events: none;
+      overflow: hidden;
+      border-radius: inherit;
+    }
+
+    .vt-save-success-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      filter: brightness(0.85);
+      animation: vt-save-bar 3s ease-in-out forwards;
+    }
+
+    .vt-save-success-text {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      white-space: nowrap;
+      font-size: 12px;
+      font-weight: 600;
+      color: #fff;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+      animation: vt-save-text 3s ease-in-out forwards;
+    }
+
+    @keyframes vt-more-menu-appear {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    @keyframes vt-more-menu-leave {
+      from { opacity: 1; transform: scale(1); }
+      to { opacity: 0; transform: scale(0.95); }
+    }
+
+    @keyframes vt-save-bar {
+      0% { width: 0%; left: 0; }
+      33% { width: 100%; left: 0; }
+      66% { width: 100%; left: 0; }
+      100% { width: 0%; left: 100%; }
+    }
+
+    @keyframes vt-save-text {
+      0% { left: 0%; transform: translateX(-100%); opacity: 0; }
+      10% { opacity: 1; }
+      33% { left: 50%; transform: translateX(calc(-50% - 10px)); }
+      66% { left: 70%; transform: translateX(calc(-70% - 10px)); }
+      100% { left: 100%; transform: translateX(0); opacity: 1; }
+    }
+
+    /* Import category dialog */
+    #vt-import-dialog-overlay {
+      font-family: message-box;
+    }
+
+    .vt-import-dialog {
+      animation: vt-import-dialog-appear 0.15s ease-out;
+    }
+
+    @keyframes vt-import-dialog-appear {
+      from { opacity: 0; transform: scale(0.96); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    #vt-import-dialog-overlay.vt-import-dialog-leaving {
+      animation: vt-import-dialog-overlay-leave 0.15s ease-out forwards;
+    }
+
+    #vt-import-dialog-overlay.vt-import-dialog-leaving .vt-import-dialog {
+      animation: vt-import-dialog-content-leave 0.15s ease-out forwards;
+    }
+
+    @keyframes vt-import-dialog-overlay-leave {
+      from { opacity: 1; }
+      to { opacity: 0; }
+    }
+
+    @keyframes vt-import-dialog-content-leave {
+      from { opacity: 1; transform: scale(1); }
+      to { opacity: 0; transform: scale(0.96); }
+    }
+
+    .vt-action-btn {
+      -moz-appearance: none;
+      appearance: none;
+      border: 0;
+      outline: 0;
+    }
+
+    .vt-action-btn::-moz-focus-inner {
+      border: 0;
+      padding: 0;
+    }
+
+    .vt-saved-category-row {
+      transition: max-height 0.25s ease-out, opacity 0.25s ease-out, padding 0.25s ease-out;
+      overflow: hidden;
+    }
+
+    .vt-saved-category-row-removing {
+      max-height: 0 !important;
+      opacity: 0 !important;
+      padding-top: 0 !important;
+      padding-bottom: 0 !important;
+    }
+
+    .vt-import-dialog-list::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .vt-import-dialog-list::-webkit-scrollbar-thumb {
+      background: rgba(128, 128, 128, 0.4);
+      border-radius: 3px;
     }
 
     @media (prefers-color-scheme: dark) {

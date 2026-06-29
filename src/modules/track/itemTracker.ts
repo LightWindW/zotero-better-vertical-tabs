@@ -15,6 +15,7 @@ export interface OpenedPDF {
   type: string;
   title: string;
   openedAt: number;
+  imported?: boolean;
 }
 
 function vtLog(msg: string): void {
@@ -25,6 +26,19 @@ let _notifierID: string | null = null;
 let _itemNotifierID: string | null = null;
 let _openedPDFs: OpenedPDF[] = [];
 let _selectedTabId = "";
+
+// Track tabs created by importing a saved category. These tabs should only
+// match their owning category by tabId, not by itemId fallback.
+const _importedTabIds = new Set<string>();
+
+export function markTabAsImported(tabId: string): void {
+  if (!tabId) return;
+  _importedTabIds.add(tabId);
+  const pdf = _openedPDFs.find((p) => p.tabId === tabId);
+  if (pdf) {
+    pdf.imported = true;
+  }
+}
 
 function getMainWindows(): Window[] {
   return Zotero.getMainWindows();
@@ -140,6 +154,11 @@ async function handleTabAdded(tabId: string): Promise<void> {
   const tracked = getTrackedItems();
   const existingTracked = tracked[itemId];
 
+  const imported = _importedTabIds.has(tabId);
+  if (imported) {
+    _importedTabIds.delete(tabId);
+  }
+
   _openedPDFs.push({
     itemId,
     parentItemId,
@@ -148,6 +167,7 @@ async function handleTabAdded(tabId: string): Promise<void> {
     type: tabInfo.type,
     title: tabInfo.title || "",
     openedAt: Date.now(),
+    imported,
   });
 
   // Persist to JSON for restart recovery (only if feature enabled)

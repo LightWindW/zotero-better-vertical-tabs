@@ -740,8 +740,10 @@ export function renderCategories(
   const assignedItemIds = new Set(data.categories.flatMap((c) => c.itemIds));
   const isTabCategorized = (pdf: OpenedPDF, cat: Category): boolean => {
     if (cat.tabIds.includes(pdf.tabId)) return true;
-    // Fallback: itemId matching (for dormant items or after tab id changes)
-    if (pdf.itemId && cat.itemIds.includes(pdf.itemId)) return true;
+    // Imported tabs are only matched by tabId to keep cloned categories independent.
+    // Non-imported tabs keep the itemId fallback for normal auto-categorization.
+    if (!pdf.imported && pdf.itemId && cat.itemIds.includes(pdf.itemId))
+      return true;
     return false;
   };
   const categorizedPdfs = data.categories.map((category) => {
@@ -756,7 +758,9 @@ export function renderCategories(
     return { category, items };
   });
   const uncategorizedPdfs = pdfs.filter(
-    (pdf) => !assignedTabIds.has(pdf.tabId) && !assignedItemIds.has(pdf.itemId),
+    (pdf) =>
+      !assignedTabIds.has(pdf.tabId) &&
+      !(!pdf.imported && assignedItemIds.has(pdf.itemId)),
   );
 
   // Sort uncategorized by persisted order, new items go to end

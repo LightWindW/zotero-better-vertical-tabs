@@ -3,6 +3,7 @@ import { getString } from "../../utils/locale";
 import {
   addCategory,
   assignItemToCategory,
+  createCategorySnapshot,
   deleteCategory,
   loadData,
   removeItemFromAllCategories,
@@ -13,6 +14,7 @@ import {
   reorderUncategorized,
   saveData,
   saveTrackedItem,
+  ItemSnapshot,
   TrackedItemInfo,
   VerticalTabsData,
 } from "./dataStore";
@@ -22,7 +24,26 @@ import {
   lightToDark,
   isDarkMode,
 } from "../render/colorUtils";
-import { getOpenedPDFs, syncTabOrderToNative } from "./itemTracker";
+import {
+  getOpenedPDFs,
+  getZoteroTabs,
+  syncTabOrderToNative,
+} from "./itemTracker";
+import {
+  addSavedCategory,
+  deleteSavedCategory,
+  findSavedCategoryByName,
+  loadSavedCategories,
+  saveSavedCategories,
+} from "../save/savedCategoryStore";
+import { showMoreMenu } from "../save/moreMenu";
+import { promptOverwriteSavedCategory } from "../save/saveCategoryDialog";
+import { showImportCategoryDialog } from "../save/importCategoryDialog";
+import {
+  restoreCategory,
+  showRestoreWarningDialog,
+} from "../save/categoryRestore";
+import { openPluginPreferences } from "../save/openPreferences";
 import {
   scheduleCollapse,
   setContextMenuOpen,
@@ -45,6 +66,11 @@ interface CategoryHandlers {
   delete: EventListener;
   color: EventListener;
   toggleCollapse: EventListener;
+  save: EventListener;
+  showMoreMenu: EventListener;
+  showImportDialog: EventListener;
+  importCategory: EventListener;
+  openPreferences: EventListener;
 }
 
 const HANDLERS_KEY = "__vtCategoryHandlers";
@@ -199,6 +225,27 @@ function showContextMenu(
   });
   menu.appendChild(renameItem);
 
+  const saveItem = doc.createElementNS(
+    "http://www.w3.org/1999/xhtml",
+    "div",
+  ) as HTMLElement;
+  saveItem.textContent = getString("vertical-tabs-save-category");
+  saveItem.style.cssText =
+    "padding: 6px 16px; cursor: pointer; white-space: nowrap; font-family: message-box;";
+  saveItem.addEventListener("mouseenter", () => {
+    saveItem.style.background = mc.hoverBg;
+  });
+  saveItem.addEventListener("mouseleave", () => {
+    saveItem.style.background = "";
+  });
+  saveItem.addEventListener("click", () => {
+    menu.remove();
+    setContextMenuOpen(doc, false);
+    scheduleCollapse(doc);
+    dispatchVtEvent(doc, "vertical-tabs:save-category", { categoryId });
+  });
+  menu.appendChild(saveItem);
+
   const deleteItem = doc.createElementNS(
     "http://www.w3.org/1999/xhtml",
     "div",
@@ -216,8 +263,9 @@ function showContextMenu(
     menu.remove();
     setContextMenuOpen(doc, false);
     scheduleCollapse(doc);
-    _data = deleteCategory(_data!, categoryId);
-    void persist(doc);
+    dispatchVtEvent(doc, "vertical-tabs:category-context-delete", {
+      categoryId,
+    });
   });
   menu.appendChild(deleteItem);
 
@@ -248,6 +296,166 @@ function showContextMenu(
     cleanup();
   };
   setTimeout(() => doc.addEventListener("mousedown", closeMenu, true), 150);
+}
+
+function showSaveSuccessAnimation(doc: Document, categoryId: string): void {
+  const wrapper = doc.querySelector(
+    `.vertical-tabs-category[data-category-id="${categoryId}"]`,
+  ) as HTMLElement | null;
+  const header = wrapper?.querySelector(
+    ".vertical-tabs-category-header",
+  ) as HTMLElement | null;
+  if (!wrapper || !header) return;
+
+  const existing = header.querySelector(".vt-save-success-overlay");
+  existing?.remove();
+
+  const overlay = doc.createElementNS(
+    "http://www.w3.org/1999/xhtml",
+    "div",
+  ) as HTMLElement;
+  overlay.className = "vt-save-success-overlay";
+
+  const bar = doc.createElementNS(
+    "http://www.w3.org/1999/xhtml",
+    "div",
+  ) as HTMLElement;
+  bar.className = "vt-save-success-bar";
+  const categoryColor = wrapper.style.background?.trim();
+  const defaultColor = isDarkMode(doc) ? "#6C6C6C" : "#BDBDBD";
+  bar.style.background = categoryColor || defaultColor;
+
+  const text = doc.createElementNS(
+    "http://www.w3.org/1999/xhtml",
+    "div",
+  ) as HTMLElement;
+  text.className = "vt-save-success-text";
+  text.textContent = getString("vertical-tabs-save-success");
+
+  overlay.appendChild(bar);
+  overlay.appendChild(text);
+  header.appendChild(overlay);
+
+  const onAnimationEnd = () => {
+    overlay.removeEventListener("animationend", onAnimationEnd);
+    overlay.remove();
+  };
+  overlay.addEventListener("animationend", onAnimationEnd);
+}
+
+async function handleSaveCategory(event: Event): Promise<void> {
+  const customEvent = event as CustomEvent;
+  const { categoryId } = customEvent.detail as { categoryId: string };
+  const doc =
+    (event.target as Node).ownerDocument ?? (event.target as Document);
+
+  const category = _data?.categories.find((c) => c.id === categoryId);
+  if (!category || !_data) return;
+
+  const ztabs = getZoteroTabs();
+  const itemSnapshots: ItemSnapshot[] = [];
+  for (let i = 0; i < category.itemIds.length; i++) {
+    const itemId = category.itemIds[i];
+    const item = Zotero.Items.get(itemId) as Zotero.Item | false;
+    if (!item) continue;
+
+    const tabId = category.tabIds[i];
+    let type: string | undefined;
+    let data: any | undefined;
+    if (tabId) {
+      const tabInfo = ztabs?.getTabInfo(tabId);
+      if (tabInfo) {
+        type = tabInfo.type;
+        data = tabInfo.data;
+      }
+    }
+
+    itemSnapshots.push({
+      itemId,
+      title: (item.getField("title") as string) || "",
+      type,
+      data,
+      parentItemId:
+        typeof item.parentItemID === "number" ? item.parentItemID : undefined,
+    });
+  }
+
+  const snapshot = createCategorySnapshot(_data, categoryId, itemSnapshots);
+  if (!snapshot) return;
+
+  const collection = await loadSavedCategories();
+  const existing = findSavedCategoryByName(collection, category.name);
+
+  if (existing) {
+    const confirmed = await promptOverwriteSavedCategory(doc, category.name);
+    if (!confirmed) return;
+    collection.categories = collection.categories.filter(
+      (c) => c.id !== existing.id,
+    );
+  }
+
+  const newCollection = addSavedCategory(collection, {
+    name: category.name,
+    itemIds: snapshot.itemIds,
+    color: snapshot.color,
+    itemSnapshots,
+  });
+
+  await saveSavedCategories(newCollection);
+  showSaveSuccessAnimation(doc, categoryId);
+}
+
+function handleShowMoreMenu(event: Event): void {
+  const doc =
+    (event.target as Node).ownerDocument ?? (event.target as Document);
+  const btn = doc.querySelector(
+    "#" + SIDEBAR_ID + " .vertical-tabs-more-btn",
+  ) as HTMLElement | null;
+  if (!btn) return;
+  showMoreMenu(doc, btn);
+}
+
+function handleShowImportDialog(event: Event): void {
+  const doc =
+    (event.target as Node).ownerDocument ?? (event.target as Document);
+  void showImportCategoryDialog(doc);
+}
+
+async function handleImportCategory(event: Event): Promise<void> {
+  const customEvent = event as CustomEvent;
+  const { savedCategoryId } = customEvent.detail as { savedCategoryId: string };
+  const doc =
+    (event.target as Node).ownerDocument ?? (event.target as Document);
+
+  if (!_data) return;
+  const collection = await loadSavedCategories();
+  const savedCategory = collection.categories.find(
+    (c) => c.id === savedCategoryId,
+  );
+  if (!savedCategory) return;
+
+  const { data: newData, result } = await restoreCategory(_data, savedCategory);
+
+  if (!result.success) {
+    await showRestoreWarningDialog(doc, result);
+    return;
+  }
+
+  _data = newData;
+  void persist(doc);
+
+  syncTabOrderToNative(
+    _data.categories.map((c) => ({ order: c.order, tabIds: c.tabIds })),
+    _data.uncategorizedOrder,
+  );
+
+  if (result.missingItemIds.length > 0 || result.updatedItemIds.length > 0) {
+    await showRestoreWarningDialog(doc, result);
+  }
+}
+
+function handleOpenPreferences(): void {
+  openPluginPreferences();
 }
 
 async function handleAddCategory(event: Event): Promise<void> {
@@ -423,6 +631,17 @@ function cleanupOldCategoryHandlers(doc: Document): void {
     "vertical-tabs:category-toggle-collapsed",
     old.toggleCollapse,
   );
+  doc.removeEventListener("vertical-tabs:save-category", old.save);
+  doc.removeEventListener("vertical-tabs:show-more-menu", old.showMoreMenu);
+  doc.removeEventListener(
+    "vertical-tabs:show-import-dialog",
+    old.showImportDialog,
+  );
+  doc.removeEventListener("vertical-tabs:import-category", old.importCategory);
+  doc.removeEventListener(
+    "vertical-tabs:open-preferences",
+    old.openPreferences,
+  );
   delete (doc as any)[HANDLERS_KEY];
 }
 
@@ -442,6 +661,17 @@ export async function initCategoryManager(doc: Document): Promise<void> {
 
   const deleteHandler: EventListener = ((e: CustomEvent) => {
     const { categoryId } = e.detail as { categoryId: string };
+    const category = _data?.categories.find((c) => c.id === categoryId);
+    if (category && category.tabIds.length > 0) {
+      const ztabs = getZoteroTabs();
+      const tabIdsToClose = category.tabIds.filter((tabId) => {
+        const tabInfo = ztabs?.getTabInfo(tabId);
+        return tabInfo && tabInfo.type !== "library";
+      });
+      if (tabIdsToClose.length > 0) {
+        ztabs?.close(tabIdsToClose);
+      }
+    }
     _data = deleteCategory(_data!, categoryId);
     void persist(doc);
   }) as EventListener;
@@ -489,6 +719,11 @@ export async function initCategoryManager(doc: Document): Promise<void> {
     delete: deleteHandler,
     color: colorHandler,
     toggleCollapse: handleToggleCollapsed,
+    save: handleSaveCategory,
+    showMoreMenu: handleShowMoreMenu,
+    showImportDialog: handleShowImportDialog,
+    importCategory: handleImportCategory,
+    openPreferences: handleOpenPreferences,
   };
 
   doc.addEventListener("vertical-tabs:add-category", handlers.add);
@@ -508,6 +743,20 @@ export async function initCategoryManager(doc: Document): Promise<void> {
   doc.addEventListener(
     "vertical-tabs:category-toggle-collapsed",
     handlers.toggleCollapse,
+  );
+  doc.addEventListener("vertical-tabs:save-category", handlers.save);
+  doc.addEventListener("vertical-tabs:show-more-menu", handlers.showMoreMenu);
+  doc.addEventListener(
+    "vertical-tabs:show-import-dialog",
+    handlers.showImportDialog,
+  );
+  doc.addEventListener(
+    "vertical-tabs:import-category",
+    handlers.importCategory,
+  );
+  doc.addEventListener(
+    "vertical-tabs:open-preferences",
+    handlers.openPreferences,
   );
 
   doc.addEventListener("vertical-tabs:native-order-changed", ((

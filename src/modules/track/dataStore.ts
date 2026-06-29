@@ -43,6 +43,61 @@ function createDefaultData(): VerticalTabsData {
   };
 }
 
+export interface ItemSnapshot {
+  itemId: number;
+  title: string;
+  type?: string;
+  data?: any;
+  parentItemId?: number;
+}
+
+export interface CategorySnapshot {
+  name: string;
+  itemIds: number[];
+  color?: string;
+  itemSnapshots?: ItemSnapshot[];
+}
+
+export function createCategorySnapshot(
+  data: VerticalTabsData,
+  categoryId: string,
+  itemSnapshots?: ItemSnapshot[],
+): CategorySnapshot | undefined {
+  const category = data.categories.find((c) => c.id === categoryId);
+  if (!category) return undefined;
+
+  return {
+    name: category.name,
+    itemIds: [...category.itemIds],
+    color: category.color,
+    itemSnapshots,
+  };
+}
+
+export function importCategoryFromSnapshot(
+  data: VerticalTabsData,
+  snapshot: CategorySnapshot,
+  tabIds?: string[],
+): VerticalTabsData {
+  const newCategory: Category = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    name: snapshot.name,
+    order: 0,
+    itemIds: [...snapshot.itemIds],
+    tabIds: tabIds ?? [],
+    collapsed: false,
+    color: snapshot.color,
+  };
+
+  return {
+    ...data,
+    categories: [
+      newCategory,
+      ...data.categories.map((c) => ({ ...c, order: c.order + 1 })),
+    ],
+  };
+}
+
 export async function loadData(): Promise<VerticalTabsData> {
   const path = getDataFilePath();
   try {

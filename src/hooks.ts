@@ -16,6 +16,7 @@ async function onStartup() {
   // Register the preferences pane — REQUIRED for Zotero 8/9 to show the pane
   Zotero.PreferencePanes.register({
     pluginID: addon.data.config.addonID,
+    id: addon.data.config.addonID,
     src: rootURI + "content/preferences.xhtml",
     label: getString("prefs-title"),
     image: `chrome://${addon.data.config.addonRef}/content/icons/favicon.png`,

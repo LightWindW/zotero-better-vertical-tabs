@@ -104,3 +104,21 @@ vertical-tabs-close-tab = 关闭
 vertical-tabs-close-other-tabs = 关闭其他标签页
 vertical-tabs-extra = 备注
 vertical-tabs-university = 学校
+
+# 保存 / 导入分类
+vertical-tabs-save-category = 保存分类
+vertical-tabs-overwrite-title = 分类已存在
+vertical-tabs-overwrite-confirm = 已存在名为 "{ $name }" 的保存分类，是否覆盖？
+vertical-tabs-save-success = 保存成功。
+vertical-tabs-more-menu = 更多
+vertical-tabs-import-category = 导入分类
+vertical-tabs-plugin-settings = 插件设置
+vertical-tabs-import-dialog-title = 选择或编辑分类
+vertical-tabs-no-saved-categories = 暂无保存的分类。右键点击分类并选择“保存分类”来创建。
+vertical-tabs-apply-category = 运用
+vertical-tabs-rename-saved-category = 重命名
+vertical-tabs-delete-saved-category = 删除
+vertical-tabs-restore-warning-title = 分类恢复完成（有警告）
+vertical-tabs-restore-missing = 保存分类中的 { $count } 个条目已不在文献库中，已跳过。
+vertical-tabs-restore-updated = 保存分类中的 { $count } 个条目的元数据自保存以来已更新。
+vertical-tabs-restore-confirm-hint = 其余有效条目已成功恢复。
