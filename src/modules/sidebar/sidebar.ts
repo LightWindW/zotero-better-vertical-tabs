@@ -211,6 +211,7 @@ interface DocState {
   contextMenuOpen: boolean;
   searchFocused: boolean;
   waitMouseMoveAfterInput: boolean;
+  dialogOpen: boolean;
   inputPositionCleanup: (() => void) | null;
   widthObserverCleanup: (() => void) | null;
 }
@@ -226,6 +227,7 @@ function getDocState(doc: Document): DocState {
       contextMenuOpen: false,
       searchFocused: false,
       waitMouseMoveAfterInput: false,
+      dialogOpen: false,
       inputPositionCleanup: null,
       widthObserverCleanup: null,
     };
@@ -240,6 +242,14 @@ export function setContextMenuOpen(doc: Document, open: boolean): void {
 
 function isContextMenuOpen(doc: Document): boolean {
   return getDocState(doc).contextMenuOpen;
+}
+
+export function setDialogOpen(doc: Document, open: boolean): void {
+  getDocState(doc).dialogOpen = open;
+}
+
+function isDialogOpen(doc: Document): boolean {
+  return getDocState(doc).dialogOpen;
 }
 
 export function setSearchFocused(doc: Document, focused: boolean): void {
@@ -346,10 +356,14 @@ function setupInputPositionListener(doc: Document): void {
       return;
     }
 
-    // Mouse moved outside VT — collapse now and stop waiting.
+    // Mouse moved outside VT — schedule delayed collapse and stop waiting.
     clearInputPositionListener(doc);
     state.waitMouseMoveAfterInput = false;
-    performCollapse(doc);
+    const searchInput = getSidebar(doc)?.querySelector(
+      ".vertical-tabs-search",
+    ) as HTMLInputElement | null;
+    searchInput?.blur();
+    scheduleCollapse(doc);
   };
 
   doc.addEventListener("mousemove", handler);
@@ -404,7 +418,8 @@ export function scheduleCollapse(doc: Document): void {
   if (
     isContextMenuOpen(doc) ||
     isSearchFocused(doc) ||
-    isWaitingMouseMoveAfterInput(doc)
+    isWaitingMouseMoveAfterInput(doc) ||
+    isDialogOpen(doc)
   )
     return;
   clearLeaveTimer(doc);
@@ -561,13 +576,15 @@ export function createSidebar(doc: Document): HTMLElement {
   });
 
   sidebar.addEventListener("mouseleave", (e: MouseEvent) => {
+    // Always clear pending expand timer so a quick mouse pass doesn't expand VT
+    clearHoverTimer(doc);
     if (isPinned() || !isFloatingExpanded(doc)) return;
     if (isWaitingMouseMoveAfterInput(doc)) {
       setWaitMouseMoveAfterInput(doc, false);
       clearInputPositionListener(doc);
-      // New mouse position is outside VT → collapse immediately.
+      // New mouse position is outside VT → schedule delayed collapse.
       if (!isMouseOverVt(doc, e.clientX, e.clientY)) {
-        performCollapse(doc);
+        scheduleCollapse(doc);
       }
       return;
     }
@@ -753,7 +770,8 @@ export function collapseFloatingSidebar(doc: Document): void {
   if (
     isContextMenuOpen(doc) ||
     isSearchFocused(doc) ||
-    isWaitingMouseMoveAfterInput(doc)
+    isWaitingMouseMoveAfterInput(doc) ||
+    isDialogOpen(doc)
   )
     return;
   const sidebar = getSidebar(doc);
@@ -808,15 +826,11 @@ function setWrapperAndSplitter(
 }
 
 export function renderSidebarMode(doc: Document): HTMLElement | null {
-  const mainPageEnabled = Zotero.Prefs.get(
-    `${PREF_NAMESPACE}.verticalTabs.mainPageEnabled`,
-    true,
-  ) as boolean;
   const globallyEnabled = Zotero.Prefs.get(
     `${PREF_NAMESPACE}.verticalTabs.enabled`,
     true,
   ) as boolean;
-  if (!globallyEnabled || !mainPageEnabled) {
+  if (!globallyEnabled) {
     destroySidebar(doc);
     return null;
   }

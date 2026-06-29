@@ -47,6 +47,7 @@ import { openPluginPreferences } from "../save/openPreferences";
 import {
   scheduleCollapse,
   setContextMenuOpen,
+  setDialogOpen,
   SIDEBAR_ID,
 } from "../sidebar/sidebar";
 
@@ -190,7 +191,7 @@ function showContextMenu(
       inputValue: cat?.name ?? "",
     };
 
-    new ztoolkit.Dialog(2, 1)
+    const dialog = new ztoolkit.Dialog(2, 1)
       .addCell(0, 0, {
         tag: "label",
         namespace: "html",
@@ -213,7 +214,28 @@ function showContextMenu(
       .setDialogData(dialogData)
       .open(getString("vertical-tabs-rename"));
 
-    await dialogData.unloadLock.promise;
+    dialogData.loadCallback = () => {
+      const input = dialog.window.document.getElementById(
+        "vt-rename-category-input",
+      ) as HTMLInputElement | null;
+      if (!input) return;
+      input.focus();
+      input.select();
+      input.addEventListener("keydown", (e: KeyboardEvent) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          dialogData._lastButtonId = "confirm";
+          dialog.window.close();
+        }
+      });
+    };
+
+    setDialogOpen(doc, true);
+    try {
+      await dialogData.unloadLock.promise;
+    } finally {
+      setDialogOpen(doc, false);
+    }
 
     if (dialogData._lastButtonId === "confirm") {
       const newName = (dialogData.inputValue as string) || "";
@@ -471,7 +493,7 @@ async function handleAddCategory(event: Event): Promise<void> {
     inputValue: defaultName,
   };
 
-  new ztoolkit.Dialog(2, 1)
+  const dialog = new ztoolkit.Dialog(2, 1)
     .addCell(0, 0, {
       tag: "label",
       namespace: "html",
@@ -494,7 +516,28 @@ async function handleAddCategory(event: Event): Promise<void> {
     .setDialogData(dialogData)
     .open(getString("vertical-tabs-add-category"));
 
-  await dialogData.unloadLock.promise;
+  setDialogOpen(doc, true);
+  dialogData.loadCallback = () => {
+    const input = dialog.window.document.getElementById(
+      "vt-add-category-input",
+    ) as HTMLInputElement | null;
+    if (!input) return;
+    input.focus();
+    input.select();
+    input.addEventListener("keydown", (e: KeyboardEvent) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        dialogData._lastButtonId = "confirm";
+        dialog.window.close();
+      }
+    });
+  };
+
+  try {
+    await dialogData.unloadLock.promise;
+  } finally {
+    setDialogOpen(doc, false);
+  }
 
   if (dialogData._lastButtonId === "confirm") {
     const name = (dialogData.inputValue as string) || "";

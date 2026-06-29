@@ -29,18 +29,6 @@ function bindPrefEvents() {
         checked,
         false,
       );
-      // Auto-sync mainPageEnabled checkbox when global VT is toggled
-      const mainPageCheckbox = addon.data.prefs!.window.document?.querySelector(
-        `#zotero-prefpane-${config.addonRef}-main-page-enabled`,
-      ) as XUL.Checkbox | null;
-      if (mainPageCheckbox) {
-        mainPageCheckbox.checked = checked;
-        Zotero.Prefs.set(
-          `${config.prefsPrefix}.verticalTabs.mainPageEnabled`,
-          checked,
-          false,
-        );
-      }
     });
   }
 
@@ -52,20 +40,6 @@ function bindPrefEvents() {
     showExtraCheckbox.addEventListener("command", (e: Event) => {
       Zotero.Prefs.set(
         `${config.prefsPrefix}.verticalTabs.showExtra`,
-        (e.target as XUL.Checkbox).checked,
-        false,
-      );
-    });
-  }
-
-  // mainPageEnabled checkbox
-  const mainPageCheckbox = addon.data.prefs!.window.document?.querySelector(
-    `#zotero-prefpane-${config.addonRef}-main-page-enabled`,
-  );
-  if (mainPageCheckbox) {
-    mainPageCheckbox.addEventListener("command", (e: Event) => {
-      Zotero.Prefs.set(
-        `${config.prefsPrefix}.verticalTabs.mainPageEnabled`,
         (e.target as XUL.Checkbox).checked,
         false,
       );

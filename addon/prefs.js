@@ -1,5 +1,4 @@
 pref("verticalTabs.enabled", true);
-pref("verticalTabs.mainPageEnabled", true);
 pref("verticalTabs.collapsed", false);
 pref("verticalTabs.pinned", false);
 pref("verticalTabs.categoryColors", "");

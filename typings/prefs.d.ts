@@ -8,7 +8,6 @@ declare namespace _ZoteroTypes {
   interface Prefs {
     PluginPrefsMap: {
       "verticalTabs.enabled": boolean;
-      "verticalTabs.mainPageEnabled": boolean;
       "verticalTabs.collapsed": boolean;
       "verticalTabs.pinned": boolean;
       "verticalTabs.categoryColors": string;
