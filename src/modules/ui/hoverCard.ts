@@ -68,10 +68,26 @@ function applyCardDarkMode(card: HTMLElement, isDark: boolean): void {
   });
 }
 
-function fadeIn(card: HTMLElement): void {
+function fadeIn(
+  card: HTMLElement,
+  target: HTMLElement,
+  mouseX?: number,
+  mouseY?: number,
+): void {
+  // Position the card at the target location before making it visible,
+  // so the left/top transition does not animate from the previous location.
+  const originalTransition = card.style.transition;
+  card.style.transition = "none";
   card.style.display = "block";
-  // Force reflow so transition triggers
+  card.style.opacity = "0";
+  positionCard(
+    card,
+    target,
+    mouseX ?? rectCenterX(target),
+    mouseY ?? rectCenterY(target),
+  );
   void card.offsetWidth;
+  card.style.transition = originalTransition;
   card.style.opacity = "1";
 }
 
@@ -238,18 +254,19 @@ function showHoverCard(
       // Switching items: update immediately, transitions handle the animation
       await renderCard(doc, itemId);
       _currentItemId = itemId;
+      positionCard(
+        card,
+        target,
+        mouseX ?? rectCenterX(target),
+        mouseY ?? rectCenterY(target),
+      );
     } else if (!isSwitch) {
-      fadeIn(card);
+      // Card was fully hidden: fade in at the target location without
+      // animating left/top from the previous location.
+      fadeIn(card, target, mouseX, mouseY);
       _currentItemId = itemId;
       await renderCard(doc, itemId);
     }
-
-    positionCard(
-      card,
-      target,
-      mouseX ?? rectCenterX(target),
-      mouseY ?? rectCenterY(target),
-    );
   };
 
   if (isSwitch) {
@@ -336,7 +353,8 @@ function handleItemHoverEnd(event: Event): void {
 }
 
 function handleExpandAnimationComplete(event: Event): void {
-  const doc = (event.target as Node).ownerDocument ?? (event.target as Document);
+  const doc =
+    (event.target as Node).ownerDocument ?? (event.target as Document);
   if (!doc) return;
 
   const pendingItemId = _pendingItemId;

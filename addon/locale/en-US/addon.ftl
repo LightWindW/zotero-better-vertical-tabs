@@ -103,3 +103,21 @@ vertical-tabs-close-tab = Close
 vertical-tabs-close-other-tabs = Close Other Tabs
 vertical-tabs-extra = Extra
 vertical-tabs-university = University
+
+# Save / Import Categories
+vertical-tabs-save-category = Save Category
+vertical-tabs-overwrite-title = Category Already Exists
+vertical-tabs-overwrite-confirm = A saved category named "{ $name }" already exists. Do you want to overwrite it?
+vertical-tabs-save-success = Save successful.
+vertical-tabs-more-menu = More
+vertical-tabs-import-category = Import Category
+vertical-tabs-plugin-settings = Plugin Settings
+vertical-tabs-import-dialog-title = Select or Edit Categories
+vertical-tabs-no-saved-categories = No saved categories yet. Right-click a category and select "Save Category" to create one.
+vertical-tabs-apply-category = Apply
+vertical-tabs-rename-saved-category = Rename
+vertical-tabs-delete-saved-category = Delete
+vertical-tabs-restore-warning-title = Category Restored with Warnings
+vertical-tabs-restore-missing = { $count } items in the saved category no longer exist in the library and were skipped.
+vertical-tabs-restore-updated = { $count } items' metadata have been updated since the category was saved.
+vertical-tabs-restore-confirm-hint = The remaining valid items have been successfully restored.
