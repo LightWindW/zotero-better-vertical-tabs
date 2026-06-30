@@ -8,6 +8,8 @@ import {
   SPLITTER_ID,
 } from "../render/styles";
 import { dispatchVtEvent } from "../core/events";
+import { isDarkMode } from "../render/colorUtils";
+import { pinFillIcon, pinIcon } from "../ui/iconSvgs";
 
 const PREF_NAMESPACE = config.prefsPrefix;
 const DEFAULT_WIDTH = 260;
@@ -19,9 +21,15 @@ const PIN_ICON_CLASS = "vertical-tabs-pin-icon";
 const HOVER_STRIP_WIDTH = 35;
 const COLLAPSE_FADE_START_WIDTH = 40;
 
-function pinIconUrl(filled: boolean): string {
-  return `chrome://${config.addonRef}/content/icons/${filled ? "pin-fill" : "pin"}.svg`;
+function getIconColor(doc: Document): string {
+  return isDarkMode(doc) ? "#A2A2A2" : "#6C6C6C";
 }
+
+function pinIconSvg(filled: boolean, doc: Document): string {
+  const color = getIconColor(doc);
+  return filled ? pinFillIcon(color) : pinIcon(color);
+}
+
 type TimerHandle = ReturnType<typeof setTimeout>;
 
 const HOVER_DELAY_MS = 300;
@@ -455,13 +463,17 @@ export function createSidebar(doc: Document): HTMLElement {
             },
             children: [
               {
-                tag: "img",
+                tag: "span",
                 classList: [PIN_ICON_CLASS],
-                attributes: {
-                  src: pinIconUrl(isPinned()),
-                  width: "16",
-                  height: "16",
-                  alt: "",
+                properties: {
+                  innerHTML: pinIconSvg(isPinned(), doc),
+                },
+                styles: {
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: "16px",
+                  height: "16px",
                 },
               },
             ],
@@ -555,9 +567,9 @@ export function createSidebar(doc: Document): HTMLElement {
       );
       const icon = pinBtn.querySelector(
         `.${PIN_ICON_CLASS}`,
-      ) as HTMLImageElement | null;
+      ) as HTMLElement | null;
       if (icon) {
-        icon.src = pinIconUrl(isPinned());
+        icon.innerHTML = pinIconSvg(isPinned(), doc);
       }
     }
   };

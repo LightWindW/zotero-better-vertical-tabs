@@ -2,11 +2,16 @@ import { config } from "../../../package.json";
 import { getString } from "../../utils/locale";
 import { getItemInfo } from "../render/uiRenderer";
 import { isDarkMode, watchDarkMode } from "../render/colorUtils";
+import {
+  getHoverCardStyleSheet,
+  getPopupColors,
+} from "../render/popupStyleUtils";
 import { isExpandAnimating, SIDEBAR_ID } from "../sidebar/sidebar";
 
 const CARD_ID = "vertical-tabs-hover-card";
 const SHOW_DELAY_MS = 150;
 const HIDE_DELAY_MS = 150;
+const PREF_DISABLE_BLUR = `${config.prefsPrefix}.verticalTabs.disableBlur`;
 
 function createEl(doc: Document, tag: string): HTMLElement {
   return doc.createElementNS(
@@ -27,20 +32,9 @@ function createCard(doc: Document): HTMLElement {
     position: fixed;
     display: none;
     opacity: 0;
-    width: 320px;
-    background: ${dark ? "rgba(42, 42, 42, 0.5)" : "rgba(242, 242, 242, 0.5)"};
-    border: 1px solid ${dark ? "rgba(85, 85, 85, 0.5)" : "rgba(182, 182, 182, 0.5)"};
-    border-radius: 6px;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
     z-index: 100001;
-    padding: 12px;
-    font-size: 13px;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    color: ${dark ? "#eee" : "var(--material-text, #222)"};
-    pointer-events: none;
-    transition: opacity 0.15s ease-out, left 0.1s ease-out, top 0.1s ease-out, width 0.25s ease-out, height 0.25s ease-out;
+    ${getHoverCardStyleSheet(doc)}
   `;
   doc.documentElement?.appendChild(card);
   return card;
@@ -50,21 +44,26 @@ function createCard(doc: Document): HTMLElement {
  * Explicitly override hover card colors for dark/light mode switch.
  * CSS variables from Zotero theme may not update reactively in reader sandbox.
  */
-function applyCardDarkMode(card: HTMLElement, isDark: boolean): void {
-  card.style.background = isDark
-    ? "rgba(42, 42, 42, 0.5)"
-    : "rgba(242, 242, 242, 0.5)";
-  card.style.color = isDark ? "#eee" : "var(--material-text, #222)";
-  card.style.borderColor = isDark
-    ? "rgba(85, 85, 85, 0.5)"
-    : "rgba(182, 182, 182, 0.5)";
+function applyCardDarkMode(card: HTMLElement, _isDark: boolean): void {
+  const colors = getPopupColors(card.ownerDocument!, "hover");
+  card.style.background = colors.background;
+  card.style.color = colors.text;
+  card.style.border = colors.border;
+  card.style.boxShadow = colors.shadow;
+
+  // Sync backdrop-filter when user toggles blur preference or reader state
+  if (colors.backdropFilter === "none") {
+    card.style.backdropFilter = "";
+  } else {
+    card.style.backdropFilter = colors.backdropFilter;
+  }
 
   // Update label colors inside the card
   const labels = card.querySelectorAll<HTMLElement>(
     '[style*="font-weight: 600"]',
   );
   labels.forEach((label: HTMLElement) => {
-    label.style.color = isDark ? "#aaa" : "var(--material-text-muted, #666)";
+    label.style.color = _isDark ? "#aaa" : "var(--material-text-muted, #666)";
   });
 }
 
@@ -382,16 +381,46 @@ export function initHoverCard(doc: Document): void {
   );
 
   // Watch dark mode switch to update card colors in real time
-  const existing = (doc as any).__vtHoverDarkCleanup as
+  const existingDark = (doc as any).__vtHoverDarkCleanup as
     | (() => void)
     | undefined;
-  if (existing) existing();
+  if (existingDark) existingDark();
 
-  const cleanup = watchDarkMode(doc, (isDark) => {
+  const darkCleanup = watchDarkMode(doc, (isDark) => {
     const card = doc.getElementById(CARD_ID) as HTMLElement | null;
     if (card) applyCardDarkMode(card, isDark);
   });
-  (doc as any).__vtHoverDarkCleanup = cleanup;
+  (doc as any).__vtHoverDarkCleanup = darkCleanup;
+
+  // Watch disable-blur preference so toggling takes effect immediately
+  const existingBlur = (doc as any).__vtHoverBlurCleanup as
+    | (() => void)
+    | undefined;
+  if (existingBlur) existingBlur();
+
+  let blurObserverSymbol: symbol | undefined;
+  const blurObserver = (_value: boolean) => {
+    const card = doc.getElementById(CARD_ID) as HTMLElement | null;
+    if (card) applyCardDarkMode(card, isDarkMode(doc));
+  };
+
+  try {
+    blurObserverSymbol = Zotero.Prefs.registerObserver(
+      PREF_DISABLE_BLUR,
+      blurObserver,
+      false,
+    );
+  } catch {
+    // ignore
+  }
+  (doc as any).__vtHoverBlurCleanup = () => {
+    if (!blurObserverSymbol) return;
+    try {
+      Zotero.Prefs.unregisterObserver(blurObserverSymbol);
+    } catch {
+      // ignore
+    }
+  };
 }
 
 export function destroyHoverCard(doc: Document): void {
@@ -402,10 +431,20 @@ export function destroyHoverCard(doc: Document): void {
     handleExpandAnimationComplete,
   );
 
-  const cleanup = (doc as any).__vtHoverDarkCleanup as (() => void) | undefined;
-  if (cleanup) {
-    cleanup();
+  const darkCleanup = (doc as any).__vtHoverDarkCleanup as
+    | (() => void)
+    | undefined;
+  if (darkCleanup) {
+    darkCleanup();
     delete (doc as any).__vtHoverDarkCleanup;
+  }
+
+  const blurCleanup = (doc as any).__vtHoverBlurCleanup as
+    | (() => void)
+    | undefined;
+  if (blurCleanup) {
+    blurCleanup();
+    delete (doc as any).__vtHoverBlurCleanup;
   }
 
   const card = doc.getElementById(CARD_ID);

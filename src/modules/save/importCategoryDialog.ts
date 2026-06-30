@@ -1,6 +1,7 @@
 import { getString } from "../../utils/locale";
 import { dispatchVtEvent } from "../core/events";
 import { isDarkMode } from "../render/colorUtils";
+import { getDialogStyleSheet } from "../render/popupStyleUtils";
 import { setDialogOpen } from "../sidebar/sidebar";
 import {
   deleteSavedCategory,
@@ -24,7 +25,6 @@ function getThemeColors(doc: Document) {
     badgeBg: dark ? "#3a3a3a" : "#E4E4E4",
     text: dark ? "#eee" : "#333",
     icon: dark ? "#aaa" : "#6C6C6C",
-    dialogBg: dark ? "rgba(42, 42, 42, 0.95)" : "rgba(255, 255, 255, 0.95)",
     dialogBorder: dark
       ? "1px solid rgba(85, 85, 85, 0.5)"
       : "1px solid rgba(182, 182, 182, 0.5)",
@@ -387,20 +387,7 @@ export async function showImportCategoryDialog(doc: Document): Promise<void> {
     "div",
   ) as HTMLElement;
   dialog.className = "vt-import-dialog";
-  dialog.style.cssText = `
-    background: ${colors.dialogBg};
-    border: ${colors.dialogBorder};
-    border-radius: 8px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-    min-width: 400px;
-    max-width: 500px;
-    max-height: 500px;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-  `;
+  dialog.style.cssText = getDialogStyleSheet(doc);
 
   const header = doc.createElementNS(
     "http://www.w3.org/1999/xhtml",

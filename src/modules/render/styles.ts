@@ -660,6 +660,10 @@ export function getStyles(): string {
     }
 
     @media (prefers-color-scheme: dark) {
+      #${SIDEBAR_ID} .vertical-tabs-chevron {
+        color: #A2A2A2;
+      }
+
       #${SIDEBAR_ID} {
         background: var(--material-sidepane, #2a2a2a);
         border-right-color: #555;
