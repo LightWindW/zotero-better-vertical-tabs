@@ -2,6 +2,7 @@ import { getString } from "../../utils/locale";
 import { dispatchVtEvent } from "../core/events";
 import { isDarkMode } from "../render/colorUtils";
 import { getDialogStyleSheet } from "../render/popupStyleUtils";
+import { renameIcon, trashIcon, yesIcon } from "../ui/iconSvgs";
 import { setDialogOpen } from "../sidebar/sidebar";
 import {
   deleteSavedCategory,
@@ -13,10 +14,6 @@ import {
 } from "./savedCategoryStore";
 
 const OVERLAY_ID = "vt-import-dialog-overlay";
-
-function yesIconHtml(color: string): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="${color}" width="16" height="16"><polygon points="40.6,12.1 17,35.7 7.4,26.1 4.6,29 17,41.3 43.4,14.9"/></svg>`;
-}
 
 function getThemeColors(doc: Document) {
   const dark = isDarkMode(doc);
@@ -157,46 +154,18 @@ function createSavedCategoryRow(
     ) as HTMLElement;
     btn.className = "vt-action-btn";
     btn.title = title;
-    btn.style.cssText = `
-      -moz-appearance: none;
-      appearance: none;
-      background: transparent;
-      border: 0;
-      outline: 0;
-      box-shadow: none;
-      cursor: pointer;
-      padding: 4px;
-      border-radius: 4px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    `;
     const wrapper = doc.createElementNS(
       "http://www.w3.org/1999/xhtml",
       "span",
     ) as HTMLElement;
-    wrapper.style.cssText = `
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 16px;
-      height: 16px;
-      color: ${colors.icon};
-    `;
+    wrapper.style.color = colors.icon;
     wrapper.innerHTML = html;
     btn.appendChild(wrapper);
-    btn.addEventListener("mouseenter", () => {
-      btn.style.background =
-        "var(--material-button-hover, rgba(0, 0, 0, 0.06))";
-    });
-    btn.addEventListener("mouseleave", () => {
-      btn.style.background = "";
-    });
     return btn;
   };
 
   const applyBtn = actionBtn(
-    yesIconHtml(colors.icon),
+    yesIcon(colors.icon),
     getString("vertical-tabs-apply-category"),
   );
   applyBtn.addEventListener("click", () => {
@@ -207,7 +176,7 @@ function createSavedCategoryRow(
   });
 
   const renameBtn = actionBtn(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor" width="16" height="16"><path d="M345.994,42.019,179.531,208.481A646.3,646.3,0,0,0,25.325,456.521a24.845,24.845,0,0,0,6,25.708l.087.087a24.84,24.84,0,0,0,17.611,7.342,25.172,25.172,0,0,0,8.1-1.344,646.283,646.283,0,0,0,248.04-154.207L471.62,167.646A88.831,88.831,0,0,0,345.994,42.019ZM282.531,311.48A614.445,614.445,0,0,1,60.419,453.221,614.435,614.435,0,0,1,202.158,231.108l99.162-99.161,80.372,80.372ZM448.993,145.019l-44.674,44.673L323.947,109.32l44.674-44.674a56.832,56.832,0,1,1,80.372,80.373Z"/></svg>`,
+    renameIcon(colors.icon),
     getString("vertical-tabs-rename-saved-category"),
   );
   renameBtn.addEventListener("click", () => {
@@ -215,7 +184,7 @@ function createSavedCategoryRow(
   });
 
   const deleteBtn = actionBtn(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M0 0h24v24H0z" fill="none"/><line x1="4" y1="7" x2="20" y2="7" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></svg>`,
+    trashIcon(colors.icon),
     getString("vertical-tabs-delete-saved-category"),
   );
   deleteBtn.addEventListener("click", async () => {

@@ -80,6 +80,17 @@ function resolveColors(
   const readerAlpha = 0.9;
   const blurRadius = kind === "hover" ? "12px" : "20px";
 
+  // Dialogs should always be opaque for readability.
+  if (kind === "dialog") {
+    return {
+      background: base.solidBackground,
+      border: base.solidBorder,
+      text: base.text,
+      shadow: base.shadow,
+      backdropFilter: "none",
+    };
+  }
+
   // Reader fallback: same hue, higher opacity so the card still looks "frosted"
   // when backdrop-filter cannot blur the <browser> layer beneath it.
   const readerBg = dark
