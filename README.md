@@ -20,6 +20,8 @@ This plugin helps you manage open tabs through a vertical sidebar, making it fas
 
 After installing the plugin, a vertical tabs sidebar (VT) appears on the left side of the main window. It automatically expands when you hover over it and collapses when you move the cursor away.
 
+![Category](.\doc\figs\VT.gif)
+
 The main window VT currently supports:
 
 1. **Tab Synchronization**: Keeps in sync with Zotero's native tab bar; attachments display their parent item icon.
