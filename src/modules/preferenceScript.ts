@@ -1,4 +1,9 @@
 import { config } from "../../package.json";
+import {
+  applyTabHeightToAllWindows,
+  getTabHeightValue,
+  type TabHeight,
+} from "../modules/render/tabHeight";
 
 export async function registerPrefsScripts(_window: Window) {
   // This function is called when the prefs window is opened
@@ -89,6 +94,23 @@ function bindPrefEvents() {
         days,
         false,
       );
+    });
+  }
+
+  // Tab height dropdown: set pref and immediately update all VT sidebars.
+  const tabHeightMenulist = addon.data.prefs!.window.document?.getElementById(
+    `zotero-prefpane-${config.addonRef}-tab-height`,
+  ) as XUL.MenuList | null;
+  if (tabHeightMenulist) {
+    tabHeightMenulist.value = getTabHeightValue();
+    tabHeightMenulist.addEventListener("command", () => {
+      const value = tabHeightMenulist.value as TabHeight;
+      Zotero.Prefs.set(
+        `${config.prefsPrefix}.verticalTabs.tabHeight`,
+        value,
+        false,
+      );
+      applyTabHeightToAllWindows(value);
     });
   }
 

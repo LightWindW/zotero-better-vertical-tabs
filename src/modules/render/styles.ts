@@ -249,7 +249,7 @@ export function getStyles(): string {
       display: flex;
       flex-direction: row;
       align-items: center;
-      min-height: 36px;
+      min-height: var(--vt-item-min-height, 36px);
       padding: 4px 12px 4px 9px;
       cursor: pointer;
       gap: 8px;
