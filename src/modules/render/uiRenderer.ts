@@ -138,6 +138,7 @@ function createItemElement(
   doc: Document,
   pdf: OpenedPDF,
   categoryId: string | null,
+  categoryColors?: { light: string; dark: string },
 ): HTMLElement {
   // Use parent item for metadata (attachments don't have journal etc.)
   const metadataItemId = pdf.parentItemId ?? pdf.itemId;
@@ -274,6 +275,17 @@ function createItemElement(
     }
   });
   row.appendChild(closeBtn);
+
+  // If this item belongs to a colored category, make the close button
+  // gradient use the category color (with dark-mode variant).
+  if (categoryColors) {
+    closeBtn.dataset.vtColorLight = categoryColors.light;
+    closeBtn.dataset.vtColorDark = categoryColors.dark;
+    closeBtn.style.setProperty(
+      "--vt-close-bg",
+      isDarkMode(doc) ? categoryColors.dark : categoryColors.light,
+    );
+  }
 
   // Middle-click to close tab
   row.addEventListener("mousedown", (e: MouseEvent) => {
@@ -431,15 +443,17 @@ function createCategoryElement(
     category.color && category.color.toUpperCase() !== "#F2F2F2"
       ? category.color
       : undefined;
+  const categoryColors = effectiveColor
+    ? { light: effectiveColor, dark: lightToDark(effectiveColor) }
+    : undefined;
 
-  if (effectiveColor) {
-    const dark = lightToDark(effectiveColor);
-    wrapper.dataset.vtColorLight = effectiveColor;
-    wrapper.dataset.vtColorDark = dark;
+  if (categoryColors) {
+    wrapper.dataset.vtColorLight = categoryColors.light;
+    wrapper.dataset.vtColorDark = categoryColors.dark;
     if (isDarkMode(doc)) {
-      wrapper.style.background = dark;
+      wrapper.style.background = categoryColors.dark;
     } else {
-      wrapper.style.background = effectiveColor;
+      wrapper.style.background = categoryColors.light;
     }
     wrapper.style.borderRadius = "4px";
   }
@@ -603,7 +617,9 @@ function createCategoryElement(
   const itemsContainer = createEl(doc, "div");
   itemsContainer.className = "vertical-tabs-items";
   for (const pdf of items) {
-    itemsContainer.appendChild(createItemElement(doc, pdf, category.id));
+    itemsContainer.appendChild(
+      createItemElement(doc, pdf, category.id, categoryColors),
+    );
   }
   wrapper.appendChild(itemsContainer);
 
@@ -977,6 +993,20 @@ export function applyCategoryColors(doc: Document, isDark: boolean): void {
     } else {
       el.style.background = "";
       el.style.borderRadius = "";
+    }
+  });
+
+  // Sync close-button gradient backgrounds for colored categories.
+  doc.querySelectorAll(".vertical-tabs-item-close").forEach((btn: Element) => {
+    const el = btn as HTMLElement;
+    const light = el.dataset.vtColorLight;
+    const dark = el.dataset.vtColorDark;
+    if (isDark && dark) {
+      el.style.setProperty("--vt-close-bg", dark);
+    } else if (!isDark && light) {
+      el.style.setProperty("--vt-close-bg", light);
+    } else {
+      el.style.removeProperty("--vt-close-bg");
     }
   });
 }
