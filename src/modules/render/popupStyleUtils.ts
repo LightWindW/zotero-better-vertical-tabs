@@ -27,12 +27,12 @@ export function isBackdropFilterSupported(doc: Document): boolean {
 }
 
 /**
- * 用户是否手动禁用了磨砂效果。
+ * 用户是否启用了磨砂效果。
  */
-export function isBlurDisabledByUser(): boolean {
+export function isBlurEnabledByUser(): boolean {
   try {
     return Zotero.Prefs.get(
-      `${PREF_NAMESPACE}.verticalTabs.disableBlur`,
+      `${PREF_NAMESPACE}.verticalTabs.enableBlur`,
       false,
     ) as boolean;
   } catch {
@@ -87,10 +87,10 @@ function resolveColors(
     : `rgba(242, 242, 242, ${readerAlpha})`;
 
   const supported = isBackdropFilterSupported(doc);
-  const disabled = isBlurDisabledByUser();
+  const enabled = isBlurEnabledByUser();
   const reader = isReaderActive();
 
-  if (!supported || disabled) {
+  if (!supported || !enabled) {
     return {
       background: base.solidBackground,
       border: base.solidBorder,

@@ -51,14 +51,14 @@ function bindPrefEvents() {
     });
   }
 
-  // disableBlur checkbox: manually fire Zotero.Prefs.set to trigger observers
-  const disableBlurCheckbox = addon.data.prefs!.window.document?.querySelector(
-    `#zotero-prefpane-${config.addonRef}-disable-blur`,
+  // enableBlur checkbox: manually fire Zotero.Prefs.set to trigger observers
+  const enableBlurCheckbox = addon.data.prefs!.window.document?.querySelector(
+    `#zotero-prefpane-${config.addonRef}-enable-blur`,
   );
-  if (disableBlurCheckbox) {
-    disableBlurCheckbox.addEventListener("command", (e: Event) => {
+  if (enableBlurCheckbox) {
+    enableBlurCheckbox.addEventListener("command", (e: Event) => {
       Zotero.Prefs.set(
-        `${config.prefsPrefix}.verticalTabs.disableBlur`,
+        `${config.prefsPrefix}.verticalTabs.enableBlur`,
         (e.target as XUL.Checkbox).checked,
         false,
       );
