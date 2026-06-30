@@ -654,13 +654,40 @@ export function getStyles(): string {
     .vt-action-btn {
       -moz-appearance: none;
       appearance: none;
+      background: transparent;
       border: 0;
       outline: 0;
+      box-shadow: none;
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s ease-out;
     }
 
     .vt-action-btn::-moz-focus-inner {
       border: 0;
       padding: 0;
+    }
+
+    .vt-action-btn:hover {
+      background: var(--material-button-hover, rgba(0, 0, 0, 0.06));
+    }
+
+    .vt-action-btn > span {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .vt-action-btn:hover {
+        background: var(--material-button-hover, rgba(255, 255, 255, 0.08));
+      }
     }
 
     .vt-saved-category-row {
