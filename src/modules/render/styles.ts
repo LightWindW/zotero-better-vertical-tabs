@@ -160,14 +160,10 @@ export function getStyles(): string {
       grid-template-rows: auto 1fr;
       transition: grid-template-rows 0.3s ease-out;
       margin-bottom: 2px;
-    }
-
-    #${SIDEBAR_ID} .vertical-tabs-category.collapsed {
-      grid-template-rows: auto 0fr;
+      position: relative;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category-header {
-      position: relative;
       display: flex;
       align-items: center;
       min-height: 28px;
@@ -175,6 +171,35 @@ export function getStyles(): string {
       cursor: pointer;
       gap: 6px;
       transition: padding 0.2s ease-out, gap 0.2s ease-out;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-category-header > * {
+      position: relative;
+      z-index: 2;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-category::before {
+      content: "";
+      position: absolute;
+      top: 4.5px;
+      left: 0;
+      width: 100%;
+      height: 26px;
+      border-radius: 4px;
+      background: #fff;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-category.has-active-reader-folded::before {
+      opacity: 1;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-category.collapsed {
+      grid-template-rows: auto 0fr;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category-header:hover {
@@ -702,6 +727,11 @@ export function getStyles(): string {
       #${SIDEBAR_ID} .vertical-tabs-item.active:hover {
         background: #626262;
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+      }
+
+      #${SIDEBAR_ID} .vertical-tabs-category::before {
+        background: #626262;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
       }
 
       #${SIDEBAR_ID} .vertical-tabs-category.drag-over {

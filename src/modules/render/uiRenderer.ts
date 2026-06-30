@@ -15,6 +15,7 @@ import {
   getSelectedTabId,
 } from "../track/itemTracker";
 import { dispatchVtEvent } from "../core/events";
+import { updateActiveCategoryHighlight } from "./categoryHighlight";
 import {
   lightToDark,
   isDarkMode,
@@ -51,7 +52,7 @@ function formatRelativeTime(timestamp: number): string {
   return getString("vertical-tabs-days-ago", { args: { count: diffDays } });
 }
 
-function createEl(doc: Document, tag: string): HTMLElement {
+export function createEl(doc: Document, tag: string): HTMLElement {
   return doc.createElementNS(
     "http://www.w3.org/1999/xhtml",
     tag,
@@ -549,6 +550,8 @@ function createCategoryElement(
       categoryId: category.id,
       collapsed,
     });
+    // Sync the folded-category highlight without rebuilding DOM.
+    updateActiveCategoryHighlight(doc);
   });
 
   header.addEventListener("contextmenu", (event: MouseEvent) => {
@@ -905,6 +908,9 @@ export function renderCategories(
     container.appendChild(sep);
     container.appendChild(dropZone);
   }
+
+  // Sync the reader-tab folded-category highlight after rebuilding DOM.
+  updateActiveCategoryHighlight(doc);
 }
 
 let _searchQuery = "";
