@@ -317,7 +317,7 @@ export function getStyles(): string {
       color: #6C6C6C;
       opacity: 0;
       cursor: pointer;
-      background: linear-gradient(to right, transparent, #F2F2F2 60%);
+      background: linear-gradient(to right, transparent, var(--vt-close-bg, #F2F2F2) 60%);
       transition: opacity 0.15s ease;
       z-index: 5;
     }
@@ -732,7 +732,7 @@ export function getStyles(): string {
 
       #${SIDEBAR_ID} .vertical-tabs-item-close {
         color: #999;
-        background: linear-gradient(to right, transparent, #303030 60%);
+        background: linear-gradient(to right, transparent, var(--vt-close-bg, #303030) 60%);
       }
 
       #${SIDEBAR_ID} .vertical-tabs-item-close:hover {
