@@ -6,5 +6,5 @@ pref("verticalTabs.rememberCategories", true);
 pref("verticalTabs.showExtra", false);
 pref("verticalTabs.autoCloseEnabled", false);
 pref("verticalTabs.autoCloseDays", 7);
-pref("verticalTabs.disableBlur", false);
 pref("verticalTabs.tabHeight", "loose");
+pref("verticalTabs.enableBlur", false);

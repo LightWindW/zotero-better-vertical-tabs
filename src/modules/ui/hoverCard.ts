@@ -11,7 +11,7 @@ import { isExpandAnimating, SIDEBAR_ID } from "../sidebar/sidebar";
 const CARD_ID = "vertical-tabs-hover-card";
 const SHOW_DELAY_MS = 150;
 const HIDE_DELAY_MS = 150;
-const PREF_DISABLE_BLUR = `${config.prefsPrefix}.verticalTabs.disableBlur`;
+const PREF_ENABLE_BLUR = `${config.prefsPrefix}.verticalTabs.enableBlur`;
 
 function createEl(doc: Document, tag: string): HTMLElement {
   return doc.createElementNS(
@@ -406,7 +406,7 @@ export function initHoverCard(doc: Document): void {
 
   try {
     blurObserverSymbol = Zotero.Prefs.registerObserver(
-      PREF_DISABLE_BLUR,
+      PREF_ENABLE_BLUR,
       blurObserver,
       false,
     );
