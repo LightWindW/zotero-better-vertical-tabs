@@ -4,13 +4,40 @@
 <groupbox
   onload="Zotero['__addonInstance__'].hooks.onPrefsEvent('load', { window })"
 >
-  <label><html:h2 data-l10n-id="pref-vertical-tabs-section-title" /></label>
-
   <checkbox
     id="zotero-prefpane-__addonRef__-vertical-tabs-enabled"
     preference="verticalTabs.enabled"
     data-l10n-id="pref-vertical-tabs-enabled"
   />
+
+  <html:div style="margin-top: 12px; margin-bottom: 4px">
+    <html:label
+      style="font-weight: 600"
+      data-l10n-id="pref-vertical-tabs-custom-options"
+    />
+  </html:div>
+
+  <html:div
+    style="display: flex; align-items: center; gap: 8px; margin-left: 4px"
+  >
+    <html:label data-l10n-id="pref-vertical-tabs-tab-height-label" />
+    <menulist id="zotero-prefpane-__addonRef__-tab-height">
+      <menupopup>
+        <menuitem
+          value="compact"
+          data-l10n-id="pref-vertical-tabs-tab-height-compact"
+        />
+        <menuitem
+          value="loose"
+          data-l10n-id="pref-vertical-tabs-tab-height-loose"
+        />
+        <menuitem
+          value="extraLoose"
+          data-l10n-id="pref-vertical-tabs-tab-height-extra-loose"
+        />
+      </menupopup>
+    </menulist>
+  </html:div>
 
   <checkbox
     id="zotero-prefpane-__addonRef__-remember-categories"

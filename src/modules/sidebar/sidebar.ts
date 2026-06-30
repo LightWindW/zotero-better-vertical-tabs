@@ -7,6 +7,7 @@ import {
   WRAPPER_ID,
   SPLITTER_ID,
 } from "../render/styles";
+import { applyTabHeightStyle } from "../render/tabHeight";
 import { dispatchVtEvent } from "../core/events";
 import { isDarkMode } from "../render/colorUtils";
 import { pinFillIcon, pinIcon } from "../ui/iconSvgs";
@@ -679,6 +680,9 @@ export function createSidebar(doc: Document): HTMLElement {
     });
   }
 
+  // Apply the current tab height preference to the sidebar.
+  applyTabHeightStyle(doc);
+
   return sidebar;
 }
 
@@ -854,6 +858,9 @@ export function renderSidebarMode(doc: Document): HTMLElement | null {
 
   const pinned = isPinned();
   const sidebar = getSidebar(doc) ?? createSidebar(doc);
+
+  // Ensure tab height CSS variable is up-to-date.
+  applyTabHeightStyle(doc);
 
   if (pinned) {
     applySidebarClasses(sidebar, "pinned");

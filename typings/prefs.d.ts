@@ -16,6 +16,7 @@ declare namespace _ZoteroTypes {
       "verticalTabs.autoCloseEnabled": boolean;
       "verticalTabs.autoCloseDays": number;
       "verticalTabs.disableBlur": boolean;
+      "verticalTabs.tabHeight": string;
     };
   }
 }
