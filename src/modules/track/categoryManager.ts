@@ -24,6 +24,7 @@ import {
   lightToDark,
   isDarkMode,
 } from "../render/colorUtils";
+import { getPopupStyleSheet } from "../render/popupStyleUtils";
 import {
   getOpenedPDFs,
   getZoteroTabs,
@@ -106,18 +107,11 @@ function showContextMenu(
     position: fixed;
     left: ${x}px;
     top: ${y}px;
-    background: ${mc.background};
-    border: ${mc.border};
-    border-radius: 6px;
-    box-shadow: ${mc.shadow};
-    backdrop-filter: ${mc.backdropFilter};
-    -webkit-backdrop-filter: ${mc.backdropFilter};
     z-index: 100000;
     padding: 4px 0;
-    font-size: 13px;
-    color: ${mc.text};
     min-width: 120px;
     font-family: message-box;
+    ${getPopupStyleSheet(doc)}
   `;
 
   // ── Color picker row ──
@@ -267,6 +261,18 @@ function showContextMenu(
     dispatchVtEvent(doc, "vertical-tabs:save-category", { categoryId });
   });
   menu.appendChild(saveItem);
+
+  const divider = doc.createElementNS(
+    "http://www.w3.org/1999/xhtml",
+    "div",
+  ) as HTMLElement;
+  divider.style.cssText = `
+    height: 1px;
+    margin: 4px 12px;
+    background: ${isDarkMode(doc) ? "#555" : "#DBDBDB"};
+    pointer-events: none;
+  `;
+  menu.appendChild(divider);
 
   const deleteItem = doc.createElementNS(
     "http://www.w3.org/1999/xhtml",

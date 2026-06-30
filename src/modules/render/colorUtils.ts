@@ -143,7 +143,9 @@ export function watchDarkMode(
 
 export interface ContextMenuColors {
   background: string;
+  solidBackground: string;
   border: string;
+  solidBorder: string;
   text: string;
   shadow: string;
   hoverBg: string;
@@ -160,7 +162,9 @@ export function getContextMenuColors(doc: Document): ContextMenuColors {
   if (isDarkMode(doc)) {
     return {
       background: "rgba(42, 42, 42, 0.5)",
+      solidBackground: "#2a2a2a",
       border: "1px solid rgba(85, 85, 85, 0.5)",
+      solidBorder: "1px solid #555",
       text: "#eee",
       shadow: "0 2px 8px rgba(0,0,0,0.3)",
       hoverBg: "rgba(255,255,255,0.08)",
@@ -171,7 +175,9 @@ export function getContextMenuColors(doc: Document): ContextMenuColors {
   }
   return {
     background: "rgba(242, 242, 242, 0.5)",
+    solidBackground: "#f2f2f2",
     border: "1px solid rgba(182, 182, 182, 0.5)",
+    solidBorder: "1px solid #b6b6b6",
     text: "#333",
     shadow: "0 2px 8px rgba(0,0,0,0.12)",
     hoverBg: "rgba(0,0,0,0.06)",

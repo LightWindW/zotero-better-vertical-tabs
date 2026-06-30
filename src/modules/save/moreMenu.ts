@@ -1,19 +1,17 @@
 import { config } from "../../../package.json";
 import { getString } from "../../utils/locale";
 import { getContextMenuColors, isDarkMode } from "../render/colorUtils";
+import { getPopupStyleSheet } from "../render/popupStyleUtils";
 import { dispatchVtEvent } from "../core/events";
+import { importIcon, plusIcon, settingIcon } from "../ui/iconSvgs";
 import {
   scheduleCollapse,
   setContextMenuOpen,
   SIDEBAR_ID,
 } from "../sidebar/sidebar";
 
-function iconUrl(name: string): string {
-  return `chrome://${config.addonRef}/content/icons/${name}.svg`;
-}
-
-function iconImgHtml(name: string, color: string): string {
-  return `<img src="${iconUrl(name)}" width="16" height="16" style="display:block;color:${color};" />`;
+function iconHtml(svg: string): string {
+  return `<span style="display:flex;align-items:center;justify-content:center;width:16px;height:16px;">${svg}</span>`;
 }
 
 export function showMoreMenu(doc: Document, anchorEl: HTMLElement): void {
@@ -24,8 +22,7 @@ export function showMoreMenu(doc: Document, anchorEl: HTMLElement): void {
 
   const mc = getContextMenuColors(doc);
   const rect = anchorEl.getBoundingClientRect();
-  const dark = isDarkMode(doc);
-  const iconColor = dark ? "#aaa" : "#6C6C6C";
+  const iconColor = isDarkMode(doc) ? "#A2A2A2" : "#6C6C6C";
 
   const menu = doc.createElementNS(
     "http://www.w3.org/1999/xhtml",
@@ -37,41 +34,58 @@ export function showMoreMenu(doc: Document, anchorEl: HTMLElement): void {
     position: fixed;
     left: ${rect.left}px;
     top: ${rect.bottom + 4}px;
-    background: ${mc.background};
-    border: ${mc.border};
-    border-radius: 6px;
-    box-shadow: ${mc.shadow};
-    backdrop-filter: ${mc.backdropFilter};
-    -webkit-backdrop-filter: ${mc.backdropFilter};
     z-index: 100000;
     padding: 4px 0;
-    font-size: 13px;
-    color: ${mc.text};
     min-width: 160px;
     font-family: message-box;
+    ${getPopupStyleSheet(doc)}
   `;
 
-  const plusSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${iconColor}" stroke-width="2" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
-
-  const items: { icon: string; label: string; action: () => void }[] = [
+  const items: {
+    icon: string;
+    label: string;
+    action: () => void;
+    divider?: boolean;
+  }[] = [
     {
-      icon: plusSvg,
+      icon: iconHtml(plusIcon(iconColor)),
       label: getString("vertical-tabs-add-category"),
       action: () => dispatchVtEvent(doc, "vertical-tabs:add-category"),
     },
     {
-      icon: iconImgHtml("import", iconColor),
+      icon: iconHtml(importIcon(iconColor)),
       label: getString("vertical-tabs-import-category"),
       action: () => dispatchVtEvent(doc, "vertical-tabs:show-import-dialog"),
     },
     {
-      icon: iconImgHtml("setting", iconColor),
+      divider: true,
+      icon: "",
+      label: "",
+      action: () => {},
+    },
+    {
+      icon: iconHtml(settingIcon(iconColor)),
       label: getString("vertical-tabs-plugin-settings"),
       action: () => dispatchVtEvent(doc, "vertical-tabs:open-preferences"),
     },
   ];
 
   for (const item of items) {
+    if (item.divider) {
+      const divider = doc.createElementNS(
+        "http://www.w3.org/1999/xhtml",
+        "div",
+      ) as HTMLElement;
+      divider.style.cssText = `
+        height: 1px;
+        margin: 4px 12px;
+        background: ${isDarkMode(doc) ? "#555" : "#DBDBDB"};
+        pointer-events: none;
+      `;
+      menu.appendChild(divider);
+      continue;
+    }
+
     const row = doc.createElementNS(
       "http://www.w3.org/1999/xhtml",
       "div",

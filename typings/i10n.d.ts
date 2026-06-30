@@ -62,6 +62,7 @@ export type FluentMessageId =
   | 'pref-vertical-tabs-category-colors-hint'
   | 'pref-vertical-tabs-clear-data'
   | 'pref-vertical-tabs-debug'
+  | 'pref-vertical-tabs-disable-blur'
   | 'pref-vertical-tabs-enabled'
   | 'pref-vertical-tabs-main-page-enabled'
   | 'pref-vertical-tabs-remember-categories'

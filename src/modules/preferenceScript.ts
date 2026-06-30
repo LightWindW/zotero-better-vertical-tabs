@@ -46,6 +46,20 @@ function bindPrefEvents() {
     });
   }
 
+  // disableBlur checkbox: manually fire Zotero.Prefs.set to trigger observers
+  const disableBlurCheckbox = addon.data.prefs!.window.document?.querySelector(
+    `#zotero-prefpane-${config.addonRef}-disable-blur`,
+  );
+  if (disableBlurCheckbox) {
+    disableBlurCheckbox.addEventListener("command", (e: Event) => {
+      Zotero.Prefs.set(
+        `${config.prefsPrefix}.verticalTabs.disableBlur`,
+        (e.target as XUL.Checkbox).checked,
+        false,
+      );
+    });
+  }
+
   // autoCloseEnabled checkbox
   const autoCloseCheckbox = addon.data.prefs!.window.document?.querySelector(
     `#zotero-prefpane-${config.addonRef}-auto-close-enabled`,

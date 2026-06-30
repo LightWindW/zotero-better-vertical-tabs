@@ -21,6 +21,7 @@ import {
   watchDarkMode,
   getContextMenuColors,
 } from "./colorUtils";
+import { getPopupStyleSheet } from "./popupStyleUtils";
 
 interface ItemInfo {
   title: string;
@@ -630,18 +631,11 @@ export function showItemContextMenu(
     position: fixed;
     left: ${x}px;
     top: ${y}px;
-    background: ${mc.background};
-    border: ${mc.border};
-    border-radius: 6px;
-    box-shadow: ${mc.shadow};
-    backdrop-filter: ${mc.backdropFilter};
-    -webkit-backdrop-filter: ${mc.backdropFilter};
     z-index: 100002;
     padding: 4px 0;
-    font-size: 13px;
-    color: ${mc.text};
     min-width: 140px;
     font-family: message-box;
+    ${getPopupStyleSheet(doc)}
   `;
 
   const addItem = (label: string, action: () => void): void => {
