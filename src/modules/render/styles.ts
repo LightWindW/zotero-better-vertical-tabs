@@ -170,12 +170,18 @@ export function getStyles(): string {
       padding: 4px 12px 4px 10px;
       cursor: pointer;
       gap: 6px;
+      position: relative;
       transition: padding 0.2s ease-out, gap 0.2s ease-out;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category-header > * {
       position: relative;
       z-index: 2;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-category-header .vt-save-success-overlay {
+      position: absolute;
+      z-index: 10;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category::before {

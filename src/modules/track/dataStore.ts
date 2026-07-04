@@ -334,6 +334,114 @@ export function reorderUncategorized(
   return { ...data, uncategorizedOrder: order };
 }
 
+export interface ItemTabEntry {
+  itemId: number;
+  tabId: string;
+}
+
+/**
+ * Insert a contiguous block of items into a category at a specific position.
+ * Items are first removed from all other categories and from the uncategorized
+ * list, then inserted at the computed index in the target category.
+ */
+export function insertItemsIntoCategoryAt(
+  data: VerticalTabsData,
+  categoryId: string,
+  entries: ItemTabEntry[],
+  insertBeforeTabId?: string | null,
+): VerticalTabsData {
+  const itemIdsToMove = new Set(entries.map((e) => e.itemId));
+  const tabIdsToMove = new Set(entries.map((e) => e.tabId));
+
+  const cleanCategories = data.categories.map((category) => {
+    // Remove any existing pairs whose itemId or tabId is being moved, keeping
+    // the two arrays parallel.
+    const keptItemIds: number[] = [];
+    const keptTabIds: string[] = [];
+    for (let i = 0; i < category.tabIds.length; i++) {
+      const itemId = category.itemIds[i];
+      const tabId = category.tabIds[i];
+      if (!itemIdsToMove.has(itemId) && !tabIdsToMove.has(tabId)) {
+        keptItemIds.push(itemId);
+        keptTabIds.push(tabId);
+      }
+    }
+
+    if (category.id !== categoryId) {
+      return { ...category, itemIds: keptItemIds, tabIds: keptTabIds };
+    }
+
+    let insertAt = keptTabIds.length;
+    if (insertBeforeTabId) {
+      const idx = keptTabIds.indexOf(insertBeforeTabId);
+      if (idx >= 0) insertAt = idx;
+    }
+
+    const insertedItemIds = entries.map((e) => e.itemId);
+    const insertedTabIds = entries.map((e) => e.tabId);
+
+    return {
+      ...category,
+      itemIds: [
+        ...keptItemIds.slice(0, insertAt),
+        ...insertedItemIds,
+        ...keptItemIds.slice(insertAt),
+      ],
+      tabIds: [
+        ...keptTabIds.slice(0, insertAt),
+        ...insertedTabIds,
+        ...keptTabIds.slice(insertAt),
+      ],
+    };
+  });
+
+  const movedTabIdSet = tabIdsToMove;
+  const newUncategorizedOrder = data.uncategorizedOrder.filter(
+    (id) => !movedTabIdSet.has(id),
+  );
+
+  return {
+    ...data,
+    categories: cleanCategories,
+    uncategorizedOrder: newUncategorizedOrder,
+  };
+}
+
+/**
+ * Insert a contiguous block of items into the uncategorized list at a specific
+ * position. Items are first removed from all categories.
+ */
+export function insertUncategorizedItemsAt(
+  data: VerticalTabsData,
+  entries: ItemTabEntry[],
+  insertBeforeTabId?: string | null,
+): VerticalTabsData {
+  const itemIdsToMove = new Set(entries.map((e) => e.itemId));
+  const tabIdsToMove = new Set(entries.map((e) => e.tabId));
+
+  const newCategories = data.categories.map((category) => ({
+    ...category,
+    itemIds: category.itemIds.filter((id) => !itemIdsToMove.has(id)),
+    tabIds: category.tabIds.filter((id) => !tabIdsToMove.has(id)),
+  }));
+
+  const order = data.uncategorizedOrder.filter((id) => !tabIdsToMove.has(id));
+  let insertAt = order.length;
+  if (insertBeforeTabId) {
+    const idx = order.indexOf(insertBeforeTabId);
+    if (idx >= 0) insertAt = idx;
+  }
+
+  const insertedTabIds = entries.map((e) => e.tabId);
+  order.splice(insertAt, 0, ...insertedTabIds);
+
+  return {
+    ...data,
+    categories: newCategories,
+    uncategorizedOrder: order,
+  };
+}
+
 export function reorderCategories(
   data: VerticalTabsData,
   categoryId: string,

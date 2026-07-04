@@ -46,9 +46,15 @@ function getMainWindows(): Window[] {
 
 /**
  * Zotero_Tabs is a Window property in Zotero 8+, not a global.
- * Access through the first main window.
+ * Access through the provided document's window, or the first main window.
  */
-export function getZoteroTabs(): _ZoteroTypes.Zotero_Tabs | undefined {
+export function getZoteroTabs(
+  doc?: Document,
+): _ZoteroTypes.Zotero_Tabs | undefined {
+  const winFromDoc = doc?.defaultView as _ZoteroTypes.MainWindow | undefined;
+  if (winFromDoc && winFromDoc.Zotero_Tabs) {
+    return winFromDoc.Zotero_Tabs;
+  }
   const win = Zotero.getMainWindows()[0] as _ZoteroTypes.MainWindow | undefined;
   return win?.Zotero_Tabs;
 }
@@ -398,19 +404,13 @@ export function restoreDormantItems(): void {
 // ── Tab order sync with Zotero's native tab bar ──
 
 let _syncTabOrderTimer: ReturnType<typeof setTimeout> | null = null;
+const MAX_SYNC_RETRIES = 5;
 
-/**
- * Reorder Zotero's native horizontal tabs to match VT's vertical order.
- * Debounced — multiple rapid calls only trigger one actual reorder.
- */
-export function syncTabOrderToNative(
+function buildDesiredTabOrder(
   categories: { order: number; tabIds: string[] }[],
   uncategorizedOrder: string[],
-): void {
-  // Clear previous pending sync
-  if (_syncTabOrderTimer) clearTimeout(_syncTabOrderTimer);
-
-  // Build desired order
+  internalTabs: any[],
+): string[] {
   const desired: string[] = [];
   const seen = new Set<string>();
 
@@ -430,57 +430,219 @@ export function syncTabOrderToNative(
     }
   }
 
+  // Add remaining tabs not in VT order at the end
+  for (const tab of internalTabs) {
+    const tid = String(tab.id ?? "");
+    if (tid && !seen.has(tid)) {
+      desired.push(tid);
+      seen.add(tid);
+    }
+  }
+
+  // Build final order: library tab (index 0) stays first
+  const finalOrder: string[] = [];
+  const seenFinal = new Set<string>();
+  const libraryTabId = String(internalTabs[0]?.id ?? "");
+  if (libraryTabId) {
+    finalOrder.push(libraryTabId);
+    seenFinal.add(libraryTabId);
+  }
+  for (const tid of desired) {
+    if (!seenFinal.has(tid)) {
+      finalOrder.push(tid);
+      seenFinal.add(tid);
+    }
+  }
+
+  return finalOrder;
+}
+
+function getTabIds(tabs: any[] | undefined): string[] {
+  return (tabs ?? []).map((t) => String(t.id ?? ""));
+}
+
+function doSyncTabOrderToNative(
+  categories: { order: number; tabIds: string[] }[],
+  uncategorizedOrder: string[],
+  attempt: number,
+  options?: { doc?: Document; pendingTabIds?: string[] },
+): void {
+  const ztabs = getZoteroTabs(options?.doc);
+  if (!ztabs) {
+    ztoolkit.log("[vt-sync] no Zotero_Tabs available");
+    return;
+  }
+
+  let internalTabs = (ztabs as any)?._tabs as any[] | undefined;
+  if (!internalTabs || internalTabs.length < 2) return;
+
+  let currentIds = getTabIds(internalTabs);
+  const currentIdSet = new Set(currentIds);
+
+  // Build the full desired order from VT data, then restrict it to tabs that
+  // are actually open in this window. Closed/stale tabIds must not push open
+  // tabs to the wrong positions.
+  const fullDesiredOrder = buildDesiredTabOrder(
+    categories,
+    uncategorizedOrder,
+    internalTabs,
+  );
+  const desiredOpenOrder: string[] = [];
+  const seen = new Set<string>();
+  for (const id of fullDesiredOrder) {
+    if (id && currentIdSet.has(id) && !seen.has(id)) {
+      desiredOpenOrder.push(id);
+      seen.add(id);
+    }
+  }
+  // Append any open tabs not in the VT order at the end, so nothing is lost.
+  for (const id of currentIds) {
+    if (id && !seen.has(id)) {
+      desiredOpenOrder.push(id);
+      seen.add(id);
+    }
+  }
+
+  const pendingTabIds = options?.pendingTabIds ?? [];
+  const missingPending = pendingTabIds.filter((id) => !currentIdSet.has(id));
+
+  ztoolkit.log(
+    "[vt-sync] attempt",
+    attempt,
+    "desiredOpenOrder",
+    desiredOpenOrder,
+    "currentIds",
+    currentIds,
+    "pending",
+    pendingTabIds,
+    "missingPending",
+    missingPending,
+  );
+
+  // If newly opened tabs haven't been added yet, schedule a retry.
+  if (missingPending.length > 0) {
+    ztoolkit.log("[vt-sync] waiting for pending tabs:", missingPending);
+    if (attempt < MAX_SYNC_RETRIES) {
+      _syncTabOrderTimer = setTimeout(() => {
+        doSyncTabOrderToNative(
+          categories,
+          uncategorizedOrder,
+          attempt + 1,
+          options,
+        );
+      }, 200);
+      return;
+    }
+    ztoolkit.log("[vt-sync] gave up waiting for pending tabs");
+  }
+
+  // Skip if already correct
+  if (arraysEqual(desiredOpenOrder, currentIds)) {
+    ztoolkit.log("[vt-sync] already correct");
+    return;
+  }
+
+  // Try the public move() API first. Re-fetch _tabs each time in case move()
+  // replaces the internal array rather than mutating it in place.
+  if (typeof ztabs.move === "function") {
+    try {
+      for (
+        let targetIdx = 0;
+        targetIdx < desiredOpenOrder.length;
+        targetIdx++
+      ) {
+        internalTabs = (ztabs as any)?._tabs as any[] | undefined;
+        if (!internalTabs) break;
+        const tabId = desiredOpenOrder[targetIdx];
+        const currentIdx = internalTabs.findIndex(
+          (t) => String(t.id ?? "") === tabId,
+        );
+        if (currentIdx < 0) continue;
+        const safeTargetIdx = Math.min(targetIdx, internalTabs.length - 1);
+        if (currentIdx !== safeTargetIdx) {
+          ztoolkit.log(
+            "[vt-sync] move",
+            tabId,
+            "from",
+            currentIdx,
+            "to",
+            safeTargetIdx,
+          );
+          ztabs.move(tabId, safeTargetIdx);
+        }
+      }
+    } catch (err) {
+      ztoolkit.log("[vt-sync] move() failed:", err);
+    }
+  } else {
+    ztoolkit.log("[vt-sync] move() not available");
+  }
+
+  // Re-fetch _tabs after move() in case it swapped the array.
+  internalTabs = (ztabs as any)?._tabs as any[] | undefined;
+  currentIds = getTabIds(internalTabs);
+  ztoolkit.log("[vt-sync] after move currentIds:", currentIds);
+
+  // Fallback / ensure: rebuild the current _tabs array in the desired order.
+  if (
+    internalTabs &&
+    internalTabs.length >= 2 &&
+    !arraysEqual(desiredOpenOrder, currentIds)
+  ) {
+    try {
+      const tabById = new Map<string, any>();
+      for (const tab of internalTabs) {
+        const id = String(tab.id ?? "");
+        if (id) tabById.set(id, tab);
+      }
+      const orderedTabs: any[] = [];
+      for (const id of desiredOpenOrder) {
+        const tab = tabById.get(id);
+        if (tab) orderedTabs.push(tab);
+      }
+      for (const tab of internalTabs) {
+        const id = String(tab.id ?? "");
+        if (id && !seen.has(id)) {
+          orderedTabs.push(tab);
+        }
+      }
+      internalTabs.splice(0, internalTabs.length, ...orderedTabs);
+      ztoolkit.log("[vt-sync] rebuilt _tabs order:", getTabIds(internalTabs));
+    } catch (err) {
+      ztoolkit.log("[vt-sync] rebuild failed:", err);
+    }
+  }
+
+  // Refresh both internal state and the visible tab bar.
+  try {
+    (ztabs as any)?._update?.();
+    ztoolkit.log("[vt-sync] _update() called");
+  } catch (err) {
+    ztoolkit.log("[vt-sync] _update() failed:", err);
+  }
+  try {
+    (ztabs as any)?._updateTabBar?.();
+    ztoolkit.log("[vt-sync] _updateTabBar() called");
+  } catch (err) {
+    ztoolkit.log("[vt-sync] _updateTabBar() failed:", err);
+  }
+}
+
+/**
+ * Reorder Zotero's native horizontal tabs to match VT's vertical order.
+ * Debounced — multiple rapid calls only trigger one actual reorder.
+ * Retries briefly if newly opened tabs have not yet appeared in _tabs.
+ */
+export function syncTabOrderToNative(
+  categories: { order: number; tabIds: string[] }[],
+  uncategorizedOrder: string[],
+  options?: { doc?: Document; pendingTabIds?: string[] },
+): void {
+  if (_syncTabOrderTimer) clearTimeout(_syncTabOrderTimer);
   _syncTabOrderTimer = setTimeout(() => {
     _syncTabOrderTimer = null;
-    try {
-      const ztabs = getZoteroTabs();
-      const internalTabs = (ztabs as any)?._tabs as any[] | undefined;
-      if (!internalTabs || internalTabs.length < 2) return;
-
-      // Add remaining tabs not in VT order at the end
-      for (const tab of internalTabs) {
-        const tid = String(tab.id ?? "");
-        if (tid && !seen.has(tid)) {
-          desired.push(tid);
-          seen.add(tid);
-        }
-      }
-
-      // Build final order: library tab (index 0) stays first
-      const finalOrder = [String(internalTabs[0]?.id ?? "")];
-      const seenFinal = new Set<string>(finalOrder);
-      for (const tid of desired) {
-        if (!seenFinal.has(tid)) {
-          finalOrder.push(tid);
-          seenFinal.add(tid);
-        }
-      }
-
-      // Skip if already correct
-      if (
-        finalOrder.length === internalTabs.length &&
-        finalOrder.every((id, i) => String(internalTabs[i]?.id ?? "") === id)
-      )
-        return;
-
-      // Build new tab array in desired order, then replace entire _tabs content
-      const newTabs = finalOrder
-        .map((id) => internalTabs.find((t) => String(t.id) === id))
-        .filter(Boolean);
-
-      // Replace in place to trigger reactivity
-      internalTabs.splice(0, internalTabs.length, ...newTabs);
-
-      // Try to force visual update
-      try {
-        (ztabs as any)?._update?.();
-      } catch {
-        // ignore
-      }
-    } catch {
-      // ignore
-    }
-  }, 100);
+    doSyncTabOrderToNative(categories, uncategorizedOrder, 0, options);
+  }, 50);
 }
 
 function arraysEqual(a: string[], b: string[]): boolean {

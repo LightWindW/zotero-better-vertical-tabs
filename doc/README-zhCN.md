@@ -4,7 +4,7 @@
 
 适配 [Zotero](https://www.zotero.org/) 的垂直标签栏拓展插件。
 
-[English](../README.md) | [简体中文](./README-zhCN.md)
+[English](../README.md) | [简体中文](./README-zhCN.md) | [Español](./README-esES.md)
 
 ![logo](.\figs\logo.jpg)
 

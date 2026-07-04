@@ -415,8 +415,16 @@ function clearLeaveTimer(doc: Document): void {
   }
 }
 
+export function cancelPendingCollapse(doc: Document): void {
+  clearLeaveTimer(doc);
+}
+
 function isFloatingExpanded(doc: Document): boolean {
   return getDocState(doc).expanded;
+}
+
+export function getFloatingExpanded(doc: Document): boolean {
+  return isFloatingExpanded(doc);
 }
 
 function setFloatingExpanded(doc: Document, expanded: boolean): void {

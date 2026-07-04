@@ -121,3 +121,4 @@ vertical-tabs-restore-warning-title = Category Restored with Warnings
 vertical-tabs-restore-missing = { $count } items in the saved category no longer exist in the library and were skipped.
 vertical-tabs-restore-updated = { $count } items' metadata have been updated since the category was saved.
 vertical-tabs-restore-confirm-hint = The remaining valid items have been successfully restored.
+vertical-tabs-drop-missing-pdf = Some dragged items have no PDF attachments. Please check.

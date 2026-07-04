@@ -16,6 +16,7 @@ import {
 } from "../track/itemTracker";
 import { dispatchVtEvent } from "../core/events";
 import { updateActiveCategoryHighlight } from "./categoryHighlight";
+import { isInternalVtDrag, VT_DRAG_MIME_TYPE } from "../drag/dropTarget";
 import {
   lightToDark,
   isDarkMode,
@@ -314,6 +315,7 @@ function createItemElement(
   const reorderCatId = categoryId || "__uncategorized__";
   {
     row.addEventListener("dragover", (e: DragEvent) => {
+      if (!isInternalVtDrag(e.dataTransfer)) return;
       e.preventDefault();
       const rect = row.getBoundingClientRect();
       const midY = rect.top + rect.height / 2;
@@ -338,6 +340,7 @@ function createItemElement(
     });
 
     row.addEventListener("drop", (e: DragEvent) => {
+      if (!isInternalVtDrag(e.dataTransfer)) return;
       e.preventDefault();
       e.stopPropagation();
       row.classList.remove("drop-before", "drop-after");
@@ -376,6 +379,7 @@ function createItemElement(
     const dataTransfer = event.dataTransfer;
     if (dataTransfer) {
       dataTransfer.setData("text/plain", pdf.tabId || String(pdf.itemId));
+      dataTransfer.setData(VT_DRAG_MIME_TYPE, "1");
       dataTransfer.effectAllowed = "move";
     }
     dispatchVtEvent(row, "vertical-tabs:item-dragstart", {
@@ -470,11 +474,13 @@ function createCategoryElement(
     const dt = e.dataTransfer;
     if (dt) {
       dt.setData("text/plain", `cat:${category.id}`);
+      dt.setData(VT_DRAG_MIME_TYPE, "1");
       dt.effectAllowed = "move";
     }
   });
 
   wrapper.addEventListener("dragover", (e: DragEvent) => {
+    if (!isInternalVtDrag(e.dataTransfer)) return;
     const dt = e.dataTransfer;
     if (!dt || !dt.types.includes("text/plain")) return;
     // Only handle category drags
@@ -508,6 +514,7 @@ function createCategoryElement(
   });
 
   wrapper.addEventListener("drop", (e: DragEvent) => {
+    if (!isInternalVtDrag(e.dataTransfer)) return;
     e.preventDefault();
     e.stopPropagation();
     wrapper.classList.remove("cat-drop-before", "cat-drop-after");
@@ -600,6 +607,7 @@ function createCategoryElement(
     }
   };
   const onDrop = (e: DragEvent) => {
+    if (!isInternalVtDrag(e.dataTransfer)) return;
     e.preventDefault();
     wrapper.classList.remove("drag-over");
     const dragData = e.dataTransfer?.getData("text/plain");
@@ -849,6 +857,7 @@ export function renderCategories(
     const dropZone = createEl(doc, "div");
     dropZone.className = "vertical-tabs-drop-zone";
     dropZone.addEventListener("dragover", (e: DragEvent) => {
+      if (!isInternalVtDrag(e.dataTransfer)) return;
       e.preventDefault();
       doc
         .querySelectorAll(".vertical-tabs-category.drag-over")
@@ -859,6 +868,7 @@ export function renderCategories(
       dropZone.classList.remove("drag-over");
     });
     dropZone.addEventListener("drop", (e: DragEvent) => {
+      if (!isInternalVtDrag(e.dataTransfer)) return;
       e.preventDefault();
       dropZone.classList.remove("drag-over");
       const itemIdStr = e.dataTransfer?.getData("text/plain");
@@ -881,6 +891,7 @@ export function renderCategories(
     const dropZone = createEl(doc, "div");
     dropZone.className = "vertical-tabs-drop-zone";
     dropZone.addEventListener("dragover", (e: DragEvent) => {
+      if (!isInternalVtDrag(e.dataTransfer)) return;
       e.preventDefault();
       doc
         .querySelectorAll(".vertical-tabs-category.drag-over")
@@ -891,6 +902,7 @@ export function renderCategories(
       dropZone.classList.remove("drag-over");
     });
     dropZone.addEventListener("drop", (e: DragEvent) => {
+      if (!isInternalVtDrag(e.dataTransfer)) return;
       e.preventDefault();
       dropZone.classList.remove("drag-over");
       const dragData = e.dataTransfer?.getData("text/plain");

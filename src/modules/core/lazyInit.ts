@@ -33,6 +33,7 @@ import {
 } from "../render/uiRenderer";
 import { destroyAutoClose, initAutoClose } from "../track/autoClose";
 import { dispatchVtEvent } from "./events";
+import { initMainPaneDrop, destroyMainPaneDrop } from "../drag/mainPaneDrop";
 
 function vtLog(msg: string): void {
   Zotero.logError(new Error("[BVT] " + msg));
@@ -107,6 +108,7 @@ export async function initVerticalTabs(
           if (value) {
             startTracking();
             setSidebarVisibility(w.document, true);
+            initMainPaneDrop(w.document);
             ws.visible = true;
             // Re-scan existing tabs to re-inject reader VT
             scanOpenedTabs();
@@ -114,6 +116,7 @@ export async function initVerticalTabs(
               visible: true,
             });
           } else {
+            destroyMainPaneDrop(w.document);
             stopTracking();
             destroySidebar(w.document);
             ws.visible = false;
@@ -200,6 +203,9 @@ export async function initVerticalTabs(
   // Start auto-close timer if enabled
   initAutoClose();
 
+  // Enable dragging items from the main Zotero item pane into the VT sidebar.
+  initMainPaneDrop(win.document);
+
   // Trigger initial render
   dispatchVtEvent(win.document, "vertical-tabs:visibility-changed", {
     visible,
@@ -217,6 +223,7 @@ export function destroyVerticalTabs(win: Window): void {
   teardownCategoryDarkMode(win.document);
   destroyCategoryManager(win.document);
   destroySidebar(win.document);
+  destroyMainPaneDrop(win.document);
   stopTracking();
 
   // Unregister prefs observers if no windows remain

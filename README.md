@@ -4,7 +4,7 @@
 
 A vertical tabs extension for [Zotero](https://www.zotero.org/).
 
-[English](./README.md) | [简体中文](./doc/README-zhCN.md)
+[English](./README.md) | [简体中文](./doc/README-zhCN.md) | [Español](./doc/README-esES.md)
 
 ![logo](.\doc\figs\logo.jpg)
 

@@ -42,6 +42,12 @@ export type DropTarget =
 
 const UNCATEGORIZED = "__uncategorized__";
 
+export const VT_DRAG_MIME_TYPE = "application/x-better-vertical-tabs";
+
+export function isInternalVtDrag(dataTransfer: DataTransfer | null): boolean {
+  return dataTransfer?.types.includes(VT_DRAG_MIME_TYPE) ?? false;
+}
+
 function getItemCategoryId(itemEl: HTMLElement): string | "__uncategorized__" {
   const categoryEl = itemEl.closest(
     ".vertical-tabs-category",
@@ -64,12 +70,15 @@ function getItemCategoryId(itemEl: HTMLElement): string | "__uncategorized__" {
  * 2. Category under cursor -> category
  * 3. Drop-zone under cursor -> drop-zone
  * 4. None
+ *
+ * For external drags (e.g. from the main Zotero item pane), pass `undefined`
+ * for `draggedTabId` so every item is treated as a valid drop target.
  */
 export function computeDropTarget(
   doc: Document,
   clientX: number,
   clientY: number,
-  draggedTabId: string,
+  draggedTabId?: string,
 ): DropTarget {
   const el = doc.elementFromPoint(clientX, clientY) as HTMLElement | null;
   if (!el) return { type: "none" };
@@ -78,7 +87,10 @@ export function computeDropTarget(
   const itemEl = el.closest(".vertical-tabs-item") as HTMLElement | null;
   if (itemEl) {
     const targetTabId = itemEl.dataset.tabId;
-    if (targetTabId && targetTabId !== draggedTabId) {
+    if (
+      targetTabId &&
+      (draggedTabId === undefined || targetTabId !== draggedTabId)
+    ) {
       const rect = itemEl.getBoundingClientRect();
       const before = clientY < rect.top + rect.height / 2;
       return {

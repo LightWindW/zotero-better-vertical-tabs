@@ -69,6 +69,7 @@ interface CategoryHandlers {
   color: EventListener;
   toggleCollapse: EventListener;
   save: EventListener;
+  externalDrop: EventListener;
   showMoreMenu: EventListener;
   showImportDialog: EventListener;
   importCategory: EventListener;
@@ -433,6 +434,26 @@ async function handleSaveCategory(event: Event): Promise<void> {
   showSaveSuccessAnimation(doc, categoryId);
 }
 
+function handleExternalDrop(event: Event): void {
+  const customEvent = event as CustomEvent;
+  const { data, pendingTabIds } = customEvent.detail as {
+    data: VerticalTabsData;
+    pendingTabIds?: string[];
+  };
+  const doc =
+    (event.target as Node).ownerDocument ?? (event.target as Document);
+
+  _data = data;
+
+  syncTabOrderToNative(
+    _data.categories.map((c) => ({ order: c.order, tabIds: c.tabIds })),
+    _data.uncategorizedOrder,
+    { doc, pendingTabIds },
+  );
+
+  void persist(doc);
+}
+
 function handleShowMoreMenu(event: Event): void {
   const doc =
     (event.target as Node).ownerDocument ?? (event.target as Document);
@@ -681,6 +702,10 @@ function cleanupOldCategoryHandlers(doc: Document): void {
     old.toggleCollapse,
   );
   doc.removeEventListener("vertical-tabs:save-category", old.save);
+  doc.removeEventListener(
+    "vertical-tabs:external-items-dropped",
+    old.externalDrop,
+  );
   doc.removeEventListener("vertical-tabs:show-more-menu", old.showMoreMenu);
   doc.removeEventListener(
     "vertical-tabs:show-import-dialog",
@@ -769,6 +794,7 @@ export async function initCategoryManager(doc: Document): Promise<void> {
     color: colorHandler,
     toggleCollapse: handleToggleCollapsed,
     save: handleSaveCategory,
+    externalDrop: handleExternalDrop,
     showMoreMenu: handleShowMoreMenu,
     showImportDialog: handleShowImportDialog,
     importCategory: handleImportCategory,
@@ -794,6 +820,10 @@ export async function initCategoryManager(doc: Document): Promise<void> {
     handlers.toggleCollapse,
   );
   doc.addEventListener("vertical-tabs:save-category", handlers.save);
+  doc.addEventListener(
+    "vertical-tabs:external-items-dropped",
+    handlers.externalDrop,
+  );
   doc.addEventListener("vertical-tabs:show-more-menu", handlers.showMoreMenu);
   doc.addEventListener(
     "vertical-tabs:show-import-dialog",

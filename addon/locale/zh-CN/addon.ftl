@@ -122,3 +122,4 @@ vertical-tabs-restore-warning-title = 分类恢复完成（有警告）
 vertical-tabs-restore-missing = 保存分类中的 { $count } 个条目已不在文献库中，已跳过。
 vertical-tabs-restore-updated = 保存分类中的 { $count } 个条目的元数据自保存以来已更新。
 vertical-tabs-restore-confirm-hint = 其余有效条目已成功恢复。
+vertical-tabs-drop-missing-pdf = 本次拖拽有条目不存在pdf附件请检查
