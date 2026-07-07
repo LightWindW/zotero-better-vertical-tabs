@@ -468,6 +468,90 @@ export function reorderCategories(
   };
 }
 
+/**
+ * Remove closed tabIds from the persisted order arrays.
+ * - In categories, closed tabIds are replaced with empty strings so that the
+ *   paired itemId (category assignment) is preserved for restart restore.
+ * - In uncategorizedOrder, closed tabIds are removed entirely.
+ */
+export function cleanStaleTabIds(
+  data: VerticalTabsData,
+  liveTabIds: Set<string>,
+): VerticalTabsData {
+  return {
+    ...data,
+    categories: data.categories.map((category) => ({
+      ...category,
+      tabIds: category.tabIds.map((tabId) =>
+        tabId && !liveTabIds.has(tabId) ? "" : tabId,
+      ),
+    })),
+    uncategorizedOrder: data.uncategorizedOrder.filter((id) =>
+      liveTabIds.has(id),
+    ),
+  };
+}
+
+/**
+ * Move live (non-empty) tabId/itemId pairs to the front of a category and
+ * dormant (empty) pairs to the back. This keeps insertion indices computed
+ * from tabIds aligned with the visible VT order.
+ */
+export function compactCategoryTabIds(
+  data: VerticalTabsData,
+  categoryId: string,
+): VerticalTabsData {
+  return {
+    ...data,
+    categories: data.categories.map((category) => {
+      if (category.id !== categoryId) return category;
+
+      const live: { itemId: number; tabId: string }[] = [];
+      const dormant: { itemId: number; tabId: string }[] = [];
+
+      for (let i = 0; i < category.tabIds.length; i++) {
+        const itemId = category.itemIds[i];
+        const tabId = category.tabIds[i];
+        if (tabId) {
+          live.push({ itemId, tabId });
+        } else {
+          dormant.push({ itemId, tabId });
+        }
+      }
+
+      const combined = [...live, ...dormant];
+      return {
+        ...category,
+        itemIds: combined.map((e) => e.itemId),
+        tabIds: combined.map((e) => e.tabId),
+      };
+    }),
+  };
+}
+
+/**
+ * Make sure all currently open uncategorized tabs are represented in
+ * uncategorizedOrder, preserving the existing relative order and appending any
+ * missing tabs at the end.
+ */
+export function reconcileUncategorizedOrder(
+  data: VerticalTabsData,
+  liveUncategorizedTabIds: string[],
+): VerticalTabsData {
+  const existing = new Set(data.uncategorizedOrder);
+  const appended: string[] = [];
+  for (const tabId of liveUncategorizedTabIds) {
+    if (!existing.has(tabId)) {
+      appended.push(tabId);
+    }
+  }
+  if (appended.length === 0) return data;
+  return {
+    ...data,
+    uncategorizedOrder: [...data.uncategorizedOrder, ...appended],
+  };
+}
+
 export function saveTrackedItem(
   data: VerticalTabsData,
   itemId: number,

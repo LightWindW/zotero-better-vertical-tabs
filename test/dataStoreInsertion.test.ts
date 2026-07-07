@@ -2,6 +2,9 @@ import { assert } from "chai";
 import {
   insertItemsIntoCategoryAt,
   insertUncategorizedItemsAt,
+  cleanStaleTabIds,
+  compactCategoryTabIds,
+  reconcileUncategorizedOrder,
   type ItemTabEntry,
   type VerticalTabsData,
 } from "../src/modules/track/dataStore";
@@ -27,6 +30,30 @@ function makeData(): VerticalTabsData {
     ],
     trackedItems: {},
     uncategorizedOrder: ["tU1", "tU2"],
+  };
+}
+
+function makeStaleData(): VerticalTabsData {
+  return {
+    version: 2,
+    categories: [
+      {
+        id: "cat1",
+        name: "Category 1",
+        order: 0,
+        itemIds: [101, 102, 103, 104],
+        tabIds: ["stale", "tA", "tB", ""],
+      },
+      {
+        id: "cat2",
+        name: "Category 2",
+        order: 1,
+        itemIds: [201],
+        tabIds: ["tD"],
+      },
+    ],
+    trackedItems: {},
+    uncategorizedOrder: ["staleU", "tU1"],
   };
 }
 
@@ -97,6 +124,63 @@ describe("dataStore insertion helpers", function () {
       const entries: ItemTabEntry[] = [{ itemId: 999, tabId: "tNew" }];
       const result = insertUncategorizedItemsAt(data, entries, undefined);
       assert.deepEqual(result.uncategorizedOrder, ["tU1", "tU2", "tNew"]);
+    });
+  });
+
+  describe("cleanStaleTabIds", function () {
+    it("replaces closed category tabIds with empty strings and keeps itemIds", function () {
+      const data = makeStaleData();
+      const result = cleanStaleTabIds(data, new Set(["tA", "tB", "tD", "tU1"]));
+      const cat1 = result.categories.find((c) => c.id === "cat1")!;
+      assert.deepEqual(cat1.tabIds, ["", "tA", "tB", ""]);
+      assert.deepEqual(cat1.itemIds, [101, 102, 103, 104]);
+    });
+
+    it("removes stale tabIds from uncategorizedOrder", function () {
+      const data = makeStaleData();
+      const result = cleanStaleTabIds(data, new Set(["tA", "tB", "tD", "tU1"]));
+      assert.deepEqual(result.uncategorizedOrder, ["tU1"]);
+    });
+  });
+
+  describe("compactCategoryTabIds", function () {
+    it("moves live tabId/itemId pairs to the front", function () {
+      const data = makeStaleData();
+      data.categories[0].tabIds = ["", "tA", "tB", ""];
+      const result = compactCategoryTabIds(data, "cat1");
+      const cat1 = result.categories.find((c) => c.id === "cat1")!;
+      assert.deepEqual(cat1.tabIds, ["tA", "tB", "", ""]);
+      assert.deepEqual(cat1.itemIds, [102, 103, 101, 104]);
+    });
+  });
+
+  describe("reconcileUncategorizedOrder", function () {
+    it("appends missing live uncategorized tabs", function () {
+      const data = makeStaleData();
+      data.uncategorizedOrder = ["tU1"];
+      const result = reconcileUncategorizedOrder(data, ["tU1", "tU2"]);
+      assert.deepEqual(result.uncategorizedOrder, ["tU1", "tU2"]);
+    });
+
+    it("returns same data when nothing is missing", function () {
+      const data = makeStaleData();
+      data.uncategorizedOrder = ["tU1", "tU2"];
+      const result = reconcileUncategorizedOrder(data, ["tU1", "tU2"]);
+      assert.strictEqual(result, data);
+    });
+  });
+
+  describe("insertItemsIntoCategoryAt after cleanup", function () {
+    it("inserts before the first live tab after compaction", function () {
+      let data = makeStaleData();
+      data.categories[0].tabIds = ["", "tA", "tB", ""];
+      data = cleanStaleTabIds(data, new Set(["tA", "tB", "tD", "tU1"]));
+      data = compactCategoryTabIds(data, "cat1");
+      const entries: ItemTabEntry[] = [{ itemId: 999, tabId: "tNew" }];
+      const result = insertItemsIntoCategoryAt(data, "cat1", entries, "tA");
+      const cat1 = result.categories.find((c) => c.id === "cat1")!;
+      assert.deepEqual(cat1.tabIds, ["tNew", "tA", "tB", "", ""]);
+      assert.deepEqual(cat1.itemIds, [999, 102, 103, 101, 104]);
     });
   });
 });

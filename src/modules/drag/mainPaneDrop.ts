@@ -18,13 +18,19 @@ import { getData } from "../track/categoryManager";
 import {
   insertItemsIntoCategoryAt,
   insertUncategorizedItemsAt,
+  cleanStaleTabIds,
+  compactCategoryTabIds,
+  reconcileUncategorizedOrder,
   type ItemTabEntry,
   type VerticalTabsData,
 } from "../track/dataStore";
 import { openItemAsNewTab } from "../track/tabOpener";
 import { getString } from "../../utils/locale";
 import { showToast } from "../ui/toast";
-import { getZoteroTabs } from "../track/itemTracker";
+import {
+  getZoteroTabs,
+  getLiveUncategorizedTabIds,
+} from "../track/itemTracker";
 
 interface MainPaneDropState {
   isExternalDrag: boolean;
@@ -293,7 +299,41 @@ async function handleDrop(
   // before persisting data and syncing native tab order.
   await waitForTabIds(doc, openedTabIds);
 
-  const currentData = getData();
+  const ztabs = getZoteroTabs(doc);
+  const internalTabs = (ztabs as any)?._tabs as any[] | undefined;
+  const liveTabIds = new Set(
+    (internalTabs ?? []).map((t) => String(t.id ?? "")).filter((id) => id),
+  );
+
+  let currentData = getData();
+  currentData = cleanStaleTabIds(currentData, liveTabIds);
+  currentData = reconcileUncategorizedOrder(
+    currentData,
+    getLiveUncategorizedTabIds(currentData, doc),
+  );
+
+  let targetCategoryId: string | undefined;
+  if (target.type === "category") {
+    targetCategoryId = target.categoryId;
+  } else if (
+    (target.type === "item-before" || target.type === "item-after") &&
+    target.categoryId !== "__uncategorized__"
+  ) {
+    targetCategoryId = target.categoryId;
+  }
+  if (targetCategoryId) {
+    currentData = compactCategoryTabIds(currentData, targetCategoryId);
+  }
+
+  ztoolkit.log(
+    "[vt-main-pane-drop] prepared data for target",
+    targetCategoryId || "__uncategorized__",
+    "categories",
+    currentData.categories.map((c) => ({ id: c.id, tabIds: c.tabIds })),
+    "uncategorizedOrder",
+    currentData.uncategorizedOrder,
+  );
+
   let newData: VerticalTabsData;
 
   if (target.type === "category") {

@@ -5,7 +5,7 @@ import {
   removePersistedItem,
   getTrackedItems,
 } from "./categoryManager";
-import type { TrackedItemInfo } from "./dataStore";
+import type { TrackedItemInfo, VerticalTabsData } from "./dataStore";
 
 export interface OpenedPDF {
   itemId: number;
@@ -57,6 +57,61 @@ export function getZoteroTabs(
   }
   const win = Zotero.getMainWindows()[0] as _ZoteroTypes.MainWindow | undefined;
   return win?.Zotero_Tabs;
+}
+
+/**
+ * Return all tab ids currently present in Zotero_Tabs._tabs for the given
+ * document's window (or the first main window).
+ */
+export function getLiveOpenTabIds(doc?: Document): string[] {
+  const ztabs = getZoteroTabs(doc);
+  const internalTabs = (ztabs as any)?._tabs as any[] | undefined;
+  return (internalTabs ?? []).map((t) => String(t.id ?? "")).filter((id) => id);
+}
+
+/**
+ * Return tab ids for tabs that are currently open and not assigned to any
+ * category. This is used to keep uncategorizedOrder in sync with reality.
+ */
+export function getLiveUncategorizedTabIds(
+  data: VerticalTabsData,
+  doc?: Document,
+): string[] {
+  const ztabs = getZoteroTabs(doc);
+  const internalTabs = (ztabs as any)?._tabs as any[] | undefined;
+  if (!internalTabs) return [];
+
+  const assignedTabIds = new Set(
+    data.categories.flatMap((c) => c.tabIds).filter(Boolean),
+  );
+  const assignedItemIds = new Set(data.categories.flatMap((c) => c.itemIds));
+
+  const result: string[] = [];
+  for (const tab of internalTabs) {
+    const tabId = String(tab.id ?? "");
+    if (!tabId) continue;
+
+    if (assignedTabIds.has(tabId)) continue;
+
+    let itemId = 0;
+    try {
+      const tabInfo = ztabs?.getTabInfo(tabId);
+      if (tabInfo?.data?.itemID) {
+        itemId = tabInfo.data.itemID;
+      }
+    } catch {
+      // ignore
+    }
+    if (!itemId) {
+      const pdf = _openedPDFs.find((p) => p.tabId === tabId);
+      itemId = pdf?.itemId ?? 0;
+    }
+
+    if (!assignedItemIds.has(itemId)) {
+      result.push(tabId);
+    }
+  }
+  return result;
 }
 
 function dispatchPDFsChanged(): void {
@@ -207,6 +262,10 @@ function handleTabClosed(tabId: string): void {
     // Clean up persisted item if no longer in a category
     if (closed && closed.itemId > 0) {
       void removePersistedItem(closed.itemId);
+    }
+    // Notify categoryManager to prune this closed tabId from in-memory data.
+    for (const win of getMainWindows()) {
+      dispatchVtEvent(win.document, "vertical-tabs:tab-closed", { tabId });
     }
     dispatchPDFsChanged();
   }

@@ -3,6 +3,7 @@ import { getString } from "../../utils/locale";
 import {
   addCategory,
   assignItemToCategory,
+  cleanStaleTabIds,
   createCategorySnapshot,
   deleteCategory,
   loadData,
@@ -26,6 +27,7 @@ import {
 } from "../render/colorUtils";
 import { getPopupStyleSheet } from "../render/popupStyleUtils";
 import {
+  getLiveOpenTabIds,
   getOpenedPDFs,
   getZoteroTabs,
   syncTabOrderToNative,
@@ -70,6 +72,7 @@ interface CategoryHandlers {
   toggleCollapse: EventListener;
   save: EventListener;
   externalDrop: EventListener;
+  tabClosed: EventListener;
   showMoreMenu: EventListener;
   showImportDialog: EventListener;
   importCategory: EventListener;
@@ -454,6 +457,18 @@ function handleExternalDrop(event: Event): void {
   void persist(doc);
 }
 
+/**
+ * Prune a closed tabId from in-memory _data. Does not persist to disk;
+ * the next normal persist will write the cleaned state.
+ */
+function cleanupClosedTabId(tabId: string): void {
+  if (!_data) return;
+  const liveTabIds = new Set(
+    getLiveOpenTabIds().filter((id) => id && id !== tabId),
+  );
+  _data = cleanStaleTabIds(_data, liveTabIds);
+}
+
 function handleShowMoreMenu(event: Event): void {
   const doc =
     (event.target as Node).ownerDocument ?? (event.target as Document);
@@ -706,6 +721,7 @@ function cleanupOldCategoryHandlers(doc: Document): void {
     "vertical-tabs:external-items-dropped",
     old.externalDrop,
   );
+  doc.removeEventListener("vertical-tabs:tab-closed", old.tabClosed);
   doc.removeEventListener("vertical-tabs:show-more-menu", old.showMoreMenu);
   doc.removeEventListener(
     "vertical-tabs:show-import-dialog",
@@ -795,6 +811,10 @@ export async function initCategoryManager(doc: Document): Promise<void> {
     toggleCollapse: handleToggleCollapsed,
     save: handleSaveCategory,
     externalDrop: handleExternalDrop,
+    tabClosed: ((e: CustomEvent) => {
+      const { tabId } = e.detail as { tabId: string };
+      cleanupClosedTabId(tabId);
+    }) as EventListener,
     showMoreMenu: handleShowMoreMenu,
     showImportDialog: handleShowImportDialog,
     importCategory: handleImportCategory,
@@ -824,6 +844,7 @@ export async function initCategoryManager(doc: Document): Promise<void> {
     "vertical-tabs:external-items-dropped",
     handlers.externalDrop,
   );
+  doc.addEventListener("vertical-tabs:tab-closed", handlers.tabClosed);
   doc.addEventListener("vertical-tabs:show-more-menu", handlers.showMoreMenu);
   doc.addEventListener(
     "vertical-tabs:show-import-dialog",
