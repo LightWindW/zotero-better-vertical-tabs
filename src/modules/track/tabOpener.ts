@@ -1,4 +1,5 @@
 import { getZoteroTabs } from "./itemTracker";
+import { getItemDisplayTitle } from "../utils/itemTitle";
 
 function getMainWindow(): _ZoteroTypes.MainWindow | undefined {
   return Zotero.getMainWindows()[0] as _ZoteroTypes.MainWindow | undefined;
@@ -10,23 +11,6 @@ function getZoteroPane(): _ZoteroTypes.ZoteroPane | undefined {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function getItemDisplayTitle(item: Zotero.Item, savedTitle?: string): string {
-  const itemType = (item.itemType as string) || "";
-  // For attachments, always prefer the parent item title so tabs don't show "PDF"
-  if (itemType === "attachment" || itemType === "attachment-pdf") {
-    const parentItemId = item.parentItemID;
-    if (typeof parentItemId === "number") {
-      const parentItem = Zotero.Items.get(parentItemId);
-      if (parentItem) {
-        const parentTitle = (parentItem.getField("title") as string) || "";
-        if (parentTitle) return parentTitle;
-      }
-    }
-  }
-  if (savedTitle) return savedTitle;
-  return (item.getField("title") as string) || "";
 }
 
 function inferTabType(item: Zotero.Item): string {
@@ -100,6 +84,14 @@ export async function openItemAsNewTab(
       });
       await delay(100);
       tabId = newTab.id;
+    }
+
+    if (tabId) {
+      try {
+        ztabs.rename(tabId, title);
+      } catch (err) {
+        ztoolkit.log("[vt-tab-opener] rename failed:", err);
+      }
     }
 
     return tabId;

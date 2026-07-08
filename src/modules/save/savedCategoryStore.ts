@@ -35,6 +35,10 @@ function createDefaultCollection(): SavedCategoryCollection {
   };
 }
 
+export async function clearSavedCategories(): Promise<void> {
+  await saveSavedCategories(createDefaultCollection());
+}
+
 export async function loadSavedCategories(): Promise<SavedCategoryCollection> {
   const path = getSavedCategoryFilePath();
   try {

@@ -4,6 +4,7 @@ import {
   getTabHeightValue,
   type TabHeight,
 } from "../modules/render/tabHeight";
+import { clearSavedCategories } from "../modules/save/savedCategoryStore";
 
 export async function registerPrefsScripts(_window: Window) {
   // This function is called when the prefs window is opened
@@ -157,42 +158,14 @@ function bindPrefEvents() {
           `BVT-vertical-tabs.json`,
         );
 
-        // Read existing data to preserve trackedItems
-        let trackedItems = {};
-        if (await IOUtils.exists(dataPath)) {
-          try {
-            const raw = await IOUtils.readUTF8(dataPath);
-            const parsed = JSON.parse(raw);
-            trackedItems = parsed.trackedItems || {};
-          } catch {
-            // ignore
-          }
-        }
-
-        // Get native tab order (skip library tab at index 0)
-        const uncategorizedOrder: string[] = [];
-        try {
-          const win = Zotero.getMainWindows()[0] as any;
-          const ztabs = win?.Zotero_Tabs;
-          const internalTabs = ztabs?._tabs as any[] | undefined;
-          if (internalTabs) {
-            for (let i = 1; i < internalTabs.length; i++) {
-              const tid = String(internalTabs[i]?.id ?? "");
-              if (tid) uncategorizedOrder.push(tid);
-            }
-          }
-        } catch {
-          // ignore
-        }
-
         await IOUtils.writeUTF8(
           dataPath,
           JSON.stringify(
             {
-              version: 2,
+              version: 3,
               categories: [],
-              trackedItems,
-              uncategorizedOrder,
+              uncategorizedOrder: [],
+              uncategorizedItemIds: [],
             },
             null,
             2,
@@ -211,6 +184,20 @@ function bindPrefEvents() {
           );
           doc.dispatchEvent(event);
         }
+      } catch {
+        // ignore
+      }
+    });
+  }
+
+  // Delete saved categories button
+  const deleteSavedBtn = addon.data.prefs!.window.document?.getElementById(
+    `${config.addonRef}-delete-saved-categories`,
+  ) as HTMLButtonElement | null;
+  if (deleteSavedBtn) {
+    deleteSavedBtn.addEventListener("click", async () => {
+      try {
+        await clearSavedCategories();
       } catch {
         // ignore
       }

@@ -40,12 +40,6 @@
   </html:div>
 
   <checkbox
-    id="zotero-prefpane-__addonRef__-remember-categories"
-    preference="verticalTabs.rememberCategories"
-    data-l10n-id="pref-vertical-tabs-remember-categories"
-  />
-
-  <checkbox
     id="zotero-prefpane-__addonRef__-show-extra"
     preference="verticalTabs.showExtra"
     data-l10n-id="pref-vertical-tabs-show-extra"
@@ -170,12 +164,27 @@
       style="font-weight: 600"
       data-l10n-id="pref-vertical-tabs-debug"
     />
-    <html:div style="margin-top: 4px">
+    <html:div
+      style="display: flex; align-items: center; gap: 8px; margin-top: 4px"
+    >
       <html:button
         id="__addonRef__-clear-vt-data"
         data-l10n-id="pref-vertical-tabs-clear-data"
         style="padding: 4px 12px; cursor: pointer"
       />
+      <html:button
+        id="__addonRef__-delete-saved-categories"
+        data-l10n-id="pref-vertical-tabs-delete-saved-categories"
+        style="padding: 4px 12px; cursor: pointer"
+      />
     </html:div>
+    <html:div
+      style="font-size: 11px; color: #888; margin-top: 4px"
+      data-l10n-id="pref-vertical-tabs-clear-data-hint"
+    />
+    <html:div
+      style="font-size: 11px; color: #888; margin-top: 2px"
+      data-l10n-id="pref-vertical-tabs-delete-saved-categories-hint"
+    />
   </html:div>
 </groupbox>

@@ -14,6 +14,7 @@ import {
   getZoteroTabs,
   getSelectedTabId,
 } from "../track/itemTracker";
+import { openItemAsNewTab } from "../track/tabOpener";
 import { dispatchVtEvent } from "../core/events";
 import { updateActiveCategoryHighlight } from "./categoryHighlight";
 import { isInternalVtDrag, VT_DRAG_MIME_TYPE } from "../drag/dropTarget";
@@ -695,6 +696,15 @@ export function showItemContextMenu(
 
   addItem(getString("vertical-tabs-duplicate-tab"), () => {
     if (!pdf.tabId) return;
+    // Reader tabs must be opened through Zotero.Reader so the PDF actually
+    // loads; duplicating via Zotero_Tabs.add leaves a blank tab.
+    if (pdf.type?.startsWith("reader")) {
+      const item = Zotero.Items.get(pdf.itemId) as Zotero.Item | false;
+      if (item) {
+        void openItemAsNewTab(item, { doc, openInBackground: true });
+      }
+      return;
+    }
     const ztabs = getZoteroTabs();
     const tabInfo = ztabs?.getTabInfo(pdf.tabId);
     if (ztabs && tabInfo) {
@@ -784,21 +794,13 @@ export function renderCategories(
   // This avoids losing manual fold/unfold state when VT collapses/expands.
   container.innerHTML = "";
 
-  // Match by tabId (for independent cloned tabs), fallback to itemId
+  // Categories only contain currently open tabs, so match purely by tabId.
   const assignedTabIds = new Set(
-    data.categories.flatMap((c) => c.tabIds.filter((id) => id !== "")),
+    data.categories.flatMap((c) => c.tabIds).filter(Boolean),
   );
-  const assignedItemIds = new Set(data.categories.flatMap((c) => c.itemIds));
-  const isTabCategorized = (pdf: OpenedPDF, cat: Category): boolean => {
-    if (cat.tabIds.includes(pdf.tabId)) return true;
-    // Imported tabs are only matched by tabId to keep cloned categories independent.
-    // Non-imported tabs keep the itemId fallback for normal auto-categorization.
-    if (!pdf.imported && pdf.itemId && cat.itemIds.includes(pdf.itemId))
-      return true;
-    return false;
-  };
+
   const categorizedPdfs = data.categories.map((category) => {
-    const items = pdfs.filter((pdf) => isTabCategorized(pdf, category));
+    const items = pdfs.filter((pdf) => category.tabIds.includes(pdf.tabId));
     // Sort items by category tabIds order
     const orderMap = new Map(category.tabIds.map((id, i) => [id, i]));
     items.sort((a, b) => {
@@ -809,9 +811,7 @@ export function renderCategories(
     return { category, items };
   });
   const uncategorizedPdfs = pdfs.filter(
-    (pdf) =>
-      !assignedTabIds.has(pdf.tabId) &&
-      !(!pdf.imported && assignedItemIds.has(pdf.itemId)),
+    (pdf) => !assignedTabIds.has(pdf.tabId),
   );
 
   // Sort uncategorized by persisted order, new items go to end
@@ -822,12 +822,45 @@ export function renderCategories(
     return ai - bi;
   });
 
-  // Only show empty state when there are no categories AND no opened tabs
+  // Only show empty state when there are no categories AND no opened tabs.
+  // Render it as a full-height drop zone so external/internal drags still have
+  // a target and the uncategorized drop-zone border is visible.
   if (data.categories.length === 0 && pdfs.length === 0) {
+    const dropZone = createEl(doc, "div");
+    dropZone.className =
+      "vertical-tabs-drop-zone vertical-tabs-drop-zone-empty";
+
     const empty = createEl(doc, "div");
     empty.className = "vertical-tabs-empty";
     empty.textContent = getString("vertical-tabs-empty");
-    container.appendChild(empty);
+    dropZone.appendChild(empty);
+
+    dropZone.addEventListener("dragover", (e: DragEvent) => {
+      if (!isInternalVtDrag(e.dataTransfer)) return;
+      e.preventDefault();
+      doc
+        .querySelectorAll(".vertical-tabs-category.drag-over")
+        .forEach((el: Element) => el.classList.remove("drag-over"));
+      dropZone.classList.add("drag-over");
+    });
+    dropZone.addEventListener("dragleave", () => {
+      dropZone.classList.remove("drag-over");
+    });
+    dropZone.addEventListener("drop", (e: DragEvent) => {
+      if (!isInternalVtDrag(e.dataTransfer)) return;
+      e.preventDefault();
+      dropZone.classList.remove("drag-over");
+      const dragData = e.dataTransfer?.getData("text/plain");
+      if (!dragData) return;
+      const byTab = getOpenedPDFs().find((p) => p.tabId === dragData);
+      dispatchVtEvent(dropZone, "vertical-tabs:assign-item", {
+        itemId: byTab ? byTab.itemId : Number(dragData),
+        tabId: byTab ? dragData : undefined,
+        categoryId: "__uncategorized__",
+      });
+    });
+
+    container.appendChild(dropZone);
     return;
   }
 

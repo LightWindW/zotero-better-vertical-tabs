@@ -1,6 +1,6 @@
 import { config } from "../../../package.json";
 
-const DATA_VERSION = 2;
+const DATA_VERSION = 3;
 const DATA_FILE_NAME = `BVT-vertical-tabs.json`;
 
 export interface Category {
@@ -13,20 +13,11 @@ export interface Category {
   collapsed?: boolean;
 }
 
-export interface TrackedItemInfo {
-  title: string;
-  type: string;
-  parentItemId?: number;
-  parentItemType?: string;
-  openedAt: number;
-  vtPinned?: boolean;
-}
-
 export interface VerticalTabsData {
   version: number;
   categories: Category[];
-  trackedItems: Record<number, TrackedItemInfo>;
   uncategorizedOrder: string[]; // tabIds for uncategorized items order
+  uncategorizedItemIds: number[]; // parallel itemIds for restart restore
 }
 
 function getDataFilePath(): string {
@@ -38,8 +29,8 @@ function createDefaultData(): VerticalTabsData {
   return {
     version: DATA_VERSION,
     categories: [],
-    trackedItems: {},
     uncategorizedOrder: [],
+    uncategorizedItemIds: [],
   };
 }
 
@@ -109,29 +100,47 @@ export async function loadData(): Promise<VerticalTabsData> {
     if (!parsed || typeof parsed !== "object") {
       return createDefaultData();
     }
-    // Add tabIds to old categories that don't have them
+    // Migrate old data: drop empty tabId slots and any trackedItems residue.
     const categories: Category[] = Array.isArray(parsed.categories)
-      ? parsed.categories.map((cat: any) => ({
-          id: cat.id,
-          name: cat.name,
-          order: cat.order ?? 0,
-          itemIds: Array.isArray(cat.itemIds) ? cat.itemIds : [],
-          tabIds: Array.isArray(cat.tabIds) ? cat.tabIds : [],
-          color: cat.color || undefined,
-          collapsed: cat.collapsed ?? false,
-        }))
+      ? parsed.categories.map((cat: any) => {
+          const rawItemIds: number[] = Array.isArray(cat.itemIds)
+            ? cat.itemIds
+            : [];
+          const rawTabIds: string[] = Array.isArray(cat.tabIds)
+            ? cat.tabIds
+            : [];
+          const itemIds: number[] = [];
+          const tabIds: string[] = [];
+          const len = Math.min(rawItemIds.length, rawTabIds.length);
+          for (let i = 0; i < len; i++) {
+            if (rawTabIds[i]) {
+              itemIds.push(rawItemIds[i]);
+              tabIds.push(rawTabIds[i]);
+            }
+          }
+          return {
+            id: cat.id,
+            name: cat.name,
+            order: cat.order ?? 0,
+            itemIds,
+            tabIds,
+            color: cat.color || undefined,
+            collapsed: cat.collapsed ?? false,
+          };
+        })
+      : [];
+
+    const rawUncategorizedOrder = Array.isArray(parsed.uncategorizedOrder)
+      ? parsed.uncategorizedOrder.filter((id: any) => id)
       : [];
 
     return {
-      version: parsed.version ?? DATA_VERSION,
+      version: DATA_VERSION,
       categories,
-      trackedItems:
-        parsed.trackedItems && typeof parsed.trackedItems === "object"
-          ? (parsed.trackedItems as Record<number, TrackedItemInfo>)
-          : {},
-      uncategorizedOrder: Array.isArray(parsed.uncategorizedOrder)
-        ? parsed.uncategorizedOrder
-        : [],
+      uncategorizedOrder: rawUncategorizedOrder,
+      uncategorizedItemIds: Array.isArray(parsed.uncategorizedItemIds)
+        ? parsed.uncategorizedItemIds.slice(0, rawUncategorizedOrder.length)
+        : rawUncategorizedOrder.map(() => 0),
     };
   } catch (error) {
     ztoolkit.log("Failed to load vertical tabs data:", error);
@@ -207,43 +216,39 @@ export function assignItemToCategory(
   categoryId: string,
   tabId?: string,
 ): VerticalTabsData {
-  // Collect tabIds to remove: current tabId + any tabIds from OTHER categories
-  // where this itemId appears (stale duplicates from previous buggy drags).
-  // We do NOT collect tabIds from the TARGET category — those belong to
-  // other items and should be preserved.
-  const staleTabIds = new Set<string>();
-  if (tabId) staleTabIds.add(tabId);
-  for (const cat of data.categories) {
-    if (cat.id === categoryId) continue; // skip target
-    if (cat.itemIds.includes(itemId)) {
-      for (const tid of cat.tabIds) {
-        staleTabIds.add(tid);
+  if (tabId) {
+    // Tab-specific move: only remove the pair matching this tabId from other
+    // categories. The target category also drops any existing pair with the
+    // same tabId before appending, which handles within-category reorder.
+    const categories = data.categories.map((category) => {
+      const keptItemIds: number[] = [];
+      const keptTabIds: string[] = [];
+      for (let i = 0; i < category.tabIds.length; i++) {
+        if (category.tabIds[i] !== tabId) {
+          keptItemIds.push(category.itemIds[i]);
+          keptTabIds.push(category.tabIds[i]);
+        }
       }
-    }
+      if (category.id === categoryId) {
+        return {
+          ...category,
+          itemIds: [...keptItemIds, itemId],
+          tabIds: [...keptTabIds, tabId],
+        };
+      }
+      return { ...category, itemIds: keptItemIds, tabIds: keptTabIds };
+    });
+    return { ...data, categories };
   }
 
-  const categories = data.categories.map((category) => {
-    // Remove itemId from all categories
-    const withoutItem = category.itemIds.filter((id) => id !== itemId);
-    // Remove ALL associated tabIds (stale + current)
-    let withoutTab = category.tabIds;
-    for (const tid of staleTabIds) {
-      withoutTab = withoutTab.filter((id) => id !== tid);
-    }
-    if (tabId) {
-      withoutTab = withoutTab.filter((id) => id !== tabId);
-    }
-
-    if (category.id === categoryId) {
-      return {
-        ...category,
-        itemIds: [...withoutItem, itemId],
-        tabIds: tabId ? [...withoutTab, tabId] : withoutTab,
-      };
-    }
-    return { ...category, itemIds: withoutItem, tabIds: withoutTab };
-  });
-  return { ...data, categories };
+  // Item-level assignment without a tabId is no longer supported: categories
+  // only track currently open tabs, so every assignment must identify a real
+  // tab. Log a warning and leave the data unchanged.
+  ztoolkit.log(
+    "[vt-dataStore] assignItemToCategory called without tabId for itemId:",
+    itemId,
+  );
+  return data;
 }
 
 export function removeItemFromAllCategories(
@@ -251,32 +256,40 @@ export function removeItemFromAllCategories(
   itemId: number,
   tabId?: string,
 ): VerticalTabsData {
-  const staleTabIds = new Set<string>();
-  if (tabId) staleTabIds.add(tabId);
-  for (const cat of data.categories) {
-    if (cat.itemIds.includes(itemId)) {
-      for (const tid of cat.tabIds) {
-        staleTabIds.add(tid);
-      }
-    }
+  if (tabId) {
+    // Tab-specific removal: only drop the pair matching this tabId.
+    return {
+      ...data,
+      categories: data.categories.map((category) => {
+        const keptItemIds: number[] = [];
+        const keptTabIds: string[] = [];
+        for (let i = 0; i < category.tabIds.length; i++) {
+          if (category.tabIds[i] !== tabId) {
+            keptItemIds.push(category.itemIds[i]);
+            keptTabIds.push(category.tabIds[i]);
+          }
+        }
+        return { ...category, itemIds: keptItemIds, tabIds: keptTabIds };
+      }),
+    };
   }
 
+  // Item-level removal: drop all pairs for this itemId.
   return {
     ...data,
-    categories: data.categories.map((category) => ({
-      ...category,
-      itemIds: category.itemIds.filter((id) => id !== itemId),
-      tabIds: (() => {
-        let filtered = category.tabIds;
-        for (const tid of staleTabIds) {
-          filtered = filtered.filter((id) => id !== tid);
+    categories: data.categories.map((category) => {
+      const indicesToRemove = new Set<number>();
+      for (let i = 0; i < category.itemIds.length; i++) {
+        if (category.itemIds[i] === itemId) {
+          indicesToRemove.add(i);
         }
-        if (tabId) {
-          filtered = filtered.filter((id) => id !== tabId);
-        }
-        return filtered;
-      })(),
-    })),
+      }
+      return {
+        ...category,
+        itemIds: category.itemIds.filter((_, i) => !indicesToRemove.has(i)),
+        tabIds: category.tabIds.filter((_, i) => !indicesToRemove.has(i)),
+      };
+    }),
   };
 }
 
@@ -309,13 +322,22 @@ export function reorderItemInCategory(
     ...data,
     categories: data.categories.map((category) => {
       if (category.id !== categoryId) return category;
-      const tabIds = category.tabIds.filter((id) => id !== tabId);
-      const idx = insertBeforeTabId
-        ? tabIds.indexOf(insertBeforeTabId)
-        : tabIds.length;
-      const insertAt = idx >= 0 ? idx : tabIds.length;
-      tabIds.splice(insertAt, 0, tabId);
-      return { ...category, tabIds };
+      const idx = category.tabIds.indexOf(tabId);
+      if (idx < 0) return category;
+
+      const pairItemId = category.itemIds[idx];
+      const keptItemIds = category.itemIds.filter((_, i) => i !== idx);
+      const keptTabIds = category.tabIds.filter((_, i) => i !== idx);
+
+      let insertAt = keptTabIds.length;
+      if (insertBeforeTabId) {
+        const targetIdx = keptTabIds.indexOf(insertBeforeTabId);
+        if (targetIdx >= 0) insertAt = targetIdx;
+      }
+
+      keptItemIds.splice(insertAt, 0, pairItemId);
+      keptTabIds.splice(insertAt, 0, tabId);
+      return { ...category, itemIds: keptItemIds, tabIds: keptTabIds };
     }),
   };
 }
@@ -323,15 +345,20 @@ export function reorderItemInCategory(
 export function reorderUncategorized(
   data: VerticalTabsData,
   tabId: string,
+  itemId: number,
   insertBeforeTabId: string | null,
 ): VerticalTabsData {
   const order = data.uncategorizedOrder.filter((id) => id !== tabId);
+  const itemIds = data.uncategorizedItemIds.filter(
+    (_, i) => data.uncategorizedOrder[i] !== tabId,
+  );
   const idx = insertBeforeTabId
     ? order.indexOf(insertBeforeTabId)
     : order.length;
   const insertAt = idx >= 0 ? idx : order.length;
   order.splice(insertAt, 0, tabId);
-  return { ...data, uncategorizedOrder: order };
+  itemIds.splice(insertAt, 0, itemId);
+  return { ...data, uncategorizedOrder: order, uncategorizedItemIds: itemIds };
 }
 
 export interface ItemTabEntry {
@@ -350,18 +377,18 @@ export function insertItemsIntoCategoryAt(
   entries: ItemTabEntry[],
   insertBeforeTabId?: string | null,
 ): VerticalTabsData {
-  const itemIdsToMove = new Set(entries.map((e) => e.itemId));
   const tabIdsToMove = new Set(entries.map((e) => e.tabId));
 
   const cleanCategories = data.categories.map((category) => {
-    // Remove any existing pairs whose itemId or tabId is being moved, keeping
-    // the two arrays parallel.
+    // Remove any existing pair whose tabId is being inserted, keeping the two
+    // arrays parallel. itemId-level deduplication is intentionally not done so
+    // that multiple tabs for the same item can coexist independently.
     const keptItemIds: number[] = [];
     const keptTabIds: string[] = [];
     for (let i = 0; i < category.tabIds.length; i++) {
       const itemId = category.itemIds[i];
       const tabId = category.tabIds[i];
-      if (!itemIdsToMove.has(itemId) && !tabIdsToMove.has(tabId)) {
+      if (!tabIdsToMove.has(tabId)) {
         keptItemIds.push(itemId);
         keptTabIds.push(tabId);
       }
@@ -396,36 +423,49 @@ export function insertItemsIntoCategoryAt(
   });
 
   const movedTabIdSet = tabIdsToMove;
-  const newUncategorizedOrder = data.uncategorizedOrder.filter(
-    (id) => !movedTabIdSet.has(id),
+  const keptUncategorizedIndices = data.uncategorizedOrder
+    .map((id, i) => ({ id, i }))
+    .filter(({ id }) => !movedTabIdSet.has(id));
+  const newUncategorizedOrder = keptUncategorizedIndices.map(({ id }) => id);
+  const newUncategorizedItemIds = keptUncategorizedIndices.map(
+    ({ i }) => data.uncategorizedItemIds[i] ?? 0,
   );
 
   return {
     ...data,
     categories: cleanCategories,
     uncategorizedOrder: newUncategorizedOrder,
+    uncategorizedItemIds: newUncategorizedItemIds,
   };
 }
 
 /**
  * Insert a contiguous block of items into the uncategorized list at a specific
- * position. Items are first removed from all categories.
+ * position. Items are first removed from all categories by tabId only, so
+ * multiple tabs for the same item remain independent.
  */
 export function insertUncategorizedItemsAt(
   data: VerticalTabsData,
   entries: ItemTabEntry[],
   insertBeforeTabId?: string | null,
 ): VerticalTabsData {
-  const itemIdsToMove = new Set(entries.map((e) => e.itemId));
   const tabIdsToMove = new Set(entries.map((e) => e.tabId));
 
   const newCategories = data.categories.map((category) => ({
     ...category,
-    itemIds: category.itemIds.filter((id) => !itemIdsToMove.has(id)),
+    itemIds: category.itemIds.filter(
+      (_, i) => !tabIdsToMove.has(category.tabIds[i]),
+    ),
     tabIds: category.tabIds.filter((id) => !tabIdsToMove.has(id)),
   }));
 
-  const order = data.uncategorizedOrder.filter((id) => !tabIdsToMove.has(id));
+  const keptUncategorizedIndices = data.uncategorizedOrder
+    .map((id, i) => ({ id, i }))
+    .filter(({ id }) => !tabIdsToMove.has(id));
+  const order = keptUncategorizedIndices.map(({ id }) => id);
+  const itemIds = keptUncategorizedIndices.map(
+    ({ i }) => data.uncategorizedItemIds[i] ?? 0,
+  );
   let insertAt = order.length;
   if (insertBeforeTabId) {
     const idx = order.indexOf(insertBeforeTabId);
@@ -433,12 +473,15 @@ export function insertUncategorizedItemsAt(
   }
 
   const insertedTabIds = entries.map((e) => e.tabId);
+  const insertedItemIds = entries.map((e) => e.itemId);
   order.splice(insertAt, 0, ...insertedTabIds);
+  itemIds.splice(insertAt, 0, ...insertedItemIds);
 
   return {
     ...data,
     categories: newCategories,
     uncategorizedOrder: order,
+    uncategorizedItemIds: itemIds,
   };
 }
 
@@ -469,10 +512,9 @@ export function reorderCategories(
 }
 
 /**
- * Remove closed tabIds from the persisted order arrays.
- * - In categories, closed tabIds are replaced with empty strings so that the
- *   paired itemId (category assignment) is preserved for restart restore.
- * - In uncategorizedOrder, closed tabIds are removed entirely.
+ * Remove closed or empty tabIds from categories and uncategorizedOrder.
+ * Since categories only track currently open tabs, closed tabId/itemId pairs
+ * are removed entirely instead of being replaced with empty strings.
  */
 export function cleanStaleTabIds(
   data: VerticalTabsData,
@@ -480,51 +522,24 @@ export function cleanStaleTabIds(
 ): VerticalTabsData {
   return {
     ...data,
-    categories: data.categories.map((category) => ({
-      ...category,
-      tabIds: category.tabIds.map((tabId) =>
-        tabId && !liveTabIds.has(tabId) ? "" : tabId,
-      ),
-    })),
-    uncategorizedOrder: data.uncategorizedOrder.filter((id) =>
-      liveTabIds.has(id),
-    ),
-  };
-}
-
-/**
- * Move live (non-empty) tabId/itemId pairs to the front of a category and
- * dormant (empty) pairs to the back. This keeps insertion indices computed
- * from tabIds aligned with the visible VT order.
- */
-export function compactCategoryTabIds(
-  data: VerticalTabsData,
-  categoryId: string,
-): VerticalTabsData {
-  return {
-    ...data,
     categories: data.categories.map((category) => {
-      if (category.id !== categoryId) return category;
-
-      const live: { itemId: number; tabId: string }[] = [];
-      const dormant: { itemId: number; tabId: string }[] = [];
-
+      const keptItemIds: number[] = [];
+      const keptTabIds: string[] = [];
       for (let i = 0; i < category.tabIds.length; i++) {
-        const itemId = category.itemIds[i];
         const tabId = category.tabIds[i];
-        if (tabId) {
-          live.push({ itemId, tabId });
-        } else {
-          dormant.push({ itemId, tabId });
+        if (tabId && liveTabIds.has(tabId)) {
+          keptItemIds.push(category.itemIds[i]);
+          keptTabIds.push(tabId);
         }
       }
-
-      const combined = [...live, ...dormant];
-      return {
-        ...category,
-        itemIds: combined.map((e) => e.itemId),
-        tabIds: combined.map((e) => e.tabId),
-      };
+      return { ...category, itemIds: keptItemIds, tabIds: keptTabIds };
+    }),
+    uncategorizedOrder: data.uncategorizedOrder.filter(
+      (id) => id && liveTabIds.has(id),
+    ),
+    uncategorizedItemIds: data.uncategorizedItemIds.filter((_, i) => {
+      const id = data.uncategorizedOrder[i];
+      return id && liveTabIds.has(id);
     }),
   };
 }
@@ -536,37 +551,154 @@ export function compactCategoryTabIds(
  */
 export function reconcileUncategorizedOrder(
   data: VerticalTabsData,
-  liveUncategorizedTabIds: string[],
+  liveEntries: ItemTabEntry[],
 ): VerticalTabsData {
   const existing = new Set(data.uncategorizedOrder);
-  const appended: string[] = [];
-  for (const tabId of liveUncategorizedTabIds) {
-    if (!existing.has(tabId)) {
-      appended.push(tabId);
+  const appended: ItemTabEntry[] = [];
+  for (const entry of liveEntries) {
+    if (!existing.has(entry.tabId)) {
+      appended.push(entry);
     }
   }
   if (appended.length === 0) return data;
   return {
     ...data,
-    uncategorizedOrder: [...data.uncategorizedOrder, ...appended],
+    uncategorizedOrder: [
+      ...data.uncategorizedOrder,
+      ...appended.map((e) => e.tabId),
+    ],
+    uncategorizedItemIds: [
+      ...data.uncategorizedItemIds,
+      ...appended.map((e) => e.itemId),
+    ],
   };
 }
 
-export function saveTrackedItem(
+/**
+ * Restore category/uncategorized tabIds after a Zotero restart.
+ *
+ * Zotero may assign new tabIds on session restore, so the JSON records need to
+ * be matched by itemId. For each stale (closed/non-live) tabId we look for a
+ * currently open tab with the same itemId that has not already been consumed by
+ * another restored slot; if found we replace the tabId, otherwise we drop the
+ * pair. Live tabIds that are already in the data are kept as-is.
+ *
+ * This is intentionally run only once at startup. Tabs opened after startup are
+ * marked as new and are never restored by this function.
+ */
+export function restoreCategoryTabIdsAndOrder(
   data: VerticalTabsData,
-  itemId: number,
-  info: TrackedItemInfo,
+  liveEntries: ItemTabEntry[],
 ): VerticalTabsData {
+  const liveTabIds = new Set(liveEntries.map((e) => e.tabId));
+  const liveTabIdsByItemId = new Map<number, string[]>();
+  for (const { itemId, tabId } of liveEntries) {
+    const list = liveTabIdsByItemId.get(itemId);
+    if (list) {
+      list.push(tabId);
+    } else {
+      liveTabIdsByItemId.set(itemId, [tabId]);
+    }
+  }
+
+  // Live tabIds already present in the data are reserved and should not be
+  // re-assigned to another restored slot.
+  const consumedLiveTabIds = new Set<string>();
+  for (const category of data.categories) {
+    for (const tabId of category.tabIds) {
+      if (liveTabIds.has(tabId)) {
+        consumedLiveTabIds.add(tabId);
+      }
+    }
+  }
+
+  let categoriesChanged = false;
+  const newCategories = data.categories.map((category) => {
+    const newItemIds: number[] = [];
+    const newTabIds: string[] = [];
+    for (let i = 0; i < category.tabIds.length; i++) {
+      const itemId = category.itemIds[i];
+      const tabId = category.tabIds[i];
+      if (liveTabIds.has(tabId)) {
+        newItemIds.push(itemId);
+        newTabIds.push(tabId);
+        continue;
+      }
+      const replacement = findReplacementTabId(
+        itemId,
+        liveTabIdsByItemId,
+        consumedLiveTabIds,
+      );
+      if (replacement) {
+        newItemIds.push(itemId);
+        newTabIds.push(replacement);
+        consumedLiveTabIds.add(replacement);
+        categoriesChanged = true;
+      } else {
+        categoriesChanged = true;
+      }
+    }
+    if (
+      newItemIds.length !== category.itemIds.length ||
+      newTabIds.length !== category.tabIds.length
+    ) {
+      categoriesChanged = true;
+    }
+    return { ...category, itemIds: newItemIds, tabIds: newTabIds };
+  });
+
+  // Restore uncategorized order the same way.
+  const newUncategorizedOrder: string[] = [];
+  const newUncategorizedItemIds: number[] = [];
+  let uncategorizedChanged = false;
+  for (let i = 0; i < data.uncategorizedOrder.length; i++) {
+    const tabId = data.uncategorizedOrder[i];
+    let itemId = data.uncategorizedItemIds[i];
+    if (!itemId) {
+      // Old data may not have recorded itemIds for uncategorized tabs; try to
+      // recover from the current live entries.
+      const liveEntry = liveEntries.find((e) => e.tabId === tabId);
+      if (liveEntry) itemId = liveEntry.itemId;
+    }
+
+    if (liveTabIds.has(tabId)) {
+      newUncategorizedOrder.push(tabId);
+      newUncategorizedItemIds.push(itemId);
+      continue;
+    }
+    const replacement = itemId
+      ? findReplacementTabId(itemId, liveTabIdsByItemId, consumedLiveTabIds)
+      : undefined;
+    if (replacement) {
+      newUncategorizedOrder.push(replacement);
+      newUncategorizedItemIds.push(itemId);
+      consumedLiveTabIds.add(replacement);
+      uncategorizedChanged = true;
+    } else {
+      uncategorizedChanged = true;
+    }
+  }
+
+  if (!categoriesChanged && !uncategorizedChanged) return data;
   return {
     ...data,
-    trackedItems: { ...data.trackedItems, [itemId]: info },
+    categories: newCategories,
+    uncategorizedOrder: newUncategorizedOrder,
+    uncategorizedItemIds: newUncategorizedItemIds,
   };
 }
 
-export function removeTrackedItem(
-  data: VerticalTabsData,
+function findReplacementTabId(
   itemId: number,
-): VerticalTabsData {
-  const { [itemId]: _, ...rest } = data.trackedItems;
-  return { ...data, trackedItems: rest };
+  liveTabIdsByItemId: Map<number, string[]>,
+  consumedLiveTabIds: Set<string>,
+): string | undefined {
+  const candidates = liveTabIdsByItemId.get(itemId);
+  if (!candidates) return undefined;
+  for (const tabId of candidates) {
+    if (!consumedLiveTabIds.has(tabId)) {
+      return tabId;
+    }
+  }
+  return undefined;
 }

@@ -8,16 +8,14 @@ import {
   deleteCategory,
   loadData,
   removeItemFromAllCategories,
-  removeTrackedItem,
   renameCategory,
   reorderCategories,
   reorderItemInCategory,
   reorderUncategorized,
   saveData,
-  saveTrackedItem,
   ItemSnapshot,
-  TrackedItemInfo,
   VerticalTabsData,
+  restoreCategoryTabIdsAndOrder,
 } from "./dataStore";
 import { dispatchVtEvent } from "../core/events";
 import {
@@ -25,9 +23,12 @@ import {
   lightToDark,
   isDarkMode,
 } from "../render/colorUtils";
+import { getItemDisplayTitle } from "../utils/itemTitle";
 import { getPopupStyleSheet } from "../render/popupStyleUtils";
 import {
   getLiveOpenTabIds,
+  getMainWindows,
+  getNonNewLiveEntries,
   getOpenedPDFs,
   getZoteroTabs,
   syncTabOrderToNative,
@@ -404,7 +405,7 @@ async function handleSaveCategory(event: Event): Promise<void> {
 
     itemSnapshots.push({
       itemId,
-      title: (item.getField("title") as string) || "",
+      title: getItemDisplayTitle(item as Zotero.Item),
       type,
       data,
       parentItemId:
@@ -667,7 +668,12 @@ function handleReorderItem(event: Event): void {
     }
     _data = reorderItemInCategory(_data!, categoryId, tabId, beforeTabId);
   } else {
-    _data = reorderUncategorized(_data!, tabId, before ? targetTabId : null);
+    _data = reorderUncategorized(
+      _data!,
+      tabId,
+      movedItemId || 0,
+      before ? targetTabId : null,
+    );
   }
 
   const doc =
@@ -932,38 +938,34 @@ export function getData(): VerticalTabsData {
     _data ?? {
       version: 1,
       categories: [],
-      trackedItems: {},
       uncategorizedOrder: [],
+      uncategorizedItemIds: [],
     }
   );
 }
 
+export function cleanupStaleTabIds(doc?: Document): void {
+  if (!_data) return;
+  const liveTabIds = new Set(getLiveOpenTabIds(doc).filter((id) => id));
+  const cleaned = cleanStaleTabIds(_data, liveTabIds);
+  if (cleaned !== _data) {
+    _data = cleaned;
+    void persist(doc ?? getMainWindows()[0]?.document);
+  }
+}
+
+export function restoreCategoriesAtStartup(doc?: Document): void {
+  if (!_data) return;
+  const entries = getNonNewLiveEntries();
+  if (entries.length === 0) return;
+  const restored = restoreCategoryTabIdsAndOrder(_data, entries);
+  if (restored === _data) return;
+  _data = restored;
+  void persist(doc ?? getMainWindows()[0]?.document);
+}
+
 export async function forceReload(): Promise<void> {
   _data = await loadData();
-}
-
-export async function persistTrackedItem(
-  itemId: number,
-  info: TrackedItemInfo,
-): Promise<void> {
-  if (!_data) return;
-  _data = saveTrackedItem(_data, itemId, info);
-  await saveData(_data);
-}
-
-export async function removePersistedItem(itemId: number): Promise<void> {
-  if (!_data) return;
-  // Keep the item if it's still assigned to a category (for restart restore)
-  const inCategory = _data.categories.some((cat) =>
-    cat.itemIds.includes(itemId),
-  );
-  if (inCategory) return;
-  _data = removeTrackedItem(_data, itemId);
-  await saveData(_data);
-}
-
-export function getTrackedItems(): Record<number, TrackedItemInfo> {
-  return _data?.trackedItems ?? {};
 }
 
 const DEFAULT_COLORS = [
@@ -989,36 +991,4 @@ export function getCategoryColors(): string[] {
     }
   }
   return DEFAULT_COLORS;
-}
-
-/**
- * Sync category tabIds from itemIds using current _openedPDFs.
- * Needed after restore/load when tabIds may be empty (old data).
- */
-export function populateCategoryTabIds(
-  getOpenedPDFs: () => { tabId: string; itemId: number }[],
-): void {
-  if (!_data) return;
-  const pdfs = getOpenedPDFs();
-  const itemToTabs = new Map<number, string[]>();
-  for (const pdf of pdfs) {
-    if (!pdf.tabId) continue;
-    const tabs = itemToTabs.get(pdf.itemId) || [];
-    tabs.push(pdf.tabId);
-    itemToTabs.set(pdf.itemId, tabs);
-  }
-  _data = {
-    ..._data,
-    categories: _data.categories.map((cat) => {
-      if (cat.tabIds.length >= cat.itemIds.length) return cat;
-      const populated = [...cat.tabIds];
-      for (const itemId of cat.itemIds) {
-        const tabs = itemToTabs.get(itemId) || [];
-        for (const t of tabs) {
-          if (!populated.includes(t)) populated.push(t);
-        }
-      }
-      return { ...cat, tabIds: populated };
-    }),
-  };
 }

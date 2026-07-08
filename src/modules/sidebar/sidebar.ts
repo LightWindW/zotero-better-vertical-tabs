@@ -9,6 +9,7 @@ import {
 } from "../render/styles";
 import { applyTabHeightStyle } from "../render/tabHeight";
 import { dispatchVtEvent } from "../core/events";
+import { dispatchPDFsChanged } from "../track/itemTracker";
 import { isDarkMode } from "../render/colorUtils";
 import { pinFillIcon, pinIcon } from "../ui/iconSvgs";
 
@@ -16,6 +17,8 @@ const PREF_NAMESPACE = config.prefsPrefix;
 const DEFAULT_WIDTH = 260;
 const MIN_WIDTH = 160;
 const MAX_WIDTH = 800;
+const PINNED_REFRESH_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
+const DISPLAY_REFRESH_INTERVAL_MS = 60 * 1000; // 1 minute
 const RESIZE_HANDLE_CLASS = "vertical-tabs-resize-handle";
 const PIN_BTN_CLASS = "vertical-tabs-pin-btn";
 const PIN_ICON_CLASS = "vertical-tabs-pin-icon";
@@ -32,6 +35,9 @@ function pinIconSvg(filled: boolean, doc: Document): string {
 }
 
 type TimerHandle = ReturnType<typeof setTimeout>;
+
+let _pinnedRefreshTimer: ReturnType<typeof setInterval> | null = null;
+let _displayRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
 const HOVER_DELAY_MS = 300;
 const LEAVE_DELAY_MS = 150;
@@ -718,6 +724,36 @@ function updatePinButtonVisual(doc: Document): void {
   }
 }
 
+function startPinnedRefreshTimer(): void {
+  if (_pinnedRefreshTimer) return;
+  _pinnedRefreshTimer = setInterval(() => {
+    // Re-render so pinned VT's relative "last read" labels stay current against
+    // the persisted openedAt values.
+    dispatchPDFsChanged();
+  }, PINNED_REFRESH_INTERVAL_MS);
+}
+
+function stopPinnedRefreshTimer(): void {
+  if (!_pinnedRefreshTimer) return;
+  clearInterval(_pinnedRefreshTimer);
+  _pinnedRefreshTimer = null;
+}
+
+function startDisplayRefreshTimer(): void {
+  if (_displayRefreshTimer) return;
+  _displayRefreshTimer = setInterval(() => {
+    // Re-render VT so relative "last read" labels age (1 min → 2 min, etc.)
+    // without modifying the underlying openedAt timestamps.
+    dispatchPDFsChanged();
+  }, DISPLAY_REFRESH_INTERVAL_MS);
+}
+
+function stopDisplayRefreshTimer(): void {
+  if (!_displayRefreshTimer) return;
+  clearInterval(_displayRefreshTimer);
+  _displayRefreshTimer = null;
+}
+
 function togglePinned(doc: Document): void {
   const newPinned = !isPinned();
   setPinned(newPinned);
@@ -737,6 +773,11 @@ export function expandFloatingSidebar(doc: Document): void {
   if (isPinned()) return;
   const sidebar = getSidebar(doc);
   if (!sidebar) return;
+
+  // Re-render the instant VT expands so the relative "last read" labels reflect
+  // the current time against the persisted openedAt values (not reset them).
+  dispatchPDFsChanged();
+
   const savedWidth = getSavedWidth();
   sidebar.style.setProperty("--vt-expanded-width", `${savedWidth}px`);
   sidebar.style.width = "";
@@ -744,6 +785,9 @@ export function expandFloatingSidebar(doc: Document): void {
   updateContentOpacity(sidebar);
   setResizeHandleVisible(doc, true);
   setFloatingExpanded(doc, true);
+
+  // Keep the relative "last read" labels aging while VT stays visible.
+  startDisplayRefreshTimer();
 
   // Block hover card until the width expand animation finishes.
   setExpandAnimating(doc, true);
@@ -786,6 +830,7 @@ function performCollapse(doc: Document): void {
   setResizeHandleVisible(doc, false);
   setFloatingExpanded(doc, false);
   setExpandAnimating(doc, false);
+  stopDisplayRefreshTimer();
   dispatchVtEvent(doc, "vertical-tabs:visibility-changed", { visible: false });
 }
 
@@ -880,6 +925,8 @@ export function renderSidebarMode(doc: Document): HTMLElement | null {
     setFloatingExpanded(doc, false);
     setResizeHandleVisible(doc, false);
     setWrapperAndSplitter(doc, "pinned");
+    startPinnedRefreshTimer();
+    startDisplayRefreshTimer();
   } else {
     applySidebarClasses(sidebar, "floating");
     sidebar.classList.remove("vertical-tabs-sidebar-expanded");
@@ -890,6 +937,8 @@ export function renderSidebarMode(doc: Document): HTMLElement | null {
     setFloatingExpanded(doc, false);
     setResizeHandleVisible(doc, true);
     setWrapperAndSplitter(doc, "floating");
+    stopPinnedRefreshTimer();
+    stopDisplayRefreshTimer();
   }
 
   updatePinButtonVisual(doc);
@@ -938,6 +987,8 @@ export function destroySidebar(doc: Document): void {
   clearLeaveTimer(doc);
   clearInputPositionListener(doc);
   clearWidthObserver(doc);
+  stopPinnedRefreshTimer();
+  stopDisplayRefreshTimer();
   setWaitMouseMoveAfterInput(doc, false);
   const sidebar = getSidebar(doc);
   if (sidebar) {

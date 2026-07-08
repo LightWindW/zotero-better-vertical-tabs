@@ -2,7 +2,6 @@ pref("verticalTabs.enabled", true);
 pref("verticalTabs.collapsed", false);
 pref("verticalTabs.pinned", false);
 pref("verticalTabs.categoryColors", "");
-pref("verticalTabs.rememberCategories", true);
 pref("verticalTabs.showExtra", false);
 pref("verticalTabs.autoCloseEnabled", false);
 pref("verticalTabs.autoCloseDays", 7);

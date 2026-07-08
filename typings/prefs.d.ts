@@ -11,7 +11,6 @@ declare namespace _ZoteroTypes {
       "verticalTabs.collapsed": boolean;
       "verticalTabs.pinned": boolean;
       "verticalTabs.categoryColors": string;
-      "verticalTabs.rememberCategories": boolean;
       "verticalTabs.showExtra": boolean;
       "verticalTabs.autoCloseEnabled": boolean;
       "verticalTabs.autoCloseDays": number;

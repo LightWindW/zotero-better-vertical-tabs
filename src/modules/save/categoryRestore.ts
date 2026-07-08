@@ -1,6 +1,6 @@
 import { getString } from "../../utils/locale";
+import { getItemDisplayTitle } from "../utils/itemTitle";
 import { setDialogOpen } from "../sidebar/sidebar";
-import { markTabAsImported } from "../track/itemTracker";
 import { openItemAsNewTab } from "../track/tabOpener";
 import {
   Category,
@@ -54,7 +54,7 @@ export async function restoreCategory(
     }
 
     const snap = snapshotMap.get(itemId);
-    const currentTitle = (item.getField("title") as string) || "";
+    const currentTitle = getItemDisplayTitle(item);
     if (snap && snap.title !== currentTitle) {
       updatedItemIds.push(itemId);
     }
@@ -68,7 +68,6 @@ export async function restoreCategory(
     });
     if (tabId) {
       tabIds.push(tabId);
-      markTabAsImported(tabId);
     }
   }
 

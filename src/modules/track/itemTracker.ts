@@ -1,11 +1,7 @@
 import { config } from "../../../package.json";
 import { dispatchVtEvent } from "../core/events";
-import {
-  persistTrackedItem,
-  removePersistedItem,
-  getTrackedItems,
-} from "./categoryManager";
-import type { TrackedItemInfo, VerticalTabsData } from "./dataStore";
+import { getItemDisplayTitle } from "../utils/itemTitle";
+import type { ItemTabEntry, VerticalTabsData } from "./dataStore";
 
 export interface OpenedPDF {
   itemId: number;
@@ -15,7 +11,11 @@ export interface OpenedPDF {
   type: string;
   title: string;
   openedAt: number;
-  imported?: boolean;
+  /**
+   * True for tabs opened after startup restoration has completed. These tabs
+   * must never be auto-matched to previous categories by itemId.
+   */
+  isNew?: boolean;
 }
 
 function vtLog(msg: string): void {
@@ -26,22 +26,29 @@ let _notifierID: string | null = null;
 let _itemNotifierID: string | null = null;
 let _openedPDFs: OpenedPDF[] = [];
 let _selectedTabId = "";
+let _startupRestoreDone = false;
 
-// Track tabs created by importing a saved category. These tabs should only
-// match their owning category by tabId, not by itemId fallback.
-const _importedTabIds = new Set<string>();
-
-export function markTabAsImported(tabId: string): void {
-  if (!tabId) return;
-  _importedTabIds.add(tabId);
-  const pdf = _openedPDFs.find((p) => p.tabId === tabId);
-  if (pdf) {
-    pdf.imported = true;
-  }
+export function getMainWindows(): Window[] {
+  return Zotero.getMainWindows();
 }
 
-function getMainWindows(): Window[] {
-  return Zotero.getMainWindows();
+export function markStartupRestoreDone(): void {
+  _startupRestoreDone = true;
+}
+
+export function isStartupRestoreDone(): boolean {
+  return _startupRestoreDone;
+}
+
+/**
+ * Return live tabId/itemId entries that were present before startup restoration
+ * completed. These are the only tabs eligible for category/order restore on
+ * Zotero restart.
+ */
+export function getNonNewLiveEntries(): ItemTabEntry[] {
+  return _openedPDFs
+    .filter((pdf) => !pdf.isNew)
+    .map((pdf) => ({ itemId: pdf.itemId, tabId: pdf.tabId }));
 }
 
 /**
@@ -70,13 +77,13 @@ export function getLiveOpenTabIds(doc?: Document): string[] {
 }
 
 /**
- * Return tab ids for tabs that are currently open and not assigned to any
- * category. This is used to keep uncategorizedOrder in sync with reality.
+ * Return entries for tabs that are currently open and not assigned to any
+ * category. Tabs without a known itemId (e.g. the library tab) are skipped.
  */
-export function getLiveUncategorizedTabIds(
+export function getLiveUncategorizedEntries(
   data: VerticalTabsData,
   doc?: Document,
-): string[] {
+): ItemTabEntry[] {
   const ztabs = getZoteroTabs(doc);
   const internalTabs = (ztabs as any)?._tabs as any[] | undefined;
   if (!internalTabs) return [];
@@ -84,14 +91,11 @@ export function getLiveUncategorizedTabIds(
   const assignedTabIds = new Set(
     data.categories.flatMap((c) => c.tabIds).filter(Boolean),
   );
-  const assignedItemIds = new Set(data.categories.flatMap((c) => c.itemIds));
 
-  const result: string[] = [];
+  const result: ItemTabEntry[] = [];
   for (const tab of internalTabs) {
     const tabId = String(tab.id ?? "");
-    if (!tabId) continue;
-
-    if (assignedTabIds.has(tabId)) continue;
+    if (!tabId || assignedTabIds.has(tabId)) continue;
 
     let itemId = 0;
     try {
@@ -107,14 +111,14 @@ export function getLiveUncategorizedTabIds(
       itemId = pdf?.itemId ?? 0;
     }
 
-    if (!assignedItemIds.has(itemId)) {
-      result.push(tabId);
+    if (itemId) {
+      result.push({ itemId, tabId });
     }
   }
   return result;
 }
 
-function dispatchPDFsChanged(): void {
+export function dispatchPDFsChanged(): void {
   for (const win of getMainWindows()) {
     dispatchVtEvent(win.document, "vertical-tabs:pdfs-changed");
   }
@@ -139,17 +143,7 @@ export function syncSelectedTabId(): boolean {
 function updateOpenedAtForTab(tabId: string): void {
   const pdf = _openedPDFs.find((p) => p.tabId === tabId);
   if (!pdf) return;
-  const now = Date.now();
-  pdf.openedAt = now;
-  if (isRememberCategoriesEnabled()) {
-    void persistTrackedItem(pdf.itemId, {
-      title: pdf.title,
-      type: pdf.type,
-      parentItemId: pdf.parentItemId,
-      parentItemType: pdf.parentItemType,
-      openedAt: now,
-    });
-  }
+  pdf.openedAt = Date.now();
 }
 
 async function handleTabAdded(tabId: string): Promise<void> {
@@ -178,27 +172,15 @@ async function handleTabAdded(tabId: string): Promise<void> {
 
   if (!itemId) return;
 
-  // Check for existing dormant entry (from persisted data, tabId="")
-  const dormantIdx = _openedPDFs.findIndex(
-    (pdf) => pdf.itemId === itemId && pdf.tabId === "",
-  );
-  if (dormantIdx >= 0) {
-    _openedPDFs[dormantIdx].tabId = tabId;
-    _openedPDFs[dormantIdx].type = tabInfo.type;
-    _openedPDFs[dormantIdx].title =
-      tabInfo.title || _openedPDFs[dormantIdx].title;
-    dispatchPDFsChanged();
-    return;
-  }
-
   if (_openedPDFs.some((pdf) => pdf.tabId === tabId)) return;
 
   let parentItemId: number | undefined;
   let parentItemType: string | undefined;
+  let item: Zotero.Item | undefined;
   try {
-    const item = Zotero.Items.get(itemId);
+    item = Zotero.Items.get(itemId) as Zotero.Item | undefined;
     if (item) {
-      const pid = (item as Zotero.Item).parentItemID;
+      const pid = item.parentItemID;
       parentItemId = typeof pid === "number" ? pid : undefined;
       // Also look up parent item type (cached for reader sandbox icon rendering)
       if (parentItemId !== undefined) {
@@ -212,13 +194,9 @@ async function handleTabAdded(tabId: string): Promise<void> {
     // ignore
   }
 
-  const tracked = getTrackedItems();
-  const existingTracked = tracked[itemId];
-
-  const imported = _importedTabIds.has(tabId);
-  if (imported) {
-    _importedTabIds.delete(tabId);
-  }
+  const title = item
+    ? getItemDisplayTitle(item, tabInfo.title || "")
+    : tabInfo.title || "";
 
   _openedPDFs.push({
     itemId,
@@ -226,44 +204,19 @@ async function handleTabAdded(tabId: string): Promise<void> {
     parentItemType,
     tabId,
     type: tabInfo.type,
-    title: tabInfo.title || "",
+    title,
     openedAt: Date.now(),
-    imported,
+    isNew: _startupRestoreDone,
   });
-
-  // Persist to JSON for restart recovery (only if feature enabled)
-  if (isRememberCategoriesEnabled()) {
-    void persistTrackedItem(itemId, {
-      title: tabInfo.title || "",
-      type: tabInfo.type,
-      parentItemId,
-      parentItemType,
-      openedAt: Date.now(),
-    });
-  }
 
   dispatchPDFsChanged();
 }
 
-function isRememberCategoriesEnabled(): boolean {
-  return (
-    (Zotero.Prefs.get(
-      `${config.prefsPrefix}.verticalTabs.rememberCategories`,
-      true,
-    ) as boolean | undefined) ?? true
-  );
-}
-
 function handleTabClosed(tabId: string): void {
   const beforeLength = _openedPDFs.length;
-  const closed = _openedPDFs.find((pdf) => pdf.tabId === tabId);
   _openedPDFs = _openedPDFs.filter((pdf) => pdf.tabId !== tabId);
   if (_openedPDFs.length !== beforeLength) {
-    // Clean up persisted item if no longer in a category
-    if (closed && closed.itemId > 0) {
-      void removePersistedItem(closed.itemId);
-    }
-    // Notify categoryManager to prune this closed tabId from in-memory data.
+    // Notify categoryManager to remove this closed tabId from categories.
     for (const win of getMainWindows()) {
       dispatchVtEvent(win.document, "vertical-tabs:tab-closed", { tabId });
     }
@@ -316,12 +269,14 @@ export function startTracking(): void {
             itemIds.has(pdf.itemId) ||
             (pdf.parentItemId !== undefined && itemIds.has(pdf.parentItemId));
           if (matches) {
-            const ztabs = getZoteroTabs();
-            const tabInfo = ztabs?.getTabInfo(pdf.tabId);
-            if (tabInfo?.title && tabInfo.title !== pdf.title) {
-              pdf.title = tabInfo.title;
+            const tabItem = Zotero.Items.get(pdf.itemId) as Zotero.Item | false;
+            if (tabItem) {
+              const newTitle = getItemDisplayTitle(tabItem);
+              if (newTitle && newTitle !== pdf.title) {
+                pdf.title = newTitle;
+                changed = true;
+              }
             }
-            changed = true;
           }
         }
         if (changed) {
@@ -433,31 +388,6 @@ export function scanOpenedTabs(): void {
   } catch (error) {
     vtLog("scanOpenedTabs: FAILED " + String(error));
   }
-}
-
-/**
- * Restore dormant items from persisted JSON.
- * Called at startup — creates OpenedPDF entries with tabId="" so the
- * sidebar shows categorized items immediately, before actual tabs are restored.
- * When real tabs open via notifier, dormant entries are updated with real tabIds.
- */
-export function restoreDormantItems(): void {
-  const tracked = getTrackedItems();
-  for (const [itemIdStr, info] of Object.entries(tracked)) {
-    const itemId = Number(itemIdStr);
-    // Skip if already tracked (shouldn't happen at startup, but safe)
-    if (_openedPDFs.some((pdf) => pdf.itemId === itemId)) continue;
-    _openedPDFs.push({
-      itemId,
-      parentItemId: info.parentItemId,
-      parentItemType: info.parentItemType,
-      tabId: "", // dormant: no active tab yet
-      type: info.type,
-      title: info.title,
-      openedAt: info.openedAt,
-    });
-  }
-  if (Object.keys(tracked).length > 0) dispatchPDFsChanged();
 }
 
 // ── Tab order sync with Zotero's native tab bar ──

@@ -19,7 +19,6 @@ import {
   insertItemsIntoCategoryAt,
   insertUncategorizedItemsAt,
   cleanStaleTabIds,
-  compactCategoryTabIds,
   reconcileUncategorizedOrder,
   type ItemTabEntry,
   type VerticalTabsData,
@@ -29,7 +28,7 @@ import { getString } from "../../utils/locale";
 import { showToast } from "../ui/toast";
 import {
   getZoteroTabs,
-  getLiveUncategorizedTabIds,
+  getLiveUncategorizedEntries,
 } from "../track/itemTracker";
 
 interface MainPaneDropState {
@@ -309,7 +308,7 @@ async function handleDrop(
   currentData = cleanStaleTabIds(currentData, liveTabIds);
   currentData = reconcileUncategorizedOrder(
     currentData,
-    getLiveUncategorizedTabIds(currentData, doc),
+    getLiveUncategorizedEntries(currentData, doc),
   );
 
   let targetCategoryId: string | undefined;
@@ -320,9 +319,6 @@ async function handleDrop(
     target.categoryId !== "__uncategorized__"
   ) {
     targetCategoryId = target.categoryId;
-  }
-  if (targetCategoryId) {
-    currentData = compactCategoryTabIds(currentData, targetCategoryId);
   }
 
   ztoolkit.log(

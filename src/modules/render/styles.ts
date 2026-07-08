@@ -450,6 +450,13 @@ export function getStyles(): string {
       transition: background 0.15s ease;
     }
 
+    #${SIDEBAR_ID} .vertical-tabs-drop-zone.vertical-tabs-drop-zone-empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100%;
+    }
+
     #${SIDEBAR_ID} .vertical-tabs-drop-zone.drag-over {
       background: var(--material-selected, rgba(0, 0, 0, 0.08));
       outline: 1px dashed #999;

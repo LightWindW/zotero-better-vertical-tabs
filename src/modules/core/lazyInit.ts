@@ -6,7 +6,8 @@ import {
   destroyCategoryManager,
   getData,
   initCategoryManager,
-  populateCategoryTabIds,
+  cleanupStaleTabIds,
+  restoreCategoriesAtStartup,
 } from "../track/categoryManager";
 import { destroyHoverCard, initHoverCard } from "../ui/hoverCard";
 import {
@@ -20,10 +21,10 @@ import {
 import {
   getOpenedPDFs,
   refreshOpenedPDFs,
-  restoreDormantItems,
   scanOpenedTabs,
   startTracking,
   stopTracking,
+  markStartupRestoreDone,
 } from "../track/itemTracker";
 import {
   subscribeToRenderEvents,
@@ -74,11 +75,9 @@ export async function initVerticalTabs(
   startTracking();
   await initCategoryManager(win.document);
 
-  // Restore items from persistent JSON so sidebar shows content immediately
-  restoreDormantItems();
-
-  // Populate category tabIds from loaded itemIds
-  populateCategoryTabIds(getOpenedPDFs);
+  // Categories only track currently open tabs; dormant/remembered slots have
+  // been removed. Any leftover stale tabIds are cleaned up after Zotero finishes
+  // restoring tabs (see retry loop below).
 
   initHoverCard(win.document);
   setupCategoryDarkMode(win.document);
@@ -185,20 +184,33 @@ export async function initVerticalTabs(
 
   // Scan existing tabs (immediate attempt — clears and re-scans)
   refreshOpenedPDFs();
+  // Restore categories/order right away so the initial VT render already shows
+  // the previous session's layout. Session restore may still be adding tabs, so
+  // we run another restore on each retry and a final cleanup at the end.
+  restoreCategoriesAtStartup(win.document);
 
   // Exponential backoff retry — Zotero session restore may not have completed yet.
   const RETRY_DELAYS = [1000, 2500, 5000];
-  for (const delay of RETRY_DELAYS) {
+  RETRY_DELAYS.forEach((delay, index) => {
     setTimeout(() => {
       const before = getOpenedPDFs().length;
       scanOpenedTabs();
       const after = getOpenedPDFs().length;
       if (after > before) {
-        populateCategoryTabIds(getOpenedPDFs);
+        // New tabs appeared: restore them as well before the next render.
+        restoreCategoriesAtStartup(win.document);
         dispatchVtEvent(win.document, "vertical-tabs:pdfs-changed");
       }
+
+      if (index === RETRY_DELAYS.length - 1) {
+        // Once session restore is likely complete, do a final restore and mark
+        // all subsequently opened tabs as "new" so they are never auto-restored.
+        restoreCategoriesAtStartup(win.document);
+        markStartupRestoreDone();
+        cleanupStaleTabIds(win.document);
+      }
     }, delay);
-  }
+  });
 
   // Start auto-close timer if enabled
   initAutoClose();

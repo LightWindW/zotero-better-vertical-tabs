@@ -3,15 +3,19 @@ import {
   insertItemsIntoCategoryAt,
   insertUncategorizedItemsAt,
   cleanStaleTabIds,
-  compactCategoryTabIds,
   reconcileUncategorizedOrder,
+  assignItemToCategory,
+  removeItemFromAllCategories,
+  reorderItemInCategory,
+  reorderUncategorized,
+  restoreCategoryTabIdsAndOrder,
   type ItemTabEntry,
   type VerticalTabsData,
 } from "../src/modules/track/dataStore";
 
 function makeData(): VerticalTabsData {
   return {
-    version: 2,
+    version: 3,
     categories: [
       {
         id: "cat1",
@@ -28,14 +32,14 @@ function makeData(): VerticalTabsData {
         tabIds: ["tD"],
       },
     ],
-    trackedItems: {},
     uncategorizedOrder: ["tU1", "tU2"],
+    uncategorizedItemIds: [301, 302],
   };
 }
 
 function makeStaleData(): VerticalTabsData {
   return {
-    version: 2,
+    version: 3,
     categories: [
       {
         id: "cat1",
@@ -52,8 +56,8 @@ function makeStaleData(): VerticalTabsData {
         tabIds: ["tD"],
       },
     ],
-    trackedItems: {},
     uncategorizedOrder: ["staleU", "tU1"],
+    uncategorizedItemIds: [401, 301],
   };
 }
 
@@ -128,12 +132,12 @@ describe("dataStore insertion helpers", function () {
   });
 
   describe("cleanStaleTabIds", function () {
-    it("replaces closed category tabIds with empty strings and keeps itemIds", function () {
+    it("removes closed or empty category tabId/itemId pairs", function () {
       const data = makeStaleData();
       const result = cleanStaleTabIds(data, new Set(["tA", "tB", "tD", "tU1"]));
       const cat1 = result.categories.find((c) => c.id === "cat1")!;
-      assert.deepEqual(cat1.tabIds, ["", "tA", "tB", ""]);
-      assert.deepEqual(cat1.itemIds, [101, 102, 103, 104]);
+      assert.deepEqual(cat1.tabIds, ["tA", "tB"]);
+      assert.deepEqual(cat1.itemIds, [102, 103]);
     });
 
     it("removes stale tabIds from uncategorizedOrder", function () {
@@ -143,44 +147,153 @@ describe("dataStore insertion helpers", function () {
     });
   });
 
-  describe("compactCategoryTabIds", function () {
-    it("moves live tabId/itemId pairs to the front", function () {
-      const data = makeStaleData();
-      data.categories[0].tabIds = ["", "tA", "tB", ""];
-      const result = compactCategoryTabIds(data, "cat1");
-      const cat1 = result.categories.find((c) => c.id === "cat1")!;
-      assert.deepEqual(cat1.tabIds, ["tA", "tB", "", ""]);
-      assert.deepEqual(cat1.itemIds, [102, 103, 101, 104]);
-    });
-  });
-
   describe("reconcileUncategorizedOrder", function () {
     it("appends missing live uncategorized tabs", function () {
       const data = makeStaleData();
       data.uncategorizedOrder = ["tU1"];
-      const result = reconcileUncategorizedOrder(data, ["tU1", "tU2"]);
+      data.uncategorizedItemIds = [301];
+      const result = reconcileUncategorizedOrder(data, [
+        { itemId: 301, tabId: "tU1" },
+        { itemId: 302, tabId: "tU2" },
+      ]);
       assert.deepEqual(result.uncategorizedOrder, ["tU1", "tU2"]);
+      assert.deepEqual(result.uncategorizedItemIds, [301, 302]);
     });
 
     it("returns same data when nothing is missing", function () {
       const data = makeStaleData();
       data.uncategorizedOrder = ["tU1", "tU2"];
-      const result = reconcileUncategorizedOrder(data, ["tU1", "tU2"]);
+      data.uncategorizedItemIds = [301, 302];
+      const result = reconcileUncategorizedOrder(data, [
+        { itemId: 301, tabId: "tU1" },
+        { itemId: 302, tabId: "tU2" },
+      ]);
       assert.strictEqual(result, data);
     });
   });
 
-  describe("insertItemsIntoCategoryAt after cleanup", function () {
-    it("inserts before the first live tab after compaction", function () {
-      let data = makeStaleData();
-      data.categories[0].tabIds = ["", "tA", "tB", ""];
-      data = cleanStaleTabIds(data, new Set(["tA", "tB", "tD", "tU1"]));
-      data = compactCategoryTabIds(data, "cat1");
-      const entries: ItemTabEntry[] = [{ itemId: 999, tabId: "tNew" }];
-      const result = insertItemsIntoCategoryAt(data, "cat1", entries, "tA");
+  describe("assignItemToCategory", function () {
+    it("moves only the matching tabId pair when tabId is provided", function () {
+      const data = makeData();
+      // Make cat1 contain two tabs for the same item (duplicate reader tabs)
+      data.categories[0].itemIds = [101, 101, 102];
+      data.categories[0].tabIds = ["tA1", "tA2", "tB"];
+
+      const result = assignItemToCategory(data, 101, "cat2", "tA2");
       const cat1 = result.categories.find((c) => c.id === "cat1")!;
-      assert.deepEqual(cat1.tabIds, ["tNew", "tA", "tB", "", ""]);
-      assert.deepEqual(cat1.itemIds, [999, 102, 103, 101, 104]);
+      const cat2 = result.categories.find((c) => c.id === "cat2")!;
+
+      assert.deepEqual(cat1.itemIds, [101, 102]);
+      assert.deepEqual(cat1.tabIds, ["tA1", "tB"]);
+      assert.deepEqual(cat2.itemIds, [201, 101]);
+      assert.deepEqual(cat2.tabIds, ["tD", "tA2"]);
+    });
+
+    it("leaves data unchanged when tabId is omitted", function () {
+      const data = makeData();
+      const result = assignItemToCategory(data, 101, "cat2");
+      assert.strictEqual(result, data);
+    });
+  });
+
+  describe("removeItemFromAllCategories", function () {
+    it("removes only the matching tabId pair when tabId is provided", function () {
+      const data = makeData();
+      data.categories[0].itemIds = [101, 101, 102];
+      data.categories[0].tabIds = ["tA1", "tA2", "tB"];
+
+      const result = removeItemFromAllCategories(data, 101, "tA2");
+      const cat1 = result.categories.find((c) => c.id === "cat1")!;
+
+      assert.deepEqual(cat1.itemIds, [101, 102]);
+      assert.deepEqual(cat1.tabIds, ["tA1", "tB"]);
+    });
+
+    it("removes all pairs for the item when tabId is omitted", function () {
+      const data = makeData();
+      data.categories[0].itemIds = [101, 101, 102];
+      data.categories[0].tabIds = ["tA1", "tA2", "tB"];
+
+      const result = removeItemFromAllCategories(data, 101);
+      const cat1 = result.categories.find((c) => c.id === "cat1")!;
+
+      assert.deepEqual(cat1.itemIds, [102]);
+      assert.deepEqual(cat1.tabIds, ["tB"]);
+    });
+  });
+
+  describe("reorderItemInCategory", function () {
+    it("moves the paired itemId together with the tabId", function () {
+      const data = makeData();
+      const result = reorderItemInCategory(data, "cat1", "tC", "tA");
+      const cat1 = result.categories.find((c) => c.id === "cat1")!;
+
+      assert.deepEqual(cat1.tabIds, ["tC", "tA", "tB"]);
+      assert.deepEqual(cat1.itemIds, [103, 101, 102]);
+    });
+
+    it("appends to the end when insertBeforeTabId is null", function () {
+      const data = makeData();
+      const result = reorderItemInCategory(data, "cat1", "tA", null);
+      const cat1 = result.categories.find((c) => c.id === "cat1")!;
+
+      assert.deepEqual(cat1.tabIds, ["tB", "tC", "tA"]);
+      assert.deepEqual(cat1.itemIds, [102, 103, 101]);
+    });
+  });
+
+  describe("insertItemsIntoCategoryAt duplicate item handling", function () {
+    it("keeps the existing pair and adds a new pair for the same itemId", function () {
+      const data = makeData();
+      const entries: ItemTabEntry[] = [{ itemId: 101, tabId: "tNew" }];
+      const result = insertItemsIntoCategoryAt(data, "cat1", entries, "tB");
+      const cat1 = result.categories.find((c) => c.id === "cat1")!;
+
+      assert.deepEqual(cat1.tabIds, ["tA", "tNew", "tB", "tC"]);
+      assert.deepEqual(cat1.itemIds, [101, 101, 102, 103]);
+    });
+  });
+
+  describe("reorderUncategorized", function () {
+    it("moves the paired itemId together with the tabId", function () {
+      const data = makeData();
+      const result = reorderUncategorized(data, "tU2", 302, "tU1");
+
+      assert.deepEqual(result.uncategorizedOrder, ["tU2", "tU1"]);
+      assert.deepEqual(result.uncategorizedItemIds, [302, 301]);
+    });
+  });
+
+  describe("restoreCategoryTabIdsAndOrder", function () {
+    it("replaces stale tabIds with live tabs for the same itemId", function () {
+      const data = makeData();
+      // Simulate a restart: tA/tB changed to tA2/tB2, tC closed.
+      data.categories[0].tabIds = ["oldA", "oldB", "oldC"];
+      const liveEntries: ItemTabEntry[] = [
+        { itemId: 101, tabId: "tA2" },
+        { itemId: 102, tabId: "tB2" },
+        { itemId: 201, tabId: "tD" },
+      ];
+
+      const result = restoreCategoryTabIdsAndOrder(data, liveEntries);
+      const cat1 = result.categories.find((c) => c.id === "cat1")!;
+
+      assert.deepEqual(cat1.tabIds, ["tA2", "tB2"]);
+      assert.deepEqual(cat1.itemIds, [101, 102]);
+    });
+
+    it("restores uncategorized order using recorded itemIds", function () {
+      const data = makeData();
+      data.uncategorizedOrder = ["oldU1", "oldU2"];
+      data.uncategorizedItemIds = [301, 302];
+      const liveEntries: ItemTabEntry[] = [
+        { itemId: 302, tabId: "tU2" },
+        { itemId: 301, tabId: "tU1" },
+      ];
+
+      const result = restoreCategoryTabIdsAndOrder(data, liveEntries);
+      assert.deepEqual(result.uncategorizedOrder, ["tU1", "tU2"]);
+      assert.deepEqual(result.uncategorizedItemIds, [301, 302]);
     });
   });
 });
