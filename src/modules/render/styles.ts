@@ -303,6 +303,28 @@ export function getStyles(): string {
       box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
     }
 
+    #${SIDEBAR_ID} .vertical-tabs-item.reader-loaded {
+      position: relative;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-item-reader-loaded-indicator {
+      position: absolute;
+      left: 0;
+      top: 10%;
+      width: 1.5px;
+      height: 80%;
+      border-radius: 0 1px 1px 0;
+      background: #306243;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      pointer-events: none;
+      z-index: 20;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-item.reader-loaded .vertical-tabs-item-reader-loaded-indicator {
+      opacity: 1;
+    }
+
     #${SIDEBAR_ID} .vertical-tabs-item.dragging {
       opacity: 0.5;
     }
@@ -767,6 +789,10 @@ export function getStyles(): string {
       #${SIDEBAR_ID} .vertical-tabs-item.active:hover {
         background: #626262;
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+      }
+
+      #${SIDEBAR_ID} .vertical-tabs-item-reader-loaded-indicator {
+        background: #4a9e6e;
       }
 
       #${SIDEBAR_ID} .vertical-tabs-category::before {

@@ -30,6 +30,12 @@ export interface OpenItemOptions {
   data?: any;
   openInBackground?: boolean;
   doc?: Document;
+  /**
+   * For reader attachments: create a `reader-unloaded` tab instead of immediately
+   * loading the PDF. The reader will only be initialized when the user selects
+   * the tab.
+   */
+  lazy?: boolean;
 }
 
 /**
@@ -54,7 +60,17 @@ export async function openItemAsNewTab(
   try {
     let tabId: string | undefined;
 
-    if (type === "reader") {
+    if (type === "reader" && options.lazy) {
+      // Create a lazy reader tab. Zotero_Tabs will automatically load the reader
+      // when the tab is selected.
+      const newTab = ztabs.add({
+        type: "reader-unloaded",
+        title,
+        data: { itemID: item.id },
+        select: false,
+      });
+      tabId = newTab.id;
+    } else if (type === "reader") {
       const reader = (await Zotero.Reader.open(item.id, undefined, {
         title,
         openInBackground,

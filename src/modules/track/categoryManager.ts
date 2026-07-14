@@ -32,7 +32,10 @@ import {
   getOpenedPDFs,
   getZoteroTabs,
   syncTabOrderToNative,
+  loadLastReadTimes,
+  getLastReadTimes,
 } from "./itemTracker";
+import { isReaderRestoreInProgress } from "./orderSyncControl";
 import {
   addSavedCategory,
   deleteSavedCategory,
@@ -74,6 +77,7 @@ interface CategoryHandlers {
   save: EventListener;
   externalDrop: EventListener;
   tabClosed: EventListener;
+  requestSync: EventListener;
   showMoreMenu: EventListener;
   showImportDialog: EventListener;
   importCategory: EventListener;
@@ -88,6 +92,13 @@ function dispatchDataChanged(doc: Document): void {
 
 async function persist(doc: Document): Promise<void> {
   if (!_data) return;
+  _data = { ..._data, lastReadTimes: getLastReadTimes() };
+  ztoolkit.log(
+    "[BVT-cat] persist categories=",
+    _data.categories.map((c) => ({ id: c.id, tabIds: c.tabIds })),
+    "uncategorizedOrder=",
+    _data.uncategorizedOrder,
+  );
   await saveData(_data);
   dispatchDataChanged(doc);
 }
@@ -467,7 +478,18 @@ function cleanupClosedTabId(tabId: string): void {
   const liveTabIds = new Set(
     getLiveOpenTabIds().filter((id) => id && id !== tabId),
   );
-  _data = cleanStaleTabIds(_data, liveTabIds);
+  const cleaned = cleanStaleTabIds(_data, liveTabIds);
+  ztoolkit.log(
+    "[BVT-cat] cleanupClosedTabId:",
+    tabId,
+    "changed=",
+    cleaned !== _data,
+    "categories=",
+    cleaned.categories.map((c) => ({ id: c.id, tabIds: c.tabIds })),
+    "uncategorizedOrder=",
+    cleaned.uncategorizedOrder,
+  );
+  _data = cleaned;
 }
 
 function handleShowMoreMenu(event: Event): void {
@@ -728,6 +750,7 @@ function cleanupOldCategoryHandlers(doc: Document): void {
     old.externalDrop,
   );
   doc.removeEventListener("vertical-tabs:tab-closed", old.tabClosed);
+  doc.removeEventListener("vertical-tabs:request-sync-order", old.requestSync);
   doc.removeEventListener("vertical-tabs:show-more-menu", old.showMoreMenu);
   doc.removeEventListener(
     "vertical-tabs:show-import-dialog",
@@ -743,6 +766,7 @@ function cleanupOldCategoryHandlers(doc: Document): void {
 
 export async function initCategoryManager(doc: Document): Promise<void> {
   _data = await loadData();
+  loadLastReadTimes(_data.lastReadTimes ?? {});
 
   cleanupOldCategoryHandlers(doc);
 
@@ -805,6 +829,18 @@ export async function initCategoryManager(doc: Document): Promise<void> {
     void persist(doc);
   }) as EventListener;
 
+  const requestSyncOrderHandler: EventListener = (() => {
+    if (!_data) return;
+    ztoolkit.log(
+      "[BVT-cat] request-sync-order received, syncing native order to VT",
+    );
+    syncTabOrderToNative(
+      _data.categories.map((c) => ({ order: c.order, tabIds: c.tabIds })),
+      _data.uncategorizedOrder,
+      { doc },
+    );
+  }) as EventListener;
+
   const handlers: CategoryHandlers = {
     add: handleAddCategory,
     assign: handleAssignItem,
@@ -821,6 +857,7 @@ export async function initCategoryManager(doc: Document): Promise<void> {
       const { tabId } = e.detail as { tabId: string };
       cleanupClosedTabId(tabId);
     }) as EventListener,
+    requestSync: requestSyncOrderHandler,
     showMoreMenu: handleShowMoreMenu,
     showImportDialog: handleShowImportDialog,
     importCategory: handleImportCategory,
@@ -868,10 +905,18 @@ export async function initCategoryManager(doc: Document): Promise<void> {
   doc.addEventListener("vertical-tabs:native-order-changed", ((
     e: CustomEvent,
   ) => {
-    if (_syncingFromNative) return;
+    if (_syncingFromNative || isReaderRestoreInProgress()) return;
     const { nativeOrder } = (e.detail || {}) as {
       nativeOrder?: string[];
     };
+    ztoolkit.log(
+      "[BVT-cat] native-order-changed received, nativeOrder=",
+      nativeOrder,
+      "current categories=",
+      _data?.categories.map((c) => ({ id: c.id, tabIds: c.tabIds })),
+      "uncategorizedOrder=",
+      _data?.uncategorizedOrder,
+    );
     if (!nativeOrder || !_data) return;
 
     const sorted = [..._data.categories].sort((a, b) => a.order - b.order);
@@ -909,12 +954,23 @@ export async function initCategoryManager(doc: Document): Promise<void> {
           _data!.uncategorizedOrder.includes(id),
         ),
       };
+      ztoolkit.log(
+        "[BVT-cat] native-order-changed applied new _data categories=",
+        _data.categories.map((c) => ({ id: c.id, tabIds: c.tabIds })),
+        "uncategorizedOrder=",
+        _data.uncategorizedOrder,
+      );
 
       void persist(doc);
     } finally {
       _syncingFromNative = false;
     }
   }) as EventListener);
+
+  doc.addEventListener(
+    "vertical-tabs:request-sync-order",
+    handlers.requestSync,
+  );
 
   doc.addEventListener("vertical-tabs:force-reload", async () => {
     _data = await loadData();
@@ -940,6 +996,7 @@ export function getData(): VerticalTabsData {
       categories: [],
       uncategorizedOrder: [],
       uncategorizedItemIds: [],
+      lastReadTimes: {},
     }
   );
 }
@@ -961,6 +1018,11 @@ export function restoreCategoriesAtStartup(doc?: Document): void {
   const restored = restoreCategoryTabIdsAndOrder(_data, entries);
   if (restored === _data) return;
   _data = restored;
+  // Persist() merges the latest _lastReadTimes over _data.lastReadTimes. We
+  // must first load the migrated lastReadTimes into itemTracker so that
+  // getLastReadTimes() returns the new tabId keys; otherwise the migrated keys
+  // would be overwritten with the stale keys still in memory.
+  loadLastReadTimes(_data.lastReadTimes);
   void persist(doc ?? getMainWindows()[0]?.document);
 }
 

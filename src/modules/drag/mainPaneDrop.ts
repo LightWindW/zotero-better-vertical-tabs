@@ -154,6 +154,7 @@ async function openPDFAttachmentsAsTabs(
   for (const attachment of attachments) {
     const tabId = await openItemAsNewTab(attachment, {
       openInBackground: true,
+      lazy: true,
       doc,
     });
     if (tabId) {

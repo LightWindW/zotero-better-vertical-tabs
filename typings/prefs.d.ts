@@ -12,8 +12,11 @@ declare namespace _ZoteroTypes {
       "verticalTabs.pinned": boolean;
       "verticalTabs.categoryColors": string;
       "verticalTabs.showExtra": boolean;
+      "verticalTabs.showReaderLoadedIndicator": boolean;
       "verticalTabs.autoCloseEnabled": boolean;
       "verticalTabs.autoCloseDays": number;
+      "verticalTabs.releaseReaderEnabled": boolean;
+      "verticalTabs.releaseReaderMinutes": number;
       "verticalTabs.tabHeight": string;
       "verticalTabs.enableBlur": boolean;
     };

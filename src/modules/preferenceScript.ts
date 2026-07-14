@@ -1,4 +1,5 @@
 import { config } from "../../package.json";
+import { dispatchVtEvent } from "../modules/core/events";
 import {
   applyTabHeightToAllWindows,
   getTabHeightValue,
@@ -47,6 +48,62 @@ function bindPrefEvents() {
       Zotero.Prefs.set(
         `${config.prefsPrefix}.verticalTabs.showExtra`,
         (e.target as XUL.Checkbox).checked,
+        false,
+      );
+    });
+  }
+
+  // showReaderLoadedIndicator checkbox
+  const showReaderLoadedIndicatorCheckbox =
+    addon.data.prefs!.window.document?.querySelector(
+      `#zotero-prefpane-${config.addonRef}-show-reader-loaded-indicator`,
+    );
+  if (showReaderLoadedIndicatorCheckbox) {
+    showReaderLoadedIndicatorCheckbox.addEventListener(
+      "command",
+      (e: Event) => {
+        Zotero.Prefs.set(
+          `${config.prefsPrefix}.verticalTabs.showReaderLoadedIndicator`,
+          (e.target as XUL.Checkbox).checked,
+          false,
+        );
+        // Re-render VT sidebars so the indicator visibility updates immediately.
+        for (const win of Zotero.getMainWindows()) {
+          dispatchVtEvent(win.document, "vertical-tabs:data-changed");
+        }
+      },
+    );
+  }
+
+  // releaseReaderEnabled checkbox
+  const releaseReaderEnabledCheckbox =
+    addon.data.prefs!.window.document?.querySelector(
+      `#zotero-prefpane-${config.addonRef}-release-reader-enabled`,
+    );
+  if (releaseReaderEnabledCheckbox) {
+    releaseReaderEnabledCheckbox.addEventListener("command", (e: Event) => {
+      Zotero.Prefs.set(
+        `${config.prefsPrefix}.verticalTabs.releaseReaderEnabled`,
+        (e.target as XUL.Checkbox).checked,
+        false,
+      );
+    });
+  }
+
+  // releaseReaderMinutes input: clamp to 1-1440 and set pref
+  const releaseReaderMinutesInput =
+    addon.data.prefs!.window.document?.getElementById(
+      `${config.addonRef}-release-reader-minutes`,
+    ) as HTMLInputElement | null;
+  if (releaseReaderMinutesInput) {
+    releaseReaderMinutesInput.addEventListener("change", () => {
+      let minutes = parseInt(releaseReaderMinutesInput.value, 10);
+      if (Number.isNaN(minutes)) minutes = 30;
+      minutes = Math.max(1, Math.min(1440, minutes));
+      releaseReaderMinutesInput.value = String(minutes);
+      Zotero.Prefs.set(
+        `${config.prefsPrefix}.verticalTabs.releaseReaderMinutes`,
+        minutes,
         false,
       );
     });

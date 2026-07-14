@@ -18,6 +18,7 @@ export interface VerticalTabsData {
   categories: Category[];
   uncategorizedOrder: string[]; // tabIds for uncategorized items order
   uncategorizedItemIds: number[]; // parallel itemIds for restart restore
+  lastReadTimes: Record<string, number>; // tabId -> timestamp
 }
 
 function getDataFilePath(): string {
@@ -31,6 +32,7 @@ function createDefaultData(): VerticalTabsData {
     categories: [],
     uncategorizedOrder: [],
     uncategorizedItemIds: [],
+    lastReadTimes: {},
   };
 }
 
@@ -141,6 +143,10 @@ export async function loadData(): Promise<VerticalTabsData> {
       uncategorizedItemIds: Array.isArray(parsed.uncategorizedItemIds)
         ? parsed.uncategorizedItemIds.slice(0, rawUncategorizedOrder.length)
         : rawUncategorizedOrder.map(() => 0),
+      lastReadTimes:
+        typeof parsed.lastReadTimes === "object" && parsed.lastReadTimes
+          ? { ...parsed.lastReadTimes }
+          : {},
     };
   } catch (error) {
     ztoolkit.log("Failed to load vertical tabs data:", error);
@@ -155,6 +161,18 @@ export async function saveData(data: VerticalTabsData): Promise<void> {
   } catch (error) {
     ztoolkit.log("Failed to save vertical tabs data:", error);
   }
+}
+
+/**
+ * Save only the lastReadTimes field without touching other in-memory changes.
+ * This is safe to call frequently (e.g. on tab selection) because it merges
+ * with the existing file content.
+ */
+export async function saveLastReadTimes(
+  lastReadTimes: Record<string, number>,
+): Promise<void> {
+  const data = await loadData();
+  await saveData({ ...data, lastReadTimes });
 }
 
 export function createCategory(data: VerticalTabsData, name: string): Category {
@@ -520,6 +538,13 @@ export function cleanStaleTabIds(
   data: VerticalTabsData,
   liveTabIds: Set<string>,
 ): VerticalTabsData {
+  const cleanedLastReadTimes: Record<string, number> = {};
+  for (const tabId of Object.keys(data.lastReadTimes)) {
+    if (tabId && liveTabIds.has(tabId)) {
+      cleanedLastReadTimes[tabId] = data.lastReadTimes[tabId];
+    }
+  }
+
   return {
     ...data,
     categories: data.categories.map((category) => {
@@ -541,6 +566,7 @@ export function cleanStaleTabIds(
       const id = data.uncategorizedOrder[i];
       return id && liveTabIds.has(id);
     }),
+    lastReadTimes: cleanedLastReadTimes,
   };
 }
 
@@ -612,6 +638,9 @@ export function restoreCategoryTabIdsAndOrder(
     }
   }
 
+  // Track old tabId -> new tabId mappings so lastReadTimes can be restored too.
+  const tabIdMapping = new Map<string, string>();
+
   let categoriesChanged = false;
   const newCategories = data.categories.map((category) => {
     const newItemIds: number[] = [];
@@ -633,6 +662,7 @@ export function restoreCategoryTabIdsAndOrder(
         newItemIds.push(itemId);
         newTabIds.push(replacement);
         consumedLiveTabIds.add(replacement);
+        tabIdMapping.set(tabId, replacement);
         categoriesChanged = true;
       } else {
         categoriesChanged = true;
@@ -673,6 +703,7 @@ export function restoreCategoryTabIdsAndOrder(
       newUncategorizedOrder.push(replacement);
       newUncategorizedItemIds.push(itemId);
       consumedLiveTabIds.add(replacement);
+      tabIdMapping.set(tabId, replacement);
       uncategorizedChanged = true;
     } else {
       uncategorizedChanged = true;
@@ -680,11 +711,25 @@ export function restoreCategoryTabIdsAndOrder(
   }
 
   if (!categoriesChanged && !uncategorizedChanged) return data;
+
+  // Migrate lastReadTimes keys using the same tabId mapping.
+  const newLastReadTimes: Record<string, number> = {};
+  for (const [tabId, time] of Object.entries(data.lastReadTimes)) {
+    const mappedTabId = tabIdMapping.get(tabId);
+    if (mappedTabId) {
+      newLastReadTimes[mappedTabId] = time;
+    } else if (liveTabIds.has(tabId)) {
+      newLastReadTimes[tabId] = time;
+    }
+    // Closed tabs drop out of lastReadTimes.
+  }
+
   return {
     ...data,
     categories: newCategories,
     uncategorizedOrder: newUncategorizedOrder,
     uncategorizedItemIds: newUncategorizedItemIds,
+    lastReadTimes: newLastReadTimes,
   };
 }
 

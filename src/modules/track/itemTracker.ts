@@ -1,7 +1,19 @@
 import { config } from "../../../package.json";
 import { dispatchVtEvent } from "../core/events";
 import { getItemDisplayTitle } from "../utils/itemTitle";
-import type { ItemTabEntry, VerticalTabsData } from "./dataStore";
+import {
+  clearReleasedReaderState,
+  dispatchReaderLoadingEvent,
+  markReaderRestored,
+  restoreReaderForTab,
+  waitForReaderLoaded,
+} from "./readerRelease";
+import {
+  isReaderRestoreInProgress,
+  markPendingSyncTabOrder,
+} from "./orderSyncControl";
+import { saveLastReadTimes, type VerticalTabsData } from "./dataStore";
+import type { ItemTabEntry } from "./dataStore";
 
 export interface OpenedPDF {
   itemId: number;
@@ -16,6 +28,11 @@ export interface OpenedPDF {
    * must never be auto-matched to previous categories by itemId.
    */
   isNew?: boolean;
+  /**
+   * True when the PDF reader resources for this tab have been released
+   * to free memory, but the native Zotero tab is still open.
+   */
+  readerReleased?: boolean;
 }
 
 function vtLog(msg: string): void {
@@ -27,6 +44,14 @@ let _itemNotifierID: string | null = null;
 let _openedPDFs: OpenedPDF[] = [];
 let _selectedTabId = "";
 let _startupRestoreDone = false;
+let _lastReadTimes: Record<string, number> = {};
+let _saveLastReadTimesTimer: ReturnType<typeof setTimeout> | null = null;
+const SAVE_LAST_READ_TIMES_DELAY_MS = 1000;
+
+/** Tab IDs that received a "close" notifier but may be transiently recreated. */
+const _pendingClosedTabIds = new Set<string>();
+let _pendingClosedFlushTimer: ReturnType<typeof setTimeout> | null = null;
+const PENDING_CLOSED_FLUSH_DELAY_MS = 100;
 
 export function getMainWindows(): Window[] {
   return Zotero.getMainWindows();
@@ -38,6 +63,48 @@ export function markStartupRestoreDone(): void {
 
 export function isStartupRestoreDone(): boolean {
   return _startupRestoreDone;
+}
+
+export function loadLastReadTimes(times: Record<string, number>): void {
+  _lastReadTimes = { ...times };
+}
+
+export function getLastReadTimes(): Record<string, number> {
+  return { ..._lastReadTimes };
+}
+
+function debouncedSaveLastReadTimes(): void {
+  if (_saveLastReadTimesTimer) {
+    clearTimeout(_saveLastReadTimesTimer);
+  }
+  _saveLastReadTimesTimer = setTimeout(() => {
+    _saveLastReadTimesTimer = null;
+    void saveLastReadTimes({ ..._lastReadTimes });
+  }, SAVE_LAST_READ_TIMES_DELAY_MS);
+}
+
+export function setLastReadTime(tabId: string, time: number): void {
+  _lastReadTimes[tabId] = time;
+  debouncedSaveLastReadTimes();
+}
+
+export function removeLastReadTime(tabId: string): void {
+  delete _lastReadTimes[tabId];
+  void saveLastReadTimes({ ..._lastReadTimes });
+}
+
+export function applyLastReadTimesToOpenedPDFs(): void {
+  let changed = false;
+  for (const pdf of _openedPDFs) {
+    const time = _lastReadTimes[pdf.tabId];
+    if (time !== undefined && time !== pdf.openedAt) {
+      pdf.openedAt = time;
+      changed = true;
+    }
+  }
+  if (changed) {
+    dispatchPDFsChanged();
+  }
 }
 
 /**
@@ -143,13 +210,23 @@ export function syncSelectedTabId(): boolean {
 function updateOpenedAtForTab(tabId: string): void {
   const pdf = _openedPDFs.find((p) => p.tabId === tabId);
   if (!pdf) return;
-  pdf.openedAt = Date.now();
+  const now = Date.now();
+  pdf.openedAt = now;
+  setLastReadTime(tabId, now);
 }
 
 async function handleTabAdded(tabId: string): Promise<void> {
   if (!tabId || tabId === "undefined") return;
   const ztabs = getZoteroTabs();
   const tabInfo = ztabs?.getTabInfo(tabId);
+  ztoolkit.log(
+    "[BVT-tracker] handleTabAdded:",
+    tabId,
+    "type=",
+    tabInfo?.type,
+    "exists=",
+    _openedPDFs.some((p) => p.tabId === tabId),
+  );
   if (!tabInfo) return;
 
   // Track all tab types: reader (PDF), note, etc.
@@ -198,6 +275,7 @@ async function handleTabAdded(tabId: string): Promise<void> {
     ? getItemDisplayTitle(item, tabInfo.title || "")
     : tabInfo.title || "";
 
+  const time = _lastReadTimes[tabId];
   _openedPDFs.push({
     itemId,
     parentItemId,
@@ -205,21 +283,98 @@ async function handleTabAdded(tabId: string): Promise<void> {
     tabId,
     type: tabInfo.type,
     title,
-    openedAt: Date.now(),
+    openedAt: time ?? Date.now(),
     isNew: _startupRestoreDone,
+    readerReleased: false,
   });
+  ztoolkit.log(
+    "[BVT-tracker] handleTabAdded pushed:",
+    tabId,
+    "type=",
+    tabInfo.type,
+    "total=",
+    _openedPDFs.length,
+  );
 
   dispatchPDFsChanged();
+
+  // For reader tabs, the reader loads asynchronously. Show the loaded
+  // indicator immediately when initialization starts, and re-render once it
+  // is ready so the indicator reflects the final loaded state.
+  // Lazy reader tabs (type === "reader-unloaded") are not loaded yet, so do
+  // not show the indicator until the user selects the tab.
+  if (
+    tabInfo.type?.startsWith("reader") &&
+    tabInfo.type !== "reader-unloaded"
+  ) {
+    dispatchReaderLoadingEvent(tabId);
+    waitForReaderLoaded(tabId, 15000).then((loaded) => {
+      if (loaded) {
+        for (const win of getMainWindows()) {
+          dispatchVtEvent(win.document, "vertical-tabs:reader-restored", {
+            tabId,
+          });
+        }
+      }
+    });
+  }
 }
 
 function handleTabClosed(tabId: string): void {
+  // A released reader that is closed must not stay in the released set,
+  // otherwise its tabId could be matched by isReaderLoaded later.
+  markReaderRestored(tabId);
+
+  if (!tabId) return;
+
+  // Defer the actual removal to filter out transient close/add cycles
+  // produced by Zotero.Reader.open() or internal tab rebuilds.
+  _pendingClosedTabIds.add(tabId);
+  schedulePendingClosedFlush();
+}
+
+function schedulePendingClosedFlush(): void {
+  if (_pendingClosedFlushTimer) return;
+  _pendingClosedFlushTimer = setTimeout(() => {
+    _pendingClosedFlushTimer = null;
+    flushPendingClosedTabs();
+  }, PENDING_CLOSED_FLUSH_DELAY_MS);
+}
+
+function flushPendingClosedTabs(): void {
+  if (_pendingClosedTabIds.size === 0) return;
+  const liveTabIds = new Set(getLiveOpenTabIds());
+  for (const tabId of Array.from(_pendingClosedTabIds)) {
+    if (liveTabIds.has(tabId)) {
+      // The tab was recreated; keep tracking it.
+      _pendingClosedTabIds.delete(tabId);
+    } else {
+      actuallyRemoveClosedTab(tabId);
+    }
+  }
+}
+
+function actuallyRemoveClosedTab(tabId: string): void {
   const beforeLength = _openedPDFs.length;
+  const closedPdf = _openedPDFs.find((p) => p.tabId === tabId);
   _openedPDFs = _openedPDFs.filter((pdf) => pdf.tabId !== tabId);
+  _pendingClosedTabIds.delete(tabId);
+  ztoolkit.log(
+    "[BVT-tracker] actuallyRemoveClosedTab:",
+    tabId,
+    "type=",
+    closedPdf?.type,
+    "before=",
+    beforeLength,
+    "after=",
+    _openedPDFs.length,
+  );
   if (_openedPDFs.length !== beforeLength) {
     // Notify categoryManager to remove this closed tabId from categories.
     for (const win of getMainWindows()) {
       dispatchVtEvent(win.document, "vertical-tabs:tab-closed", { tabId });
     }
+    removeLastReadTime(tabId);
     dispatchPDFsChanged();
   }
 }
@@ -241,8 +396,45 @@ export function startTracking(): void {
           for (const id of ids) {
             const tabId = String(id);
             _selectedTabId = tabId;
-            updateOpenedAtForTab(tabId);
-            dispatchPDFsChanged(); // re-render to update active highlight
+            const pdf = _openedPDFs.find((p) => p.tabId === tabId);
+            ztoolkit.log(
+              "[BVT-tracker] select:",
+              tabId,
+              "pdf.type=",
+              pdf?.type,
+              "readerReleased=",
+              pdf?.readerReleased,
+            );
+            if (pdf?.readerReleased) {
+              void restoreReaderForTab(tabId).then(() => {
+                updateOpenedAtForTab(tabId);
+                dispatchPDFsChanged();
+              });
+            } else {
+              // For lazy reader tabs, selecting the tab triggers Zotero to load
+              // the reader. Show the loaded indicator immediately and refresh it
+              // once loading completes.
+              const tabInfo = getZoteroTabs()?.getTabInfo(tabId);
+              if (tabInfo?.type?.startsWith("reader")) {
+                dispatchReaderLoadingEvent(tabId);
+                waitForReaderLoaded(tabId, 15000).then((loaded) => {
+                  if (loaded) {
+                    if (pdf?.type === "reader-unloaded") {
+                      pdf.type = "reader";
+                    }
+                    for (const win of getMainWindows()) {
+                      dispatchVtEvent(
+                        win.document,
+                        "vertical-tabs:reader-restored",
+                        { tabId },
+                      );
+                    }
+                  }
+                });
+              }
+              updateOpenedAtForTab(tabId);
+              dispatchPDFsChanged(); // re-render to update active highlight
+            }
           }
         } else if (event === "close") {
           for (const id of ids) {
@@ -305,8 +497,19 @@ export function stopTracking(): void {
     Zotero.Notifier.unregisterObserver(_itemNotifierID);
     _itemNotifierID = null;
   }
+  if (_saveLastReadTimesTimer) {
+    clearTimeout(_saveLastReadTimesTimer);
+    _saveLastReadTimesTimer = null;
+  }
+  if (_pendingClosedFlushTimer) {
+    clearTimeout(_pendingClosedFlushTimer);
+    _pendingClosedFlushTimer = null;
+  }
+  _pendingClosedTabIds.clear();
   _openedPDFs = [];
   _selectedTabId = "";
+  _lastReadTimes = {};
+  clearReleasedReaderState();
 }
 
 export function getOpenedPDFs(): OpenedPDF[] {
@@ -325,7 +528,22 @@ export function getOpenedPDFByTabId(tabId: string): OpenedPDF | undefined {
   return _openedPDFs.find((pdf) => pdf.tabId === tabId);
 }
 
-export function refreshOpenedPDFs(): void {
+export function setReaderReleased(tabId: string, released: boolean): void {
+  const pdf = _openedPDFs.find((p) => p.tabId === tabId);
+  if (pdf) {
+    pdf.readerReleased = released;
+    // Keep memory state aligned with the native tab type. When releasing we
+    // flip to "reader-unloaded" so Zotero's lazy-load path is used on next
+    // select. When restoring, the type is flipped back to "reader" after the
+    // reader finishes loading.
+    if (released && pdf.type === "reader") {
+      pdf.type = "reader-unloaded";
+    }
+  }
+}
+
+export async function refreshOpenedPDFs(): Promise<void> {
+  clearReleasedReaderState();
   _openedPDFs = [];
   try {
     const ztabs = getZoteroTabs();
@@ -334,11 +552,13 @@ export function refreshOpenedPDFs(): void {
 
     // Use _tabs internal array (has correct id fields in Zotero 8+)
     const internalTabs = ztAny._tabs as any[] | undefined;
+    const promises: Promise<void>[] = [];
     if (internalTabs && internalTabs.length > 0) {
       for (const tab of internalTabs) {
         const tabId = String(tab.id ?? "");
-        if (tabId) void handleTabAdded(tabId);
+        if (tabId) promises.push(handleTabAdded(tabId));
       }
+      await Promise.all(promises);
       if (syncSelectedTabId()) {
         dispatchPDFsChanged();
       }
@@ -349,8 +569,9 @@ export function refreshOpenedPDFs(): void {
     const state = (ztabs.getState?.() ?? []) as any[];
     for (const tab of state) {
       const tabId = String(tab.id ?? "");
-      if (tabId) void handleTabAdded(tabId);
+      if (tabId) promises.push(handleTabAdded(tabId));
     }
+    await Promise.all(promises);
     if (syncSelectedTabId()) {
       dispatchPDFsChanged();
     }
@@ -359,18 +580,21 @@ export function refreshOpenedPDFs(): void {
   }
 }
 
-export function scanOpenedTabs(): void {
+export async function scanOpenedTabs(): Promise<void> {
+  clearReleasedReaderState();
   try {
     const ztabs = getZoteroTabs();
     if (!ztabs) return;
     const ztAny = ztabs as unknown as Record<string, unknown>;
 
     const internalTabs = ztAny._tabs as any[] | undefined;
+    const promises: Promise<void>[] = [];
     if (internalTabs && internalTabs.length > 0) {
       for (const tab of internalTabs) {
         const tabId = String(tab.id ?? "");
-        if (tabId) void handleTabAdded(tabId);
+        if (tabId) promises.push(handleTabAdded(tabId));
       }
+      await Promise.all(promises);
       if (syncSelectedTabId()) {
         dispatchPDFsChanged();
       }
@@ -380,8 +604,9 @@ export function scanOpenedTabs(): void {
     const state = (ztabs.getState?.() ?? []) as any[];
     for (const tab of state) {
       const tabId = String(tab.id ?? "");
-      if (tabId) void handleTabAdded(tabId);
+      if (tabId) promises.push(handleTabAdded(tabId));
     }
+    await Promise.all(promises);
     if (syncSelectedTabId()) {
       dispatchPDFsChanged();
     }
@@ -627,6 +852,26 @@ export function syncTabOrderToNative(
   uncategorizedOrder: string[],
   options?: { doc?: Document; pendingTabIds?: string[] },
 ): void {
+  if (isReaderRestoreInProgress()) {
+    markPendingSyncTabOrder();
+    ztoolkit.log(
+      "[BVT-sync] syncTabOrderToNative deferred due to reader restore",
+    );
+    return;
+  }
+
+  const ztabs = getZoteroTabs(options?.doc);
+  const currentIds = ((ztabs as any)?._tabs as any[] | undefined)?.map((t) =>
+    String(t.id ?? ""),
+  );
+  ztoolkit.log(
+    "[BVT-sync] syncTabOrderToNative called, currentIds=",
+    currentIds,
+    "categories=",
+    categories.map((c) => ({ order: c.order, tabIds: c.tabIds })),
+    "uncategorizedOrder=",
+    uncategorizedOrder,
+  );
   if (_syncTabOrderTimer) clearTimeout(_syncTabOrderTimer);
   _syncTabOrderTimer = setTimeout(() => {
     _syncTabOrderTimer = null;

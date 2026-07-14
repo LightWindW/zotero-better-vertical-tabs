@@ -14,6 +14,10 @@ import {
   getZoteroTabs,
   getSelectedTabId,
 } from "../track/itemTracker";
+import {
+  isReaderLoaded,
+  isShowReaderLoadedIndicatorEnabled,
+} from "../track/readerRelease";
 import { openItemAsNewTab } from "../track/tabOpener";
 import { dispatchVtEvent } from "../core/events";
 import { updateActiveCategoryHighlight } from "./categoryHighlight";
@@ -168,6 +172,19 @@ function createItemElement(
   row.dataset.tabType = pdf.type;
   if (categoryId) row.dataset.categoryId = categoryId;
 
+  // ── Reader-loaded indicator (leftmost 4px bar) ──
+  const isReader = pdf.type?.startsWith("reader");
+  const showIndicator =
+    isReader &&
+    isShowReaderLoadedIndicatorEnabled() &&
+    isReaderLoaded(pdf.tabId);
+  if (showIndicator) {
+    row.classList.add("reader-loaded");
+  }
+  const indicator = createEl(doc, "div");
+  indicator.className = "vertical-tabs-item-reader-loaded-indicator";
+  row.insertBefore(indicator, row.firstChild);
+
   // ── Left: Zotero item type icon ──
   const isNote = pdf.type === "note" || pdf.type?.startsWith("note");
   const iconItemId = isNote ? pdf.itemId : (pdf.parentItemId ?? pdf.itemId);
@@ -196,7 +213,6 @@ function createItemElement(
   contentEl.appendChild(titleEl);
 
   // PDF reader tabs: show extra ("其他") + separator when pref enabled AND extra non-empty
-  const isReader = pdf.type?.startsWith("reader");
   const showExtra = Zotero.Prefs.get(
     `${config.prefsPrefix}.verticalTabs.showExtra`,
     true,
@@ -960,6 +976,48 @@ export function renderCategories(
 
 let _searchQuery = "";
 
+/**
+ * Update the reader-loaded indicator class on existing tab rows without
+ * rebuilding the whole categories DOM, so opacity transitions play smoothly.
+ */
+function updateReaderLoadedIndicators(doc: Document): void {
+  doc.querySelectorAll(".vertical-tabs-item").forEach((el: Element) => {
+    const row = el as HTMLElement;
+    const tabId = row.dataset.tabId;
+    const tabType = row.dataset.tabType;
+    if (!tabId || !tabType?.startsWith("reader")) return;
+    if (isShowReaderLoadedIndicatorEnabled() && isReaderLoaded(tabId)) {
+      row.classList.add("reader-loaded");
+    } else {
+      row.classList.remove("reader-loaded");
+    }
+  });
+}
+
+/**
+ * Show or hide the reader-loaded indicator for a specific tab row without
+ * rebuilding the whole categories DOM, so opacity transitions play smoothly.
+ */
+function setReaderLoadedIndicatorForTab(
+  doc: Document,
+  tabId: string,
+  show: boolean,
+): void {
+  const row = doc.querySelector(
+    `.vertical-tabs-item[data-tab-id="${CSS.escape(tabId)}"]`,
+  ) as HTMLElement | null;
+  if (!row) return;
+  if (!isShowReaderLoadedIndicatorEnabled()) {
+    row.classList.remove("reader-loaded");
+    return;
+  }
+  if (show) {
+    row.classList.add("reader-loaded");
+  } else {
+    row.classList.remove("reader-loaded");
+  }
+}
+
 export function subscribeToRenderEvents(
   doc: Document,
   getData: () => Promise<VerticalTabsData>,
@@ -991,8 +1049,25 @@ export function subscribeToRenderEvents(
     renderCategories(doc, container, data, pdfs);
   };
 
+  const readerIndicatorHandler = () => updateReaderLoadedIndicators(doc);
+  const readerLoadingHandler = ((e: CustomEvent) => {
+    const tabId = (e.detail?.tabId as string) || "";
+    if (tabId) {
+      setReaderLoadedIndicatorForTab(doc, tabId, true);
+    }
+  }) as EventListener;
+  const readerReleasedHandler = ((e: CustomEvent) => {
+    const tabId = (e.detail?.tabId as string) || "";
+    if (tabId) {
+      setReaderLoadedIndicatorForTab(doc, tabId, false);
+    }
+  }) as EventListener;
+
   doc.addEventListener("vertical-tabs:pdfs-changed", handler);
   doc.addEventListener("vertical-tabs:data-changed", handler);
+  doc.addEventListener("vertical-tabs:reader-loading", readerLoadingHandler);
+  doc.addEventListener("vertical-tabs:reader-released", readerReleasedHandler);
+  doc.addEventListener("vertical-tabs:reader-restored", readerIndicatorHandler);
   // Collapse/expand should not rebuild the categories DOM: we want the
   // existing content to be clipped by the width animation instead of
   // vanishing instantly. Only render when becoming visible (initial load).
@@ -1010,16 +1085,46 @@ export function subscribeToRenderEvents(
   }) as EventListener);
 
   (doc as any).__verticalTabsRenderHandler = handler;
+  (doc as any).__verticalTabsReaderLoadingHandler = readerLoadingHandler;
+  (doc as any).__verticalTabsReaderReleasedHandler = readerReleasedHandler;
+  (doc as any).__verticalTabsReaderRestoredHandler = readerIndicatorHandler;
 }
 
 export function unsubscribeFromRenderEvents(doc: Document): void {
   const handler = (doc as any).__verticalTabsRenderHandler;
-  if (!handler) return;
-  doc.removeEventListener("vertical-tabs:pdfs-changed", handler);
-  doc.removeEventListener("vertical-tabs:data-changed", handler);
-  doc.removeEventListener("vertical-tabs:visibility-changed", handler);
-  doc.removeEventListener("vertical-tabs:search", handler);
-  delete (doc as any).__verticalTabsRenderHandler;
+  const readerLoadingHandler = (doc as any).__verticalTabsReaderLoadingHandler;
+  const readerReleasedHandler = (doc as any)
+    .__verticalTabsReaderReleasedHandler;
+  const readerRestoredHandler = (doc as any)
+    .__verticalTabsReaderRestoredHandler;
+  if (handler) {
+    doc.removeEventListener("vertical-tabs:pdfs-changed", handler);
+    doc.removeEventListener("vertical-tabs:data-changed", handler);
+    doc.removeEventListener("vertical-tabs:visibility-changed", handler);
+    doc.removeEventListener("vertical-tabs:search", handler);
+    delete (doc as any).__verticalTabsRenderHandler;
+  }
+  if (readerLoadingHandler) {
+    doc.removeEventListener(
+      "vertical-tabs:reader-loading",
+      readerLoadingHandler,
+    );
+    delete (doc as any).__verticalTabsReaderLoadingHandler;
+  }
+  if (readerReleasedHandler) {
+    doc.removeEventListener(
+      "vertical-tabs:reader-released",
+      readerReleasedHandler,
+    );
+    delete (doc as any).__verticalTabsReaderReleasedHandler;
+  }
+  if (readerRestoredHandler) {
+    doc.removeEventListener(
+      "vertical-tabs:reader-restored",
+      readerRestoredHandler,
+    );
+    delete (doc as any).__verticalTabsReaderRestoredHandler;
+  }
   _searchQuery = "";
 }
 

@@ -25,6 +25,8 @@ import {
   startTracking,
   stopTracking,
   markStartupRestoreDone,
+  applyLastReadTimesToOpenedPDFs,
+  loadLastReadTimes,
 } from "../track/itemTracker";
 import {
   subscribeToRenderEvents,
@@ -33,6 +35,10 @@ import {
   teardownCategoryDarkMode,
 } from "../render/uiRenderer";
 import { destroyAutoClose, initAutoClose } from "../track/autoClose";
+import {
+  destroyReaderReleaseTimer,
+  initReaderReleaseTimer,
+} from "../track/readerReleaseTimer";
 import { dispatchVtEvent } from "./events";
 import { initMainPaneDrop, destroyMainPaneDrop } from "../drag/mainPaneDrop";
 
@@ -183,11 +189,13 @@ export async function initVerticalTabs(
   });
 
   // Scan existing tabs (immediate attempt — clears and re-scans)
-  refreshOpenedPDFs();
+  await refreshOpenedPDFs();
   // Restore categories/order right away so the initial VT render already shows
   // the previous session's layout. Session restore may still be adding tabs, so
   // we run another restore on each retry and a final cleanup at the end.
   restoreCategoriesAtStartup(win.document);
+  loadLastReadTimes(getData().lastReadTimes);
+  applyLastReadTimesToOpenedPDFs();
 
   // Exponential backoff retry — Zotero session restore may not have completed yet.
   const RETRY_DELAYS = [1000, 2500, 5000];
@@ -199,6 +207,8 @@ export async function initVerticalTabs(
       if (after > before) {
         // New tabs appeared: restore them as well before the next render.
         restoreCategoriesAtStartup(win.document);
+        loadLastReadTimes(getData().lastReadTimes);
+        applyLastReadTimesToOpenedPDFs();
         dispatchVtEvent(win.document, "vertical-tabs:pdfs-changed");
       }
 
@@ -206,6 +216,8 @@ export async function initVerticalTabs(
         // Once session restore is likely complete, do a final restore and mark
         // all subsequently opened tabs as "new" so they are never auto-restored.
         restoreCategoriesAtStartup(win.document);
+        loadLastReadTimes(getData().lastReadTimes);
+        applyLastReadTimesToOpenedPDFs();
         markStartupRestoreDone();
         cleanupStaleTabIds(win.document);
       }
@@ -214,6 +226,9 @@ export async function initVerticalTabs(
 
   // Start auto-close timer if enabled
   initAutoClose();
+
+  // Start PDF reader release timer if enabled
+  initReaderReleaseTimer();
 
   // Enable dragging items from the main Zotero item pane into the VT sidebar.
   initMainPaneDrop(win.document);
@@ -229,6 +244,7 @@ export function destroyVerticalTabs(win: Window): void {
   if (!state.initialized) return;
 
   destroyAutoClose();
+  destroyReaderReleaseTimer();
 
   unsubscribeFromRenderEvents(win.document);
   destroyHoverCard(win.document);

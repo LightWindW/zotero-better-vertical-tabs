@@ -51,6 +51,46 @@
     data-l10n-id="pref-vertical-tabs-enable-blur"
   />
 
+  <html:div style="margin-top: 12px; margin-bottom: 4px">
+    <html:label
+      style="font-weight: 600"
+      data-l10n-id="pref-vertical-tabs-reader-memory"
+    />
+  </html:div>
+
+  <checkbox
+    id="zotero-prefpane-__addonRef__-show-reader-loaded-indicator"
+    preference="verticalTabs.showReaderLoadedIndicator"
+    data-l10n-id="pref-vertical-tabs-show-reader-loaded-indicator"
+  />
+
+  <html:div
+    style="display: flex; align-items: center; gap: 6px; margin-top: 4px"
+  >
+    <checkbox
+      id="zotero-prefpane-__addonRef__-release-reader-enabled"
+      preference="verticalTabs.releaseReaderEnabled"
+      data-l10n-id="pref-vertical-tabs-release-reader-enabled"
+    />
+    <html:input
+      type="number"
+      id="__addonRef__-release-reader-minutes"
+      preference="verticalTabs.releaseReaderMinutes"
+      min="1"
+      max="1440"
+      style="width: 60px"
+    />
+    <html:label
+      for="__addonRef__-release-reader-minutes"
+      data-l10n-id="pref-vertical-tabs-release-reader-minutes-label"
+    />
+  </html:div>
+
+  <html:div
+    style="font-size: 11px; color: #888; margin-top: 2px"
+    data-l10n-id="pref-vertical-tabs-release-reader-hint"
+  />
+
   <html:div
     style="display: flex; align-items: center; gap: 6px; margin-top: 4px"
   >
