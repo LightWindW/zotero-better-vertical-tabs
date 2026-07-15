@@ -309,12 +309,12 @@ export function getStyles(): string {
 
     #${SIDEBAR_ID} .vertical-tabs-item-reader-loaded-indicator {
       position: absolute;
-      left: 0;
+      left: 0px;
       top: 10%;
-      width: 1.5px;
+      width: 1.8px;
       height: 80%;
-      border-radius: 0 1px 1px 0;
-      background: #306243;
+      border-radius: 0.5px 0.5px 0.5px 0.5px;
+      background: #2e8b52;
       opacity: 0;
       transition: opacity 0.2s ease;
       pointer-events: none;
