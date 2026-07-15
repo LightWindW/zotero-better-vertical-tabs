@@ -3,7 +3,7 @@ import { getString } from "../../utils/locale";
 import { getContextMenuColors, isDarkMode } from "../render/colorUtils";
 import { getPopupStyleSheet } from "../render/popupStyleUtils";
 import { dispatchVtEvent } from "../core/events";
-import { importIcon, plusIcon, settingIcon } from "../ui/iconSvgs";
+import { helpIcon, importIcon, plusIcon, settingIcon } from "../ui/iconSvgs";
 import {
   scheduleCollapse,
   setContextMenuOpen,
@@ -67,6 +67,11 @@ export function showMoreMenu(doc: Document, anchorEl: HTMLElement): void {
       icon: iconHtml(settingIcon(iconColor)),
       label: getString("vertical-tabs-plugin-settings"),
       action: () => dispatchVtEvent(doc, "vertical-tabs:open-preferences"),
+    },
+    {
+      icon: iconHtml(helpIcon(iconColor)),
+      label: getString("vertical-tabs-help"),
+      action: () => dispatchVtEvent(doc, "vertical-tabs:show-help-dialog"),
     },
   ];
 

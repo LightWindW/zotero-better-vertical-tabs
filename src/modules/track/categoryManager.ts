@@ -46,6 +46,7 @@ import {
 import { showMoreMenu } from "../save/moreMenu";
 import { promptOverwriteSavedCategory } from "../save/saveCategoryDialog";
 import { showImportCategoryDialog } from "../save/importCategoryDialog";
+import { showHelpDialog } from "../save/helpDialog";
 import {
   restoreCategory,
   showRestoreWarningDialog,
@@ -80,6 +81,7 @@ interface CategoryHandlers {
   requestSync: EventListener;
   showMoreMenu: EventListener;
   showImportDialog: EventListener;
+  showHelpDialog: EventListener;
   importCategory: EventListener;
   openPreferences: EventListener;
 }
@@ -508,6 +510,12 @@ function handleShowImportDialog(event: Event): void {
   void showImportCategoryDialog(doc);
 }
 
+function handleShowHelpDialog(event: Event): void {
+  const doc =
+    (event.target as Node).ownerDocument ?? (event.target as Document);
+  showHelpDialog(doc);
+}
+
 async function handleImportCategory(event: Event): Promise<void> {
   const customEvent = event as CustomEvent;
   const { savedCategoryId } = customEvent.detail as { savedCategoryId: string };
@@ -756,6 +764,7 @@ function cleanupOldCategoryHandlers(doc: Document): void {
     "vertical-tabs:show-import-dialog",
     old.showImportDialog,
   );
+  doc.removeEventListener("vertical-tabs:show-help-dialog", old.showHelpDialog);
   doc.removeEventListener("vertical-tabs:import-category", old.importCategory);
   doc.removeEventListener(
     "vertical-tabs:open-preferences",
@@ -860,6 +869,7 @@ export async function initCategoryManager(doc: Document): Promise<void> {
     requestSync: requestSyncOrderHandler,
     showMoreMenu: handleShowMoreMenu,
     showImportDialog: handleShowImportDialog,
+    showHelpDialog: handleShowHelpDialog,
     importCategory: handleImportCategory,
     openPreferences: handleOpenPreferences,
   };
@@ -892,6 +902,10 @@ export async function initCategoryManager(doc: Document): Promise<void> {
   doc.addEventListener(
     "vertical-tabs:show-import-dialog",
     handlers.showImportDialog,
+  );
+  doc.addEventListener(
+    "vertical-tabs:show-help-dialog",
+    handlers.showHelpDialog,
   );
   doc.addEventListener(
     "vertical-tabs:import-category",

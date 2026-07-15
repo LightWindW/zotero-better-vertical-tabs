@@ -122,3 +122,15 @@ vertical-tabs-restore-missing = { $count } items in the saved category no longer
 vertical-tabs-restore-updated = { $count } items' metadata have been updated since the category was saved.
 vertical-tabs-restore-confirm-hint = The remaining valid items have been successfully restored.
 vertical-tabs-drop-missing-pdf = Some dragged items have no PDF attachments. Please check.
+
+# Help
+vertical-tabs-help = Help
+vertical-tabs-help-dialog-title = Better Vertical Tabs Help
+vertical-tabs-help-section-1-title = 1. Tab Creation & Drag-and-Drop
+vertical-tabs-help-section-1-content = Drag items/attachments from the main pane to the VT sidebar. The plugin will open the first PDF and create a tab.
+vertical-tabs-help-section-2-title = 2. Category Creation
+vertical-tabs-help-section-2-content = Click "More > Add Category" to create a new category. Drag tabs into it, or right-click a tab and select "Remove from Category" to return it to Uncategorized.
+vertical-tabs-help-section-3-title = 3. Save and Import Categories
+vertical-tabs-help-section-3-content = Right-click a category and select "Save Category" to persist its structure. Use "More > Import Category" to restore saved categories.
+vertical-tabs-help-section-4-title = 4. PDF Reader Automatic Memory Optimization
+vertical-tabs-help-section-4-content = Enable auto-release in plugin settings. Reader tabs that have been inactive for a while will be closed automatically to free memory.

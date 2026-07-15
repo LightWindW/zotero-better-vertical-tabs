@@ -122,3 +122,15 @@ vertical-tabs-restore-missing = { $count } elementos de la categoría guardada y
 vertical-tabs-restore-updated = Los metadatos de { $count } elementos han cambiado desde que se guardó la categoría.
 vertical-tabs-restore-confirm-hint = Los elementos válidos restantes se han restaurado correctamente.
 vertical-tabs-drop-missing-pdf = Algunos elementos arrastrados no tienen archivos PDF adjuntos. Por favor, verifíquelos.
+
+# Ayuda
+vertical-tabs-help = Ayuda
+vertical-tabs-help-dialog-title = Ayuda de Better Vertical Tabs
+vertical-tabs-help-section-1-title = 1. Creación y arrastre de pestañas
+vertical-tabs-help-section-1-content = Arrastre elementos/adjuntos desde el panel principal a la barra lateral VT. El complemento abrirá el primer PDF y creará una pestaña.
+vertical-tabs-help-section-2-title = 2. Creación de categorías
+vertical-tabs-help-section-2-content = Haga clic en "Más > Agregar categoría" para crear una categoría. Arrastre pestañas a ella, o haga clic derecho en una pestaña y seleccione "Quitar de la categoría" para volver a Sin categoría.
+vertical-tabs-help-section-3-title = 3. Guardar e importar categorías
+vertical-tabs-help-section-3-content = Haga clic derecho en una categoría y seleccione "Guardar categoría" para persistir su estructura. Use "Más > Importar categoría" para restaurar categorías guardadas.
+vertical-tabs-help-section-4-title = 4. Optimización automática de memoria del lector PDF
+vertical-tabs-help-section-4-content = Habilite la liberación automática en los ajustes. Las pestañas del lector inactivas durante un tiempo se cerrarán automáticamente para liberar memoria.

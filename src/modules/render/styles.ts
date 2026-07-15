@@ -737,6 +737,38 @@ export function getStyles(): string {
       padding-bottom: 0 !important;
     }
 
+    /* Help dialog */
+    #vt-help-dialog-overlay {
+      font-family: message-box;
+    }
+
+    .vt-help-dialog {
+      animation: vt-help-dialog-appear 0.15s ease-out;
+    }
+
+    @keyframes vt-help-dialog-appear {
+      from { opacity: 0; transform: scale(0.96); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    #vt-help-dialog-overlay.vt-help-dialog-leaving {
+      animation: vt-help-dialog-overlay-leave 0.15s ease-out forwards;
+    }
+
+    #vt-help-dialog-overlay.vt-help-dialog-leaving .vt-help-dialog {
+      animation: vt-help-dialog-content-leave 0.15s ease-out forwards;
+    }
+
+    @keyframes vt-help-dialog-overlay-leave {
+      from { opacity: 1; }
+      to { opacity: 0; }
+    }
+
+    @keyframes vt-help-dialog-content-leave {
+      from { opacity: 1; transform: scale(1); }
+      to { opacity: 0; transform: scale(0.96); }
+    }
+
     .vt-import-dialog-list::-webkit-scrollbar {
       width: 6px;
     }

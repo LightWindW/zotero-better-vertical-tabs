@@ -123,3 +123,15 @@ vertical-tabs-restore-missing = 保存分类中的 { $count } 个条目已不在
 vertical-tabs-restore-updated = 保存分类中的 { $count } 个条目的元数据自保存以来已更新。
 vertical-tabs-restore-confirm-hint = 其余有效条目已成功恢复。
 vertical-tabs-drop-missing-pdf = 本次拖拽有条目不存在pdf附件请检查
+
+# 使用帮助
+vertical-tabs-help = 使用帮助
+vertical-tabs-help-dialog-title = Better Vertical Tabs 使用说明
+vertical-tabs-help-section-1-title = 1. 标签创建与拖拽
+vertical-tabs-help-section-1-content = 拖拽主窗格中的条目/附件到 VT 侧边栏，插件会自动打开第一个 PDF 并生成标签。
+vertical-tabs-help-section-2-title = 2. 分类创建
+vertical-tabs-help-section-2-content = 点击右上角“更多 > 添加分类”新建分类，可将标签拖入分类；右键标签选择“从分类移除”可回到未分类。
+vertical-tabs-help-section-3-title = 3. 分类保存和导入
+vertical-tabs-help-section-3-content = 右键分类选择“保存分类”可将当前分类结构持久化；通过“更多 > 导入分类”可恢复已保存的分类。
+vertical-tabs-help-section-4-title = 4. PDF 阅读器自动内存优化
+vertical-tabs-help-section-4-content = 在插件设置中开启自动释放后，长时间未使用的 reader 标签会被自动关闭以释放内存。
