@@ -41,6 +41,8 @@ import {
 } from "../track/readerReleaseTimer";
 import { dispatchVtEvent } from "./events";
 import { initMainPaneDrop, destroyMainPaneDrop } from "../drag/mainPaneDrop";
+import { destroyPreviewState } from "../drag/dropPreview";
+import { destroyCategoryPreviewState } from "../drag/categoryPreview";
 
 function vtLog(msg: string): void {
   Zotero.logError(new Error("[BVT] " + msg));
@@ -252,6 +254,8 @@ export function destroyVerticalTabs(win: Window): void {
   destroyCategoryManager(win.document);
   destroySidebar(win.document);
   destroyMainPaneDrop(win.document);
+  destroyPreviewState(win.document);
+  destroyCategoryPreviewState(win.document);
   stopTracking();
 
   // Unregister prefs observers if no windows remain

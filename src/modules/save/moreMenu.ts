@@ -200,6 +200,7 @@ export function showMoreMenu(doc: Document, anchorEl: HTMLElement): void {
     }
     const target = e.target as Node;
     if (menu.contains(target)) return;
+    if (anchorEl.contains(target)) return;
     if (sidebar?.contains(target)) {
       closeMoreMenu(true);
       return;

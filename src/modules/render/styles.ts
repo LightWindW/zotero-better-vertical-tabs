@@ -158,9 +158,12 @@ export function getStyles(): string {
     #${SIDEBAR_ID} .vertical-tabs-category {
       display: grid;
       grid-template-rows: auto 1fr;
-      transition: grid-template-rows 0.3s ease-out;
+      transition: grid-template-rows 0.3s ease-out, outline-color 0.3s ease, background 0.3s ease;
       margin-bottom: 2px;
       position: relative;
+      outline: 1px dashed transparent;
+      outline-offset: -1px;
+      border-radius: 4px;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category-header {
@@ -208,16 +211,25 @@ export function getStyles(): string {
       grid-template-rows: auto 0fr;
     }
 
+    #${SIDEBAR_ID} .vertical-tabs-category.vt-category-preview {
+      grid-template-rows: auto var(--vt-category-preview-height, 1fr);
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-category.vt-category-preview.collapsed {
+      grid-template-rows: auto var(--vt-category-preview-height, 1fr);
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-category.vt-category-preview .vertical-tabs-items {
+      opacity: 1;
+    }
+
     #${SIDEBAR_ID} .vertical-tabs-category-header:hover {
       background: var(--material-hover, rgba(0, 0, 0, 0.04));
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category.drag-over {
       background: var(--material-selected, rgba(0, 0, 0, 0.05));
-      outline: 1px dashed #999;
-      outline-offset: -1px;
-      border-radius: 4px;
-      transition: none;
+      outline-color: #999;
     }
 
     /* Category reorder drop indicators */
@@ -285,7 +297,7 @@ export function getStyles(): string {
       cursor: pointer;
       gap: 8px;
       position: relative;
-      transition: padding 0.2s ease-out, gap 0.2s ease-out;
+      transition: padding 0.2s ease-out, gap 0.2s ease-out, transform 0.2s ease-out;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-item:hover {
@@ -329,31 +341,54 @@ export function getStyles(): string {
       opacity: 0.5;
     }
 
-    /* Drag reorder insertion indicators */
-    #${SIDEBAR_ID} .vertical-tabs-item.drop-before::before {
-      content: "";
-      position: absolute;
-      left: 8px;
-      right: 8px;
-      top: 0;
-      height: 2px;
-      background: #42614D;
-      border-radius: 1px;
-      z-index: 10;
-      pointer-events: none;
+    #${SIDEBAR_ID} .vertical-tabs-item.vt-drag-source-collapsed {
+      height: 0 !important;
+      min-height: 0 !important;
+      padding-top: 0 !important;
+      padding-bottom: 0 !important;
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+      overflow: hidden !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+      transition: none !important;
     }
 
-    #${SIDEBAR_ID} .vertical-tabs-item.drop-after::after {
+    #${SIDEBAR_ID} .vertical-tabs-item.vt-drop-preview-shift {
+      transform: translateY(var(--vt-drop-shift-y, 0px));
+      will-change: transform;
+    }
+
+    /* Drag reorder insertion indicators
+       Pseudo-elements are always present so we can fade opacity in/out.
+       Position is set immediately (no transition) to avoid the bar sliding
+       from the item edge to the gap center. */
+    #${SIDEBAR_ID} .vertical-tabs-item::before,
+    #${SIDEBAR_ID} .vertical-tabs-item::after {
       content: "";
       position: absolute;
       left: 8px;
       right: 8px;
-      bottom: 0;
       height: 2px;
       background: #42614D;
       border-radius: 1px;
       z-index: 10;
       pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-item::before {
+      top: var(--vt-drop-indicator-offset, 0);
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-item::after {
+      bottom: var(--vt-drop-indicator-offset, 0);
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-item.drop-before::before,
+    #${SIDEBAR_ID} .vertical-tabs-item.drop-after::after {
+      opacity: 1;
     }
 
     /* Close button: appears on hover, gradient right edge */
@@ -469,7 +504,14 @@ export function getStyles(): string {
       flex: 1;
       min-height: 32px;
       padding: 4px 0;
-      transition: background 0.15s ease;
+      transition: background 0.3s ease, outline-color 0.3s ease;
+      outline: 1px dashed transparent;
+      outline-offset: -1px;
+      position: relative;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-drop-zone.vt-drop-zone-preview {
+      min-height: var(--vt-category-preview-height, 32px);
     }
 
     #${SIDEBAR_ID} .vertical-tabs-drop-zone.vertical-tabs-drop-zone-empty {
@@ -481,8 +523,33 @@ export function getStyles(): string {
 
     #${SIDEBAR_ID} .vertical-tabs-drop-zone.drag-over {
       background: var(--material-selected, rgba(0, 0, 0, 0.08));
-      outline: 1px dashed #999;
-      outline-offset: -1px;
+      outline-color: #999;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-drop-zone.vt-drop-preview-empty,
+    #${SIDEBAR_ID} .vertical-tabs-drop-zone.vt-drop-preview-top-gap {
+      position: relative;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-drop-zone::before {
+      content: "";
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      top: var(--vt-drop-indicator-top-offset, 50%);
+      transform: translateY(-50%);
+      height: 2px;
+      background: #42614D;
+      border-radius: 1px;
+      z-index: 10;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-drop-zone.vt-drop-preview-empty::before,
+    #${SIDEBAR_ID} .vertical-tabs-drop-zone.vt-drop-preview-top-gap::before {
+      opacity: 1;
     }
 
     /* Collapsed (floating, not expanded): icon-only layout */
