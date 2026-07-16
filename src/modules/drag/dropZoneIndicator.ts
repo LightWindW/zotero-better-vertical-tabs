@@ -1,22 +1,18 @@
 /**
- * Drop-zone specific drop indicator positioning.
+ * Item drop indicator positioning for drop-zones and categories.
  *
- * In the uncategorized drop-zone we want the green insertion line to be
- * vertically centered inside the one-tag-height gap that is being opened,
- * instead of sitting at the edge of the target item. Category items keep
- * the edge behavior and do not use this module.
+ * Both the uncategorized drop-zone and category item lists use the same
+ * visual model: the green insertion line is vertically centered inside the
+ * one-tag-height gap that is being opened, instead of sitting at the edge of
+ * the target item. The line is always attached to an element that does *not*
+ * shift (the item above the gap, or the container's top edge) so it stays
+ * stationary while items below animate downward.
  */
 
 const INDICATOR_OFFSET_VAR = "--vt-drop-indicator-offset";
 const TOP_GAP_OFFSET_VAR = "--vt-drop-indicator-top-offset";
 const EMPTY_PREVIEW_CLASS = "vt-drop-preview-empty";
 const TOP_GAP_PREVIEW_CLASS = "vt-drop-preview-top-gap";
-
-function getDropZones(doc: Document): HTMLElement[] {
-  return Array.from(
-    doc.querySelectorAll(".vertical-tabs-drop-zone"),
-  ) as HTMLElement[];
-}
 
 export function setItemDropIndicator(
   row: HTMLElement,
@@ -35,9 +31,9 @@ export function clearItemDropIndicator(row: HTMLElement): void {
   row.classList.remove("drop-before", "drop-after");
 }
 
-function getDefaultItemHeight(dropZone: HTMLElement): number {
-  const win = dropZone.ownerDocument?.defaultView || (globalThis as any);
-  const computed = win.getComputedStyle(dropZone);
+export function getDefaultItemHeight(container: HTMLElement): number {
+  const win = container.ownerDocument?.defaultView || (globalThis as any);
+  const computed = win.getComputedStyle(container);
   const minHeight = computed.getPropertyValue("--vt-item-min-height");
   if (minHeight) {
     const parsed = parseInt(minHeight, 10);
@@ -46,9 +42,19 @@ function getDefaultItemHeight(dropZone: HTMLElement): number {
   return 55;
 }
 
+function clearEmptyIndicator(container: HTMLElement): void {
+  container.classList.remove(EMPTY_PREVIEW_CLASS);
+}
+
+function clearTopGapIndicator(container: HTMLElement): void {
+  container.classList.remove(TOP_GAP_PREVIEW_CLASS);
+  // Keep --vt-drop-indicator-top-offset so the pseudo-element fades out at
+  // its current position.
+}
+
 export function setEmptyDropZoneIndicator(dropZone: HTMLElement): void {
-  clearDropZoneEmptyIndicator(dropZone);
-  clearDropZoneTopGapIndicator(dropZone);
+  clearEmptyIndicator(dropZone);
+  clearTopGapIndicator(dropZone);
   dropZone.classList.add(EMPTY_PREVIEW_CLASS);
 
   // Position the green bar at "half a tag height down from the top of the
@@ -61,38 +67,39 @@ export function setEmptyDropZoneIndicator(dropZone: HTMLElement): void {
   dropZone.style.setProperty(TOP_GAP_OFFSET_VAR, `${offset}px`);
 }
 
-function clearDropZoneEmptyIndicator(dropZone: HTMLElement): void {
-  dropZone.classList.remove(EMPTY_PREVIEW_CLASS);
-}
-
 export function setTopGapIndicator(
-  dropZone: HTMLElement,
+  container: HTMLElement,
   shiftHeight: number,
 ): void {
-  clearDropZoneEmptyIndicator(dropZone);
-  clearDropZoneTopGapIndicator(dropZone);
-  dropZone.classList.add(TOP_GAP_PREVIEW_CLASS);
+  clearEmptyIndicator(container);
+  clearTopGapIndicator(container);
+  container.classList.add(TOP_GAP_PREVIEW_CLASS);
 
-  const win = dropZone.ownerDocument?.defaultView || (globalThis as any);
-  const computed = win.getComputedStyle(dropZone);
+  const win = container.ownerDocument?.defaultView || (globalThis as any);
+  const computed = win.getComputedStyle(container);
   const paddingTop = parseFloat(computed.paddingTop) || 0;
   const offset = paddingTop + Math.floor(shiftHeight / 2);
-  dropZone.style.setProperty(TOP_GAP_OFFSET_VAR, `${offset}px`);
+  container.style.setProperty(TOP_GAP_OFFSET_VAR, `${offset}px`);
 }
 
-function clearDropZoneTopGapIndicator(dropZone: HTMLElement): void {
-  dropZone.classList.remove(TOP_GAP_PREVIEW_CLASS);
-  // Keep --vt-drop-indicator-top-offset so the pseudo-element fades out at
-  // its current position.
+export function clearAllItemDropIndicators(doc: Document): void {
+  // Only touch elements that actually have an active indicator, instead of
+  // scanning every drop-zone and category container on every dragover.
+  doc
+    .querySelectorAll(
+      ".vertical-tabs-item.drop-before, .vertical-tabs-item.drop-after",
+    )
+    .forEach((el: Element) => clearItemDropIndicator(el as HTMLElement));
+  doc
+    .querySelectorAll(".vt-drop-preview-top-gap, .vt-drop-preview-empty")
+    .forEach((el: Element) =>
+      el.classList.remove(TOP_GAP_PREVIEW_CLASS, EMPTY_PREVIEW_CLASS),
+    );
 }
 
+/**
+ * @deprecated Use `clearAllItemDropIndicators` instead.
+ */
 export function clearAllDropZoneItemIndicators(doc: Document): void {
-  for (const dropZone of getDropZones(doc)) {
-    clearDropZoneEmptyIndicator(dropZone);
-    clearDropZoneTopGapIndicator(dropZone);
-    const items = dropZone.querySelectorAll(":scope > .vertical-tabs-item");
-    for (const item of items) {
-      clearItemDropIndicator(item as HTMLElement);
-    }
-  }
+  clearAllItemDropIndicators(doc);
 }

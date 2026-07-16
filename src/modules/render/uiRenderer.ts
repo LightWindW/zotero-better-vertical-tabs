@@ -25,8 +25,9 @@ import { isInternalVtDrag, VT_DRAG_MIME_TYPE } from "../drag/dropTarget";
 import { applyDropPreview, clearDropPreview } from "../drag/dropPreview";
 import { applyCategoryPreview } from "../drag/categoryPreview";
 import {
-  clearAllDropZoneItemIndicators,
+  clearAllItemDropIndicators,
   clearItemDropIndicator,
+  getDefaultItemHeight,
   setEmptyDropZoneIndicator,
   setItemDropIndicator,
   setTopGapIndicator,
@@ -71,9 +72,21 @@ function getDragSourceCategoryId(doc: Document): string | null {
   return (doc as any)[DRAG_SOURCE_CATEGORY_ID_KEY] || null;
 }
 
-function getDropZoneVisibleItems(dropZone: HTMLElement): HTMLElement[] {
+function setWrapperDragOver(wrapper: HTMLElement | null, doc: Document): void {
+  if (!wrapper) return;
+  doc
+    .querySelectorAll(
+      ".vertical-tabs-category.drag-over, .vertical-tabs-drop-zone.drag-over",
+    )
+    .forEach((el: Element) => {
+      if (el !== wrapper) el.classList.remove("drag-over");
+    });
+  wrapper.classList.add("drag-over");
+}
+
+function getContainerVisibleItems(container: HTMLElement): HTMLElement[] {
   const allItems = Array.from(
-    dropZone.querySelectorAll(":scope > .vertical-tabs-item"),
+    container.querySelectorAll(":scope > .vertical-tabs-item"),
   ) as HTMLElement[];
   return allItems.filter(
     (el) => !el.classList.contains("vt-drag-source-collapsed"),
@@ -84,7 +97,7 @@ function computeDropZoneInsertIndex(
   dropZone: HTMLElement,
   clientY: number,
 ): number {
-  const visibleItems = getDropZoneVisibleItems(dropZone);
+  const visibleItems = getContainerVisibleItems(dropZone);
   let insertIndex = 0;
   for (let i = 0; i < visibleItems.length; i++) {
     const rect = visibleItems[i].getBoundingClientRect();
@@ -110,9 +123,9 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
     if (targetItem) return;
 
     applyCategoryPreview(doc, dropZone, getDragSourceCategoryId(doc), 1);
-    clearAllDropZoneItemIndicators(doc);
+    clearAllItemDropIndicators(doc);
 
-    const visibleItems = getDropZoneVisibleItems(dropZone);
+    const visibleItems = getContainerVisibleItems(dropZone);
     const draggedTabId = getDraggedTabId(doc);
     if (!draggedTabId) return;
 
@@ -156,7 +169,7 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
   dropZone.addEventListener("dragleave", (e: DragEvent) => {
     if (!dropZone.contains(e.relatedTarget as Node)) {
       dropZone.classList.remove("drag-over");
-      clearAllDropZoneItemIndicators(doc);
+      clearAllItemDropIndicators(doc);
       clearDropPreview(doc);
     }
   });
@@ -165,12 +178,12 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
     if (!isInternalVtDrag(e.dataTransfer)) return;
     e.preventDefault();
     dropZone.classList.remove("drag-over");
-    clearAllDropZoneItemIndicators(doc);
+    clearAllItemDropIndicators(doc);
     clearDropPreview(doc);
     const dragData = e.dataTransfer?.getData("text/plain");
     if (!dragData) return;
 
-    const visibleItems = getDropZoneVisibleItems(dropZone);
+    const visibleItems = getContainerVisibleItems(dropZone);
     if (visibleItems.length === 0) {
       // Empty drop-zone: move the item into uncategorized at the end.
       dispatchVtEvent(dropZone, "vertical-tabs:reorder-item", {
@@ -506,24 +519,11 @@ function createItemElement(
       const rect = row.getBoundingClientRect();
       const midY = rect.top + rect.height / 2;
       const before = e.clientY < midY;
-      const category = row.closest(".vertical-tabs-category");
-      if (category) {
-        category
-          .querySelectorAll(
-            ".vertical-tabs-item.drop-before, .vertical-tabs-item.drop-after",
-          )
-          .forEach((el: Element) => {
-            el.classList.remove("drop-before", "drop-after");
-          });
-      }
 
       const container =
         row.closest(".vertical-tabs-items") ||
         row.closest(".vertical-tabs-drop-zone");
       if (!container) return;
-      const inDropZone = container.classList.contains(
-        "vertical-tabs-drop-zone",
-      );
 
       const draggedTabId = getDraggedTabId(doc);
       if (!draggedTabId) return;
@@ -538,6 +538,7 @@ function createItemElement(
           getDragSourceCategoryId(doc),
           1,
         );
+        setWrapperDragOver(targetWrapper as HTMLElement, doc);
       }
 
       const shiftHeight = applyDropPreview(doc, {
@@ -548,35 +549,31 @@ function createItemElement(
         draggedTabId,
       });
 
-      if (inDropZone) {
-        clearAllDropZoneItemIndicators(doc);
-        const dropZone = container as HTMLElement;
-        const visibleItems = getDropZoneVisibleItems(dropZone);
-        const rowIndex = visibleItems.indexOf(row);
-        if (before) {
-          if (rowIndex <= 0) {
-            setTopGapIndicator(dropZone, shiftHeight);
-          } else {
-            const prevItem = visibleItems[rowIndex - 1];
-            setItemDropIndicator(prevItem, false, shiftHeight);
-          }
+      // Use the same centered-gap indicator model for both categories and the
+      // uncategorized drop-zone. The green bar is attached to the element above
+      // the gap (or the container top edge) so it stays put while items below
+      // animate downward.
+      clearAllItemDropIndicators(doc);
+      const itemsContainer = container as HTMLElement;
+      const visibleItems = getContainerVisibleItems(itemsContainer);
+      const rowIndex = visibleItems.indexOf(row);
+      if (before) {
+        if (rowIndex <= 0) {
+          setTopGapIndicator(itemsContainer, shiftHeight);
         } else {
-          setItemDropIndicator(row, false, shiftHeight);
+          const prevItem = visibleItems[rowIndex - 1];
+          setItemDropIndicator(prevItem, false, shiftHeight);
         }
       } else {
-        row.classList.add(before ? "drop-before" : "drop-after");
+        setItemDropIndicator(row, false, shiftHeight);
       }
     });
 
     row.addEventListener("dragleave", (e: DragEvent) => {
-      const inDropZone = row.closest(".vertical-tabs-drop-zone") !== null;
-      if (inDropZone) {
-        clearItemDropIndicator(row);
-      } else {
-        row.classList.remove("drop-before", "drop-after");
-      }
+      clearItemDropIndicator(row);
       const sidebar = doc.getElementById(SIDEBAR_ID);
       if (!sidebar?.contains(e.relatedTarget as Node)) {
+        clearAllItemDropIndicators(doc);
         clearDropPreview(doc);
       }
     });
@@ -585,12 +582,8 @@ function createItemElement(
       if (!isInternalVtDrag(e.dataTransfer)) return;
       e.preventDefault();
       e.stopPropagation();
-      const inDropZone = row.closest(".vertical-tabs-drop-zone") !== null;
-      if (inDropZone) {
-        clearItemDropIndicator(row);
-      } else {
-        row.classList.remove("drop-before", "drop-after");
-      }
+      clearItemDropIndicator(row);
+      clearAllItemDropIndicators(doc);
       clearDropPreview(doc);
       const dragData = e.dataTransfer?.getData("text/plain");
       if (!dragData) return;
@@ -654,7 +647,7 @@ function createItemElement(
     row.classList.remove("dragging", "vt-drag-source-collapsed");
     setDraggedTabId(doc, null);
     setDragSourceCategoryId(doc, null);
-    clearAllDropZoneItemIndicators(doc);
+    clearAllItemDropIndicators(doc);
     clearDropPreview(doc);
   });
 
@@ -837,24 +830,87 @@ function createCategoryElement(
 
   wrapper.appendChild(header);
 
-  // Make the entire category area a drop target
+  const itemsContainer = createEl(doc, "div");
+  itemsContainer.className = "vertical-tabs-items";
+  for (const pdf of items) {
+    itemsContainer.appendChild(
+      createItemElement(doc, pdf, category.id, categoryColors),
+    );
+  }
+
+  // Handle gaps / empty space inside the item list. When the cursor is between
+  // items (or below the last item inside the expanded container) the event
+  // target is `.vertical-tabs-items`, not an item. We compute the insert index
+  // and use the same local shift preview as item rows, so the preview does not
+  // jump between item-level and category-level shifts.
+  itemsContainer.addEventListener("dragover", (e: DragEvent) => {
+    if (!isInternalVtDrag(e.dataTransfer)) return;
+    // Directly over an item: let the item's own listener handle it.
+    if ((e.target as Element).closest(".vertical-tabs-item")) return;
+    e.preventDefault();
+
+    const draggedTabId = getDraggedTabId(doc);
+    if (!draggedTabId) return;
+
+    applyCategoryPreview(doc, wrapper, getDragSourceCategoryId(doc), 1);
+    setWrapperDragOver(wrapper, doc);
+
+    const visibleItems = getContainerVisibleItems(itemsContainer);
+    if (visibleItems.length === 0) {
+      clearDropPreview(doc);
+      clearAllItemDropIndicators(doc);
+      setTopGapIndicator(itemsContainer, getDefaultItemHeight(itemsContainer));
+      return;
+    }
+
+    const insertIndex = computeDropZoneInsertIndex(itemsContainer, e.clientY);
+    if (insertIndex >= visibleItems.length) {
+      // Append-to-end: no item shift, indicator centered below the last item.
+      clearDropPreview(doc);
+      const lastItem = visibleItems[visibleItems.length - 1];
+      const shiftHeight = lastItem.offsetHeight || 0;
+      clearAllItemDropIndicators(doc);
+      setItemDropIndicator(lastItem, false, shiftHeight);
+      return;
+    }
+
+    const targetRow = visibleItems[insertIndex];
+    const shiftHeight = applyDropPreview(doc, {
+      type: "item",
+      container: itemsContainer,
+      targetRow,
+      before: true,
+      draggedTabId,
+    });
+
+    clearAllItemDropIndicators(doc);
+    if (insertIndex === 0) {
+      setTopGapIndicator(itemsContainer, shiftHeight);
+    } else {
+      const prevItem = visibleItems[insertIndex - 1];
+      setItemDropIndicator(prevItem, false, shiftHeight);
+    }
+  });
+
+  // Make the remaining category area (header / truly empty wrapper space) a
+  // drop target. When the cursor is over an item or inside the items container,
+  // the dedicated listeners above handle the preview.
   const onDragOver = (e: DragEvent) => {
     if (!isInternalVtDrag(e.dataTransfer)) return;
     e.preventDefault();
-    // Clear outlines from OTHER categories only
+
+    // If the cursor is over an item or inside the items container, dedicated
+    // listeners handle the local shift preview; do not fall back to
+    // category-level preview here.
+    const targetItem = (e.target as Element).closest(".vertical-tabs-item");
+    if (targetItem) return;
+    if (itemsContainer.contains(e.target as Node)) return;
+
+    // Highlight this category header / empty area.
     doc
       .querySelectorAll(".vertical-tabs-category.drag-over")
       .forEach((el: Element) => {
         if (el !== wrapper) el.classList.remove("drag-over");
-      });
-    // Clear lines from OTHER categories only
-    doc
-      .querySelectorAll(
-        ".vertical-tabs-item.drop-before, .vertical-tabs-item.drop-after",
-      )
-      .forEach((el: Element) => {
-        if (!wrapper.contains(el))
-          el.classList.remove("drop-before", "drop-after");
       });
     wrapper.classList.add("drag-over");
 
@@ -874,14 +930,7 @@ function createCategoryElement(
     // Only remove if we're actually leaving the wrapper
     if (!wrapper.contains(e.relatedTarget as Node)) {
       wrapper.classList.remove("drag-over");
-      // Clear all insertion lines when leaving this category
-      wrapper
-        .querySelectorAll(
-          ".vertical-tabs-item.drop-before, .vertical-tabs-item.drop-after",
-        )
-        .forEach((el: Element) =>
-          el.classList.remove("drop-before", "drop-after"),
-        );
+      clearAllItemDropIndicators(doc);
       clearDropPreview(doc);
     }
   };
@@ -889,6 +938,7 @@ function createCategoryElement(
     if (!isInternalVtDrag(e.dataTransfer)) return;
     e.preventDefault();
     wrapper.classList.remove("drag-over");
+    clearAllItemDropIndicators(doc);
     clearDropPreview(doc);
     const dragData = e.dataTransfer?.getData("text/plain");
     if (!dragData) return;
@@ -905,13 +955,6 @@ function createCategoryElement(
   wrapper.addEventListener("dragleave", onDragLeave);
   wrapper.addEventListener("drop", onDrop);
 
-  const itemsContainer = createEl(doc, "div");
-  itemsContainer.className = "vertical-tabs-items";
-  for (const pdf of items) {
-    itemsContainer.appendChild(
-      createItemElement(doc, pdf, category.id, categoryColors),
-    );
-  }
   wrapper.appendChild(itemsContainer);
 
   return wrapper;

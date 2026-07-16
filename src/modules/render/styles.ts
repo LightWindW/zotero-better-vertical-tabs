@@ -158,7 +158,7 @@ export function getStyles(): string {
     #${SIDEBAR_ID} .vertical-tabs-category {
       display: grid;
       grid-template-rows: auto 1fr;
-      transition: grid-template-rows 0.3s ease-out, outline-color 0.3s ease, background 0.3s ease;
+      transition: grid-template-rows 0s ease, outline-color 0.3s ease, background 0.3s ease;
       margin-bottom: 2px;
       position: relative;
       outline: 1px dashed transparent;
@@ -170,6 +170,9 @@ export function getStyles(): string {
       display: flex;
       align-items: center;
       min-height: 28px;
+      height: 36px;
+      box-sizing: border-box;
+      overflow: hidden;
       padding: 4px 12px 4px 10px;
       cursor: pointer;
       gap: 6px;
@@ -209,22 +212,17 @@ export function getStyles(): string {
 
     #${SIDEBAR_ID} .vertical-tabs-category.collapsed {
       grid-template-rows: auto 0fr;
+      transition: grid-template-rows 0s ease 0.15s, outline-color 0.3s ease, background 0.3s ease;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category.vt-category-preview {
       grid-template-rows: auto var(--vt-category-preview-height, 1fr);
+      transition: grid-template-rows 0s, outline-color 0.3s ease, background 0.3s ease;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category.vt-category-preview.collapsed {
       grid-template-rows: auto var(--vt-category-preview-height, 1fr);
-    }
-
-    #${SIDEBAR_ID} .vertical-tabs-category.vt-category-preview .vertical-tabs-items {
-      opacity: 1;
-    }
-
-    #${SIDEBAR_ID} .vertical-tabs-category-header:hover {
-      background: var(--material-hover, rgba(0, 0, 0, 0.04));
+      transition: grid-template-rows 0s, outline-color 0.3s ease, background 0.3s ease;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category.drag-over {
@@ -248,13 +246,17 @@ export function getStyles(): string {
     }
 
     #${SIDEBAR_ID} .vertical-tabs-chevron {
-      font-size: 12px;
       width: 14px;
-      text-align: center;
+      height: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       color: #6C6C6C;
-      display: inline-block;
-      transition: transform 0.15s ease-out, margin 0.2s ease-out;
+      font-size: 12px;
+      line-height: 1;
+      transition: transform 0.15s ease-out;
       transform: rotate(-90deg);
+      transform-origin: 50% 50%;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category.collapsed .vertical-tabs-chevron {
@@ -282,10 +284,17 @@ export function getStyles(): string {
       overflow: hidden;
       opacity: 1;
       transition: opacity 0.15s ease-out;
+      position: relative;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category.collapsed .vertical-tabs-items {
       opacity: 0;
+      transition: opacity 0.15s ease-out;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-category.vt-category-preview .vertical-tabs-items {
+      opacity: 1;
+      transition: opacity 0.15s ease-out;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-item {
@@ -552,6 +561,30 @@ export function getStyles(): string {
       opacity: 1;
     }
 
+    #${SIDEBAR_ID} .vertical-tabs-items.vt-drop-preview-top-gap {
+      position: relative;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-items::before {
+      content: "";
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      top: var(--vt-drop-indicator-top-offset, 50%);
+      transform: translateY(-50%);
+      height: 2px;
+      background: #42614D;
+      border-radius: 1px;
+      z-index: 10;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-items.vt-drop-preview-top-gap::before {
+      opacity: 1;
+    }
+
     /* Collapsed (floating, not expanded): icon-only layout */
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-header {
       padding: 6px 0;
@@ -568,13 +601,13 @@ export function getStyles(): string {
     }
 
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-category-header {
-      padding: 4px 0;
+      padding: 4px 0 4px 10px;
       gap: 0;
     }
 
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-chevron {
-      margin-left: 10px;
-      margin-right: 10px;
+      margin-left: 0;
+      margin-right: 0;
     }
 
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-item {

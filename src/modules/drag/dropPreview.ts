@@ -91,12 +91,13 @@ function computeDesiredShifted(target: DropPreviewTarget): {
       ? target.targetRow
       : target.targetRow.nextElementSibling;
 
-    // In the uncategorized drop-zone, dropping after the last item means
-    // appending to the end: there is nothing below to shift.
+    // In the uncategorized drop-zone or a category item list, dropping after
+    // the last item means appending to the end: there is nothing below to shift.
     if (
       !target.before &&
       !startRow &&
-      container.classList.contains("vertical-tabs-drop-zone")
+      (container.classList.contains("vertical-tabs-drop-zone") ||
+        container.classList.contains("vertical-tabs-items"))
     ) {
       const height = (target.targetRow as HTMLElement).offsetHeight || 0;
       return { elements: [], height };
