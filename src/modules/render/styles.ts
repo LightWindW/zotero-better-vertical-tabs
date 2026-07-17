@@ -217,16 +217,15 @@ export function getStyles(): string {
 
     #${SIDEBAR_ID} .vertical-tabs-category.vt-category-preview {
       grid-template-rows: auto var(--vt-category-preview-height, 1fr);
-      transition: grid-template-rows 0s, outline-color 0.3s ease, background 0.3s ease;
+      transition: grid-template-rows 0.2s ease, outline-color 0.3s ease, background 0.3s ease;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category.vt-category-preview.collapsed {
       grid-template-rows: auto var(--vt-category-preview-height, 1fr);
-      transition: grid-template-rows 0s, outline-color 0.3s ease, background 0.3s ease;
+      transition: grid-template-rows 0.2s ease, outline-color 0.3s ease, background 0.3s ease;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category.drag-over {
-      background: var(--material-selected, rgba(0, 0, 0, 0.05));
       outline-color: #999;
     }
 
@@ -521,6 +520,7 @@ export function getStyles(): string {
 
     #${SIDEBAR_ID} .vertical-tabs-drop-zone.vt-drop-zone-preview {
       min-height: var(--vt-category-preview-height, 32px);
+      transition: min-height 0.2s ease, background 0.3s ease, outline-color 0.3s ease;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-drop-zone.vertical-tabs-drop-zone-empty {
@@ -531,7 +531,6 @@ export function getStyles(): string {
     }
 
     #${SIDEBAR_ID} .vertical-tabs-drop-zone.drag-over {
-      background: var(--material-selected, rgba(0, 0, 0, 0.08));
       outline-color: #999;
     }
 
@@ -933,7 +932,6 @@ export function getStyles(): string {
       }
 
       #${SIDEBAR_ID} .vertical-tabs-category.drag-over {
-        background: var(--material-selected, rgba(255, 255, 255, 0.06));
         outline-color: #888;
         transition: none;
       }
@@ -943,7 +941,7 @@ export function getStyles(): string {
       }
 
       #${SIDEBAR_ID} .vertical-tabs-drop-zone.drag-over {
-        background: var(--material-selected, rgba(255, 255, 255, 0.08));
+        outline-color: #888;
       }
 
       #${SIDEBAR_ID} .vertical-tabs-separator {

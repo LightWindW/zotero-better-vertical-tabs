@@ -143,6 +143,10 @@ export function applyDropPreview(
 
 export function clearDropPreview(doc: Document): void {
   clearCategoryPreview(doc);
+  clearItemShiftPreview(doc);
+}
+
+export function clearItemShiftPreview(doc: Document): void {
   const state = (doc as any)[PREVIEW_STATE_KEY] as PreviewState | undefined;
   if (!state) return;
   for (const el of state.shifted) {

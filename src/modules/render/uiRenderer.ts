@@ -22,7 +22,11 @@ import { openItemAsNewTab } from "../track/tabOpener";
 import { dispatchVtEvent } from "../core/events";
 import { updateActiveCategoryHighlight } from "./categoryHighlight";
 import { isInternalVtDrag, VT_DRAG_MIME_TYPE } from "../drag/dropTarget";
-import { applyDropPreview, clearDropPreview } from "../drag/dropPreview";
+import {
+  applyDropPreview,
+  clearDropPreview,
+  clearItemShiftPreview,
+} from "../drag/dropPreview";
 import { applyCategoryPreview } from "../drag/categoryPreview";
 import {
   clearAllItemDropIndicators,
@@ -72,6 +76,34 @@ function getDragSourceCategoryId(doc: Document): string | null {
   return (doc as any)[DRAG_SOURCE_CATEGORY_ID_KEY] || null;
 }
 
+const DROP_RENDER_PENDING_KEY = "__vtDropRenderPending";
+const DROP_RENDER_TIMEOUT_KEY = "__vtDropRenderPendingTimeout";
+const DROP_RENDER_FALLBACK_MS = 500;
+
+function setDropRenderPending(doc: Document, pending: boolean): void {
+  const win = doc.defaultView;
+  const existing = (doc as any)[DROP_RENDER_TIMEOUT_KEY] as number | undefined;
+  if (existing && win) {
+    win.clearTimeout(existing);
+  }
+  delete (doc as any)[DROP_RENDER_TIMEOUT_KEY];
+  (doc as any)[DROP_RENDER_PENDING_KEY] = pending;
+  if (pending && win) {
+    const timeout = win.setTimeout(() => {
+      delete (doc as any)[DROP_RENDER_TIMEOUT_KEY];
+      if ((doc as any)[DROP_RENDER_PENDING_KEY]) {
+        clearDropPreview(doc);
+        (doc as any)[DROP_RENDER_PENDING_KEY] = false;
+      }
+    }, DROP_RENDER_FALLBACK_MS);
+    (doc as any)[DROP_RENDER_TIMEOUT_KEY] = timeout;
+  }
+}
+
+function isDropRenderPending(doc: Document): boolean {
+  return !!(doc as any)[DROP_RENDER_PENDING_KEY];
+}
+
 function setWrapperDragOver(wrapper: HTMLElement | null, doc: Document): void {
   if (!wrapper) return;
   doc
@@ -110,6 +142,20 @@ function computeDropZoneInsertIndex(
   return insertIndex;
 }
 
+function computeCategoryReorderBoundary(wrapper: HTMLElement): number {
+  const wrapperRect = wrapper.getBoundingClientRect();
+  const header = wrapper.querySelector(
+    ":scope > .vertical-tabs-category-header",
+  ) as HTMLElement | null;
+  if (!header) {
+    return wrapperRect.top + wrapperRect.height / 2;
+  }
+  const headerRect = header.getBoundingClientRect();
+  // The header itself counts as the "before" region. Split only the area
+  // below the header (items / preview blank space) in half.
+  return headerRect.bottom + (wrapperRect.bottom - headerRect.bottom) / 2;
+}
+
 function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
   dropZone.addEventListener("dragover", (e: DragEvent) => {
     if (!isInternalVtDrag(e.dataTransfer)) return;
@@ -131,7 +177,7 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
 
     if (visibleItems.length === 0) {
       setEmptyDropZoneIndicator(dropZone);
-      clearDropPreview(doc);
+      clearItemShiftPreview(doc);
       return;
     }
 
@@ -139,7 +185,7 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
     if (insertIndex >= visibleItems.length) {
       // Blank append area below the last tag: no item shift, indicator centered
       // in the one-tag-height blank space.
-      clearDropPreview(doc);
+      clearItemShiftPreview(doc);
       const lastItem = visibleItems[visibleItems.length - 1];
       const shiftHeight = lastItem.offsetHeight || 0;
       setItemDropIndicator(lastItem, false, shiftHeight);
@@ -167,10 +213,18 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
   });
 
   dropZone.addEventListener("dragleave", (e: DragEvent) => {
-    if (!dropZone.contains(e.relatedTarget as Node)) {
+    const related = e.relatedTarget as Node | null;
+    if (!dropZone.contains(related)) {
       dropZone.classList.remove("drag-over");
+      clearItemShiftPreview(doc);
       clearAllItemDropIndicators(doc);
-      clearDropPreview(doc);
+      // Only tear down category preview when we really leave the sidebar.
+      // Moving from the drop-zone into a category should let the next
+      // dragover smoothly transition the height instead of jumping.
+      const sidebar = doc.getElementById(SIDEBAR_ID);
+      if (!sidebar?.contains(related) && !isDropRenderPending(doc)) {
+        clearDropPreview(doc);
+      }
     }
   });
 
@@ -179,7 +233,6 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
     e.preventDefault();
     dropZone.classList.remove("drag-over");
     clearAllItemDropIndicators(doc);
-    clearDropPreview(doc);
     const dragData = e.dataTransfer?.getData("text/plain");
     if (!dragData) return;
 
@@ -192,6 +245,7 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
         targetTabId: "",
         before: false,
       });
+      setDropRenderPending(doc, true);
       return;
     }
 
@@ -206,6 +260,7 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
           targetTabId,
           before: false,
         });
+        setDropRenderPending(doc, true);
       }
       return;
     }
@@ -218,6 +273,7 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
         targetTabId,
         before: true,
       });
+      setDropRenderPending(doc, true);
     }
   });
 }
@@ -573,8 +629,10 @@ function createItemElement(
       clearItemDropIndicator(row);
       const sidebar = doc.getElementById(SIDEBAR_ID);
       if (!sidebar?.contains(e.relatedTarget as Node)) {
-        clearAllItemDropIndicators(doc);
-        clearDropPreview(doc);
+        if (!isDropRenderPending(doc)) {
+          clearAllItemDropIndicators(doc);
+          clearDropPreview(doc);
+        }
       }
     });
 
@@ -584,7 +642,6 @@ function createItemElement(
       e.stopPropagation();
       clearItemDropIndicator(row);
       clearAllItemDropIndicators(doc);
-      clearDropPreview(doc);
       const dragData = e.dataTransfer?.getData("text/plain");
       if (!dragData) return;
       const rect = row.getBoundingClientRect();
@@ -596,6 +653,7 @@ function createItemElement(
         targetTabId: pdf.tabId,
         before: insertBefore,
       });
+      setDropRenderPending(doc, true);
     });
   }
 
@@ -606,6 +664,7 @@ function createItemElement(
   });
 
   row.addEventListener("dragstart", (event: DragEvent) => {
+    setDropRenderPending(doc, false);
     row.classList.add("dragging");
     const draggedId = pdf.tabId || String(pdf.itemId);
     setDraggedTabId(doc, draggedId);
@@ -644,11 +703,14 @@ function createItemElement(
   });
 
   row.addEventListener("dragend", () => {
-    row.classList.remove("dragging", "vt-drag-source-collapsed");
+    row.classList.remove("dragging");
     setDraggedTabId(doc, null);
     setDragSourceCategoryId(doc, null);
-    clearAllItemDropIndicators(doc);
-    clearDropPreview(doc);
+    if (!isDropRenderPending(doc)) {
+      row.classList.remove("vt-drag-source-collapsed");
+      clearAllItemDropIndicators(doc);
+      clearDropPreview(doc);
+    }
   });
 
   row.addEventListener("mouseenter", () => {
@@ -757,11 +819,10 @@ function createCategoryElement(
         }
       });
 
-    const rect = wrapper.getBoundingClientRect();
-    const midY = rect.top + rect.height / 2;
+    const boundaryY = computeCategoryReorderBoundary(wrapper);
     wrapper.classList.remove("cat-drop-before", "cat-drop-after");
     wrapper.classList.add(
-      e.clientY < midY ? "cat-drop-before" : "cat-drop-after",
+      e.clientY < boundaryY ? "cat-drop-before" : "cat-drop-after",
     );
   });
 
@@ -785,11 +846,10 @@ function createCategoryElement(
 
     if (draggedCatId === category.id) return;
 
-    const rect = wrapper.getBoundingClientRect();
-    const midY = rect.top + rect.height / 2;
+    const boundaryY = computeCategoryReorderBoundary(wrapper);
     dispatchVtEvent(wrapper, "vertical-tabs:reorder-categories", {
       categoryId: draggedCatId,
-      insertBeforeCategoryId: e.clientY < midY ? category.id : null,
+      insertBeforeCategoryId: e.clientY < boundaryY ? category.id : null,
     });
   });
 
@@ -857,7 +917,7 @@ function createCategoryElement(
 
     const visibleItems = getContainerVisibleItems(itemsContainer);
     if (visibleItems.length === 0) {
-      clearDropPreview(doc);
+      clearItemShiftPreview(doc);
       clearAllItemDropIndicators(doc);
       setTopGapIndicator(itemsContainer, getDefaultItemHeight(itemsContainer));
       return;
@@ -866,7 +926,7 @@ function createCategoryElement(
     const insertIndex = computeDropZoneInsertIndex(itemsContainer, e.clientY);
     if (insertIndex >= visibleItems.length) {
       // Append-to-end: no item shift, indicator centered below the last item.
-      clearDropPreview(doc);
+      clearItemShiftPreview(doc);
       const lastItem = visibleItems[visibleItems.length - 1];
       const shiftHeight = lastItem.offsetHeight || 0;
       clearAllItemDropIndicators(doc);
@@ -927,11 +987,20 @@ function createCategoryElement(
     }
   };
   const onDragLeave = (e: DragEvent) => {
-    // Only remove if we're actually leaving the wrapper
-    if (!wrapper.contains(e.relatedTarget as Node)) {
+    const related = e.relatedTarget as Node | null;
+    // Only remove if we're actually leaving the wrapper.
+    if (!wrapper.contains(related)) {
       wrapper.classList.remove("drag-over");
+      clearItemShiftPreview(doc);
       clearAllItemDropIndicators(doc);
-      clearDropPreview(doc);
+      // Only tear down category preview when we really leave the sidebar.
+      // Moving from this category into another category/drop-zone inside the
+      // sidebar should let applyCategoryPreview smoothly release the old
+      // container, instead of clearing it instantly and causing a height jump.
+      const sidebar = doc.getElementById(SIDEBAR_ID);
+      if (!sidebar?.contains(related) && !isDropRenderPending(doc)) {
+        clearDropPreview(doc);
+      }
     }
   };
   const onDrop = (e: DragEvent) => {
@@ -939,7 +1008,6 @@ function createCategoryElement(
     e.preventDefault();
     wrapper.classList.remove("drag-over");
     clearAllItemDropIndicators(doc);
-    clearDropPreview(doc);
     const dragData = e.dataTransfer?.getData("text/plain");
     if (!dragData) return;
     // dragData is tabId (string) or itemId (number) for backward compat
@@ -949,6 +1017,7 @@ function createCategoryElement(
       tabId: byTab ? dragData : undefined,
       categoryId: category.id,
     });
+    setDropRenderPending(doc, true);
   };
 
   wrapper.addEventListener("dragover", onDragOver);
@@ -1284,6 +1353,10 @@ export function subscribeToRenderEvents(
       });
     }
     renderCategories(doc, container, data, pdfs);
+    if (isDropRenderPending(doc)) {
+      clearDropPreview(doc);
+      setDropRenderPending(doc, false);
+    }
   };
 
   const readerIndicatorHandler = () => updateReaderLoadedIndicators(doc);
