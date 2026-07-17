@@ -211,22 +211,19 @@ export function getStyles(): string {
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category.collapsed {
-      grid-template-rows: auto 0fr;
-      transition: grid-template-rows 0s ease 0.15s, outline-color 0.3s ease, background 0.3s ease;
-    }
-
-    #${SIDEBAR_ID} .vertical-tabs-category.vt-category-preview {
-      grid-template-rows: auto var(--vt-category-preview-height, 1fr);
-      transition: grid-template-rows 0.2s ease, outline-color 0.3s ease, background 0.3s ease;
-    }
-
-    #${SIDEBAR_ID} .vertical-tabs-category.vt-category-preview.collapsed {
-      grid-template-rows: auto var(--vt-category-preview-height, 1fr);
-      transition: grid-template-rows 0.2s ease, outline-color 0.3s ease, background 0.3s ease;
+      transition: outline-color 0.3s ease, background 0.3s ease;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category.drag-over {
       outline-color: #999;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-category.vt-category-preview {
+      transition: outline-color 0.3s ease, background 0.3s ease;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-category.vt-height-animating {
+      transition: outline-color 0.3s ease, background 0.3s ease;
     }
 
     /* Category reorder drop indicators */
@@ -252,7 +249,7 @@ export function getStyles(): string {
       justify-content: center;
       color: #6C6C6C;
       font-size: 12px;
-      line-height: 1;
+      line-height: 14px;
       transition: transform 0.15s ease-out;
       transform: rotate(-90deg);
       transform-origin: 50% 50%;
@@ -280,20 +277,32 @@ export function getStyles(): string {
 
     #${SIDEBAR_ID} .vertical-tabs-items {
       padding: 2px 0;
+      box-sizing: border-box;
       overflow: hidden;
       opacity: 1;
-      transition: opacity 0.15s ease-out;
+      transition: height 0.45s ease, opacity 0.15s ease-out;
       position: relative;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category.collapsed .vertical-tabs-items {
+      height: 0;
       opacity: 0;
       transition: opacity 0.15s ease-out;
     }
 
+    /* Must come AFTER the .collapsed rule: both selectors have equal
+       specificity, so the later one wins while a category is both collapsed
+       and animating. The transition shorthand must repeat the full list —
+       writing only "opacity 0s" here would replace the whole list and kill
+       the height transition from the base rule. */
+    #${SIDEBAR_ID} .vertical-tabs-category.vt-height-animating .vertical-tabs-items {
+      opacity: 1;
+      transition: height 0.45s ease, opacity 0s;
+    }
+
     #${SIDEBAR_ID} .vertical-tabs-category.vt-category-preview .vertical-tabs-items {
       opacity: 1;
-      transition: opacity 0.15s ease-out;
+      transition: height 0.45s ease, opacity 0.15s ease-out;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-item {
@@ -520,7 +529,7 @@ export function getStyles(): string {
 
     #${SIDEBAR_ID} .vertical-tabs-drop-zone.vt-drop-zone-preview {
       min-height: var(--vt-category-preview-height, 32px);
-      transition: min-height 0.2s ease, background 0.3s ease, outline-color 0.3s ease;
+      transition: min-height 0.45s ease, background 0.3s ease, outline-color 0.3s ease;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-drop-zone.vertical-tabs-drop-zone-empty {

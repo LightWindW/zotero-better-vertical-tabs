@@ -21,6 +21,10 @@ import {
 import { openItemAsNewTab } from "../track/tabOpener";
 import { dispatchVtEvent } from "../core/events";
 import { updateActiveCategoryHighlight } from "./categoryHighlight";
+import {
+  cancelCategoryCollapseAnimation,
+  toggleCategoryCollapseAnimated,
+} from "./categoryCollapse";
 import { isInternalVtDrag, VT_DRAG_MIME_TYPE } from "../drag/dropTarget";
 import {
   applyDropPreview,
@@ -789,7 +793,10 @@ function createCategoryElement(
 
   // ── Category drag reorder ──
   header.addEventListener("dragstart", (e: DragEvent) => {
-    // Auto-collapse on drag start
+    // Auto-collapse on drag start, and cancel any in-progress expand/collapse
+    // animation so the inline grid-template-rows does not override the
+    // collapsed state during category reordering.
+    cancelCategoryCollapseAnimation(wrapper, { reset: true });
     wrapper.classList.add("collapsed");
     const dt = e.dataTransfer;
     if (dt) {
@@ -869,8 +876,7 @@ function createCategoryElement(
   header.appendChild(count);
 
   header.addEventListener("click", () => {
-    const collapsed = !wrapper.classList.contains("collapsed");
-    wrapper.classList.toggle("collapsed");
+    const collapsed = toggleCategoryCollapseAnimated(doc, wrapper);
     dispatchVtEvent(wrapper, "vertical-tabs:category-toggle-collapsed", {
       categoryId: category.id,
       collapsed,
