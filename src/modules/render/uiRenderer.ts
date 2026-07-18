@@ -20,9 +20,13 @@ import {
 } from "../track/readerRelease";
 import { openItemAsNewTab } from "../track/tabOpener";
 import { dispatchVtEvent } from "../core/events";
-import { updateActiveCategoryHighlight } from "./categoryHighlight";
+import {
+  HIGHLIGHT_CLASS,
+  updateActiveCategoryHighlight,
+} from "./categoryHighlight";
 import {
   cancelCategoryCollapseAnimation,
+  COLLAPSE_ANIMATION_MS,
   toggleCategoryCollapseAnimated,
 } from "./categoryCollapse";
 import { isInternalVtDrag, VT_DRAG_MIME_TYPE } from "../drag/dropTarget";
@@ -1466,6 +1470,16 @@ export function subscribeToRenderEvents(
           // intermediate expanded frame is ever shown; the persisted
           // collapsed state stays untouched.
           target.classList.remove("collapsed");
+          // The folded-header highlight bar should stay hidden while the
+          // category is (temporarily) expanded: remove it before the first
+          // paint and bring it back — fading in — once the collapse
+          // animation completes. updateActiveCategoryHighlight recomputes
+          // from the live DOM, so it stays correct if the user re-expands
+          // or another render happens in between.
+          target.classList.remove(HIGHLIGHT_CLASS);
+          doc.defaultView?.setTimeout(() => {
+            if (target.isConnected) updateActiveCategoryHighlight(doc);
+          }, COLLAPSE_ANIMATION_MS);
           void target.offsetHeight;
           toggleCategoryCollapseAnimated(doc, target);
         }

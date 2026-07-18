@@ -193,7 +193,11 @@ export function getStyles(): string {
     #${SIDEBAR_ID} .vertical-tabs-category::before {
       content: "";
       position: absolute;
-      top: 4.5px;
+      /* Center the 26px highlight bar on the 36px-tall header: (36-26)/2.
+         The collapsed wrapper below the header keeps a few px of items
+         padding residue, so centering must target the header, not the
+         wrapper. */
+      top: 6px;
       left: 0;
       width: 100%;
       height: 26px;
@@ -208,6 +212,13 @@ export function getStyles(): string {
 
     #${SIDEBAR_ID} .vertical-tabs-category.has-active-reader-folded::before {
       opacity: 1;
+    }
+
+    /* Drag preview expands a collapsed category: the folded-header highlight
+       bar fades out (the highlight moves back to the active row). When the
+       preview ends and the category folds again, the bar fades back in. */
+    #${SIDEBAR_ID} .vertical-tabs-category.has-active-reader-folded.vt-category-preview::before {
+      opacity: 0;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category.collapsed {
@@ -346,6 +357,34 @@ export function getStyles(): string {
     #${SIDEBAR_ID} .vertical-tabs-item.active:hover {
       background: #fff;
       box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+    }
+
+    /* While a category is collapsed, the active row's highlight stays
+       transparent — the folded-header highlight bar takes over.
+       - Collapse start: .collapsed is added, the highlight fades out over
+         0.2s in cross-fade with the header bar fading in.
+       - Collapse finish: the highlight does NOT snap back (an earlier
+         version scoped this to .vt-height-animating, which ends exactly at
+         finish; the background then reappeared during the items' 150ms
+         opacity fade, visible through the ~4px padding residue, before
+         fading out again).
+       - Expand start: .collapsed is removed, the highlight returns with the
+         row. Placed after .active:hover so equal specificity wins. */
+    #${SIDEBAR_ID} .vertical-tabs-category.collapsed .vertical-tabs-item.active {
+      background: transparent;
+      box-shadow: none;
+      transition: background 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    /* Drag preview expands a collapsed category: hand the highlight back to
+       the active row (fades in over 0.2s). When the preview ends and the
+       category folds again, the .collapsed rule above takes over and the
+       highlight fades back out. One specificity level above that rule, so
+       source order does not matter. */
+    #${SIDEBAR_ID} .vertical-tabs-category.collapsed.vt-category-preview .vertical-tabs-item.active {
+      background: #fff;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+      transition: background 0.2s ease, box-shadow 0.2s ease;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-item.reader-loaded {
@@ -532,6 +571,68 @@ export function getStyles(): string {
       background: #DBDBDB;
     }
 
+    /* Home button block: shown at the top of the sidebar while the native
+       tab bar is hidden. Geometry mirrors .vertical-tabs-item so the button
+       aligns with the tab rows below it. */
+    #${SIDEBAR_ID} .vertical-tabs-home-block {
+      flex: 0 0 auto;
+      overflow: hidden;
+      box-sizing: border-box;
+      transition: height 0.3s ease, opacity 0.3s ease;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-home-btn {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      min-height: var(--vt-item-min-height, 36px);
+      padding: 4px 12px 4px 9px;
+      cursor: pointer;
+      gap: 8px;
+      position: relative;
+      border-radius: 4px;
+      box-sizing: border-box;
+      transition: padding 0.2s ease-out, gap 0.2s ease-out;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-home-btn:hover {
+      background: var(--material-hover, rgba(0, 0, 0, 0.04));
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-home-btn.active {
+      background: #fff;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-home-btn.active:hover {
+      background: #fff;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-home-btn-icon {
+      width: 16px;
+      height: 16px;
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: margin 0.2s ease-out;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-home-btn-title {
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-home-separator {
+      height: 1px;
+      margin: 4px 12px;
+      background: #DBDBDB;
+    }
+
     /* Drop zone: area below categories for removing items from categories */
     #${SIDEBAR_ID} .vertical-tabs-drop-zone {
       flex: 1;
@@ -634,7 +735,8 @@ export function getStyles(): string {
       margin-right: 0;
     }
 
-    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-item {
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-item,
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-home-btn {
       padding: 4px 0;
       gap: 0;
     }
@@ -648,7 +750,8 @@ export function getStyles(): string {
     }
 
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-item-icon,
-    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-item-icon-fallback {
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-item-icon-fallback,
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-home-btn-icon {
       margin-left: 9px;
       margin-right: 9px;
     }
@@ -666,7 +769,8 @@ export function getStyles(): string {
       min-height: 20px;
     }
 
-    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-separator {
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-separator,
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-home-separator {
       margin: 4px 6px;
     }
 
@@ -676,6 +780,7 @@ export function getStyles(): string {
     #${SIDEBAR_ID} .vertical-tabs-category-name,
     #${SIDEBAR_ID} .vertical-tabs-count,
     #${SIDEBAR_ID} .vertical-tabs-item-content,
+    #${SIDEBAR_ID} .vertical-tabs-home-btn-title,
     #${SIDEBAR_ID} .vertical-tabs-empty {
       opacity: var(--vt-content-opacity, 1);
     }
@@ -933,16 +1038,24 @@ export function getStyles(): string {
       }
 
       #${SIDEBAR_ID} .vertical-tabs-category-header:hover,
-      #${SIDEBAR_ID} .vertical-tabs-item:hover {
+      #${SIDEBAR_ID} .vertical-tabs-item:hover,
+      #${SIDEBAR_ID} .vertical-tabs-home-btn:hover {
         background: var(--material-hover, rgba(255, 255, 255, 0.05));
       }
 
-      #${SIDEBAR_ID} .vertical-tabs-item.active {
+      #${SIDEBAR_ID} .vertical-tabs-item.active,
+      #${SIDEBAR_ID} .vertical-tabs-home-btn.active {
         background: #626262;
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
       }
 
-      #${SIDEBAR_ID} .vertical-tabs-item.active:hover {
+      #${SIDEBAR_ID} .vertical-tabs-category.collapsed.vt-category-preview .vertical-tabs-item.active {
+        background: #626262;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+      }
+
+      #${SIDEBAR_ID} .vertical-tabs-item.active:hover,
+      #${SIDEBAR_ID} .vertical-tabs-home-btn.active:hover {
         background: #626262;
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
       }
@@ -969,7 +1082,8 @@ export function getStyles(): string {
         outline-color: #888;
       }
 
-      #${SIDEBAR_ID} .vertical-tabs-separator {
+      #${SIDEBAR_ID} .vertical-tabs-separator,
+      #${SIDEBAR_ID} .vertical-tabs-home-separator {
         background: #555;
       }
 

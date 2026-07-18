@@ -1,4 +1,4 @@
-const HIGHLIGHT_CLASS = "has-active-reader-folded";
+export const HIGHLIGHT_CLASS = "has-active-reader-folded";
 
 export function updateActiveCategoryHighlight(doc: Document): void {
   // Reset all categories first.

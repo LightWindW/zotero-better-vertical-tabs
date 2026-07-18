@@ -18,7 +18,8 @@
 
 const ANIMATION_CLASS = "vt-height-animating";
 const ITEMS_SELECTOR = ":scope > .vertical-tabs-items";
-const ANIMATION_MS = 450;
+export const COLLAPSE_ANIMATION_MS = 450;
+const ANIMATION_MS = COLLAPSE_ANIMATION_MS;
 
 interface CollapseState {
   timeout: number;

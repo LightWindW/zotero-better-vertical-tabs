@@ -10,3 +10,4 @@ pref("verticalTabs.releaseReaderEnabled", true);
 pref("verticalTabs.releaseReaderMinutes", 120);
 pref("verticalTabs.tabHeight", "loose");
 pref("verticalTabs.enableBlur", false);
+pref("verticalTabs.nativeTabBarHidden", false);

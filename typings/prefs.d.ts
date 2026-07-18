@@ -19,6 +19,7 @@ declare namespace _ZoteroTypes {
       "verticalTabs.releaseReaderMinutes": number;
       "verticalTabs.tabHeight": string;
       "verticalTabs.enableBlur": boolean;
+      "verticalTabs.nativeTabBarHidden": boolean;
     };
   }
 }

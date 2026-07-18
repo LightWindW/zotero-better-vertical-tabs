@@ -43,6 +43,13 @@ import { dispatchVtEvent } from "./events";
 import { initMainPaneDrop, destroyMainPaneDrop } from "../drag/mainPaneDrop";
 import { destroyPreviewState } from "../drag/dropPreview";
 import { destroyCategoryPreviewState } from "../drag/categoryPreview";
+import {
+  applyNativeTabBarVisibility,
+  destroyNativeTabBarToggle,
+  initNativeTabBarObserver,
+  isNativeTabBarHidden,
+} from "../sidebar/nativeTabBarToggle";
+import { showLibraryHomeButton } from "../sidebar/libraryHomeButton";
 
 function vtLog(msg: string): void {
   Zotero.logError(new Error("[BVT] " + msg));
@@ -117,6 +124,12 @@ export async function initVerticalTabs(
             setSidebarVisibility(w.document, true);
             initMainPaneDrop(w.document);
             ws.visible = true;
+            // Re-apply the hidden native tab bar + home button if persisted.
+            applyNativeTabBarVisibility(w.document);
+            if (isNativeTabBarHidden()) {
+              showLibraryHomeButton(w.document, false);
+            }
+            initNativeTabBarObserver(w.document);
             // Re-scan existing tabs to re-inject reader VT
             scanOpenedTabs();
             dispatchVtEvent(w.document, "vertical-tabs:visibility-changed", {
@@ -125,6 +138,8 @@ export async function initVerticalTabs(
           } else {
             destroyMainPaneDrop(w.document);
             stopTracking();
+            // Force-restore the native tab bar so the user keeps a tab UI.
+            destroyNativeTabBarToggle(w.document);
             destroySidebar(w.document);
             ws.visible = false;
           }
@@ -235,6 +250,15 @@ export async function initVerticalTabs(
   // Enable dragging items from the main Zotero item pane into the VT sidebar.
   initMainPaneDrop(win.document);
 
+  // Restore the native tab bar visibility from prefs. When hidden, show the
+  // VT home button instantly (no animation) and keep it in sync with the
+  // native library tab via a MutationObserver.
+  applyNativeTabBarVisibility(win.document);
+  if (isNativeTabBarHidden()) {
+    showLibraryHomeButton(win.document, false);
+  }
+  initNativeTabBarObserver(win.document);
+
   // Trigger initial render
   dispatchVtEvent(win.document, "vertical-tabs:visibility-changed", {
     visible,
@@ -247,6 +271,7 @@ export function destroyVerticalTabs(win: Window): void {
 
   destroyAutoClose();
   destroyReaderReleaseTimer();
+  destroyNativeTabBarToggle(win.document);
 
   unsubscribeFromRenderEvents(win.document);
   destroyHoverCard(win.document);

@@ -62,3 +62,8 @@ export function helpIcon(color: string): string {
 export function arrowIcon(): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="6.5" height="6.5" viewBox="0 0 159 159" fill="none" stroke="currentColor" stroke-width="12.6042" stroke-linecap="round" stroke-miterlimit="8"><path d="M6.5 6.5 152.142 79.32"/><path d="M6.5 152.32 152.142 79.4988"/></svg>`;
 }
+
+/** Tab-bar glyph used by the "hide/show native tabs" more-menu entry. */
+export function tabsIcon(color: string): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="${color}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12V5.5a2 2 0 0 1 2-2h2.6l1.4 2h3a2 2 0 0 1 2 2V12"/><line x1="1.5" y1="12.5" x2="14.5" y2="12.5"/></svg>`;
+}

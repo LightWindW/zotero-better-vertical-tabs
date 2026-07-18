@@ -3,7 +3,17 @@ import { getString } from "../../utils/locale";
 import { getContextMenuColors, isDarkMode } from "../render/colorUtils";
 import { getPopupStyleSheet } from "../render/popupStyleUtils";
 import { dispatchVtEvent } from "../core/events";
-import { helpIcon, importIcon, plusIcon, settingIcon } from "../ui/iconSvgs";
+import {
+  helpIcon,
+  importIcon,
+  plusIcon,
+  settingIcon,
+  tabsIcon,
+} from "../ui/iconSvgs";
+import {
+  isNativeTabBarHidden,
+  toggleNativeTabBar,
+} from "../sidebar/nativeTabBarToggle";
 import {
   scheduleCollapse,
   setContextMenuOpen,
@@ -56,6 +66,13 @@ export function showMoreMenu(doc: Document, anchorEl: HTMLElement): void {
       icon: iconHtml(importIcon(iconColor)),
       label: getString("vertical-tabs-import-category"),
       action: () => dispatchVtEvent(doc, "vertical-tabs:show-import-dialog"),
+    },
+    {
+      icon: iconHtml(tabsIcon(iconColor)),
+      label: isNativeTabBarHidden()
+        ? getString("vertical-tabs-show-native-tab-bar")
+        : getString("vertical-tabs-hide-native-tab-bar"),
+      action: () => toggleNativeTabBar(doc),
     },
     {
       divider: true,
