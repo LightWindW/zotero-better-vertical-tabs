@@ -46,3 +46,19 @@ export function plusIcon(color: string): string {
 export function helpIcon(color: string): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="${color}"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z"/></svg>`;
 }
+
+/**
+ * Category collapse/expand arrow (from addon/content/icons/arrow.svg).
+ *
+ * Unlike the other icons this one uses `currentColor` instead of a color
+ * parameter: the chevron's color is driven by CSS (`color: #6C6C6C`, with a
+ * `#A2A2A2` override inside the dark-mode @media block), so theme switching
+ * stays pure CSS and needs no re-render.
+ *
+ * The source file's group/matrix transforms are folded into the path
+ * coordinates, so the chevron (a right-pointing ">") sits centered in the
+ * 159x159 viewBox. Rotate via CSS for the expanded (down) state.
+ */
+export function arrowIcon(): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="6.5" height="6.5" viewBox="0 0 159 159" fill="none" stroke="currentColor" stroke-width="12.6042" stroke-linecap="round" stroke-miterlimit="8"><path d="M6.5 6.5 152.142 79.32"/><path d="M6.5 152.32 152.142 79.4988"/></svg>`;
+}

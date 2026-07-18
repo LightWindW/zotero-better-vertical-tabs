@@ -244,19 +244,35 @@ export function getStyles(): string {
     #${SIDEBAR_ID} .vertical-tabs-chevron {
       width: 14px;
       height: 14px;
+      /* Never let the flex row squeeze the chevron box. In the 35px collapsed
+         sidebar a shrinking box would shift the arrow left of the item-icon
+         column center (17px) — the old text "<" suffered from exactly this. */
+      flex: 0 0 auto;
       display: flex;
       align-items: center;
       justify-content: center;
       color: #6C6C6C;
-      font-size: 12px;
-      line-height: 14px;
       transition: transform 0.15s ease-out;
-      transform: rotate(-90deg);
+      /* The inline SVG is a right-pointing ">": expanded shows it rotated
+         down, collapsed shows it unrotated (right). */
+      transform: rotate(90deg);
       transform-origin: 50% 50%;
     }
 
+    #${SIDEBAR_ID} .vertical-tabs-chevron svg {
+      display: block;
+    }
+
     #${SIDEBAR_ID} .vertical-tabs-category.collapsed .vertical-tabs-chevron {
-      transform: rotate(-180deg);
+      transform: rotate(0deg);
+    }
+
+    /* Drag preview expands even a collapsed category: point the chevron down
+       while the preview class is present. Equal specificity with the
+       .collapsed rule above, so this must come after it. The transform
+       transition on .vertical-tabs-chevron animates the rotation both ways. */
+    #${SIDEBAR_ID} .vertical-tabs-category.vt-category-preview .vertical-tabs-chevron {
+      transform: rotate(90deg);
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category-name {

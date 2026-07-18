@@ -26,6 +26,8 @@ import {
   toggleCategoryCollapseAnimated,
 } from "./categoryCollapse";
 import { isInternalVtDrag, VT_DRAG_MIME_TYPE } from "../drag/dropTarget";
+import { decideCategoryDropAction } from "../drag/categoryDropAction";
+import { arrowIcon } from "../ui/iconSvgs";
 import {
   applyDropPreview,
   clearDropPreview,
@@ -83,6 +85,7 @@ function getDragSourceCategoryId(doc: Document): string | null {
 const DROP_RENDER_PENDING_KEY = "__vtDropRenderPending";
 const DROP_RENDER_TIMEOUT_KEY = "__vtDropRenderPendingTimeout";
 const DROP_RENDER_FALLBACK_MS = 500;
+const SMOOTH_COLLAPSE_KEY = "__vtSmoothCollapseCategoryId";
 
 function setDropRenderPending(doc: Document, pending: boolean): void {
   const win = doc.defaultView;
@@ -98,6 +101,7 @@ function setDropRenderPending(doc: Document, pending: boolean): void {
       if ((doc as any)[DROP_RENDER_PENDING_KEY]) {
         clearDropPreview(doc);
         (doc as any)[DROP_RENDER_PENDING_KEY] = false;
+        delete (doc as any)[SMOOTH_COLLAPSE_KEY];
       }
     }, DROP_RENDER_FALLBACK_MS);
     (doc as any)[DROP_RENDER_TIMEOUT_KEY] = timeout;
@@ -106,6 +110,26 @@ function setDropRenderPending(doc: Document, pending: boolean): void {
 
 function isDropRenderPending(doc: Document): boolean {
   return !!(doc as any)[DROP_RENDER_PENDING_KEY];
+}
+
+/**
+ * Remember that a drop landed in a collapsed (but preview-expanded) category.
+ * The next drop-triggered re-render consumes the id and plays the standard
+ * collapse animation instead of snapping shut.
+ */
+function markSmoothCollapseAfterDrop(
+  doc: Document,
+  wrapper: Element | null,
+): void {
+  if (!wrapper || !wrapper.classList.contains("collapsed")) return;
+  const id = (wrapper as HTMLElement).dataset.categoryId;
+  if (id) (doc as any)[SMOOTH_COLLAPSE_KEY] = id;
+}
+
+function consumeSmoothCollapseAfterDrop(doc: Document): string | null {
+  const id = (doc as any)[SMOOTH_COLLAPSE_KEY] as string | undefined;
+  delete (doc as any)[SMOOTH_COLLAPSE_KEY];
+  return id || null;
 }
 
 function setWrapperDragOver(wrapper: HTMLElement | null, doc: Document): void {
@@ -657,6 +681,7 @@ function createItemElement(
         targetTabId: pdf.tabId,
         before: insertBefore,
       });
+      markSmoothCollapseAfterDrop(doc, row.closest(".vertical-tabs-category"));
       setDropRenderPending(doc, true);
     });
   }
@@ -862,7 +887,7 @@ function createCategoryElement(
 
   const chevron = createEl(doc, "span");
   chevron.className = "vertical-tabs-chevron";
-  chevron.textContent = "<";
+  chevron.innerHTML = arrowIcon();
   header.appendChild(chevron);
 
   const name = createEl(doc, "span");
@@ -958,6 +983,48 @@ function createCategoryElement(
     }
   });
 
+  // Drop counterpart of the dragover above. Without it, drops on the gaps
+  // (including the top gap shown for the FIRST position) bubble to the
+  // wrapper's onDrop and the tab lands at the category END instead of where
+  // the indicator showed. The insert index is computed exactly like the
+  // dragover preview so the drop result matches what the user saw.
+  itemsContainer.addEventListener("drop", (e: DragEvent) => {
+    if (!isInternalVtDrag(e.dataTransfer)) return;
+    const dragData = e.dataTransfer?.getData("text/plain");
+    if (!dragData) return;
+    // Category drags are handled by the wrapper's reorder-categories listener.
+    if (dragData.startsWith("cat:")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    wrapper.classList.remove("drag-over");
+    clearAllItemDropIndicators(doc);
+
+    const visibleItems = getContainerVisibleItems(itemsContainer);
+    const insertIndex = computeDropZoneInsertIndex(itemsContainer, e.clientY);
+    const action = decideCategoryDropAction(
+      insertIndex,
+      visibleItems.map((el) => el.dataset.tabId || ""),
+    );
+
+    if (action.type === "insert-before") {
+      dispatchVtEvent(itemsContainer, "vertical-tabs:reorder-item", {
+        categoryId: category.id,
+        tabId: dragData,
+        targetTabId: action.targetTabId,
+        before: true,
+      });
+    } else {
+      const byTab = getOpenedPDFs().find((p) => p.tabId === dragData);
+      dispatchVtEvent(wrapper, "vertical-tabs:assign-item", {
+        itemId: byTab ? byTab.itemId : Number(dragData),
+        tabId: byTab ? dragData : undefined,
+        categoryId: category.id,
+      });
+    }
+    markSmoothCollapseAfterDrop(doc, wrapper);
+    setDropRenderPending(doc, true);
+  });
+
   // Make the remaining category area (header / truly empty wrapper space) a
   // drop target. When the cursor is over an item or inside the items container,
   // the dedicated listeners above handle the preview.
@@ -1016,13 +1083,36 @@ function createCategoryElement(
     clearAllItemDropIndicators(doc);
     const dragData = e.dataTransfer?.getData("text/plain");
     if (!dragData) return;
-    // dragData is tabId (string) or itemId (number) for backward compat
-    const byTab = getOpenedPDFs().find((p) => p.tabId === dragData);
-    dispatchVtEvent(wrapper, "vertical-tabs:assign-item", {
-      itemId: byTab ? byTab.itemId : Number(dragData),
-      tabId: byTab ? dragData : undefined,
-      categoryId: category.id,
-    });
+    // Category drags are handled by the reorder-categories listener above.
+    if (dragData.startsWith("cat:")) return;
+
+    // Dropping on the header / wrapper area places the tab at the FIRST
+    // position of the category, matching the shift-all-rows preview shown
+    // during dragover. An empty category falls back to append (its only
+    // position).
+    const visibleItems = getContainerVisibleItems(itemsContainer);
+    const action = decideCategoryDropAction(
+      0,
+      visibleItems.map((el) => el.dataset.tabId || ""),
+    );
+
+    if (action.type === "insert-before") {
+      dispatchVtEvent(wrapper, "vertical-tabs:reorder-item", {
+        categoryId: category.id,
+        tabId: dragData,
+        targetTabId: action.targetTabId,
+        before: true,
+      });
+    } else {
+      // dragData is tabId (string) or itemId (number) for backward compat
+      const byTab = getOpenedPDFs().find((p) => p.tabId === dragData);
+      dispatchVtEvent(wrapper, "vertical-tabs:assign-item", {
+        itemId: byTab ? byTab.itemId : Number(dragData),
+        tabId: byTab ? dragData : undefined,
+        categoryId: category.id,
+      });
+    }
+    markSmoothCollapseAfterDrop(doc, wrapper);
     setDropRenderPending(doc, true);
   };
 
@@ -1362,6 +1452,24 @@ export function subscribeToRenderEvents(
     if (isDropRenderPending(doc)) {
       clearDropPreview(doc);
       setDropRenderPending(doc, false);
+      const smoothCollapseId = consumeSmoothCollapseAfterDrop(doc);
+      if (smoothCollapseId) {
+        const target = container.querySelector(
+          `.vertical-tabs-category[data-category-id="${CSS.escape(smoothCollapseId)}"]`,
+        ) as HTMLElement | null;
+        if (target) {
+          // The drop landed in a collapsed (preview-expanded) category.
+          // Recreate the expanded state the user was looking at — chevron at
+          // 90deg, items at natural height — and commit it with a reflow, then
+          // play the standard collapse animation instead of snapping shut.
+          // Everything runs synchronously before the next paint, so no
+          // intermediate expanded frame is ever shown; the persisted
+          // collapsed state stays untouched.
+          target.classList.remove("collapsed");
+          void target.offsetHeight;
+          toggleCategoryCollapseAnimated(doc, target);
+        }
+      }
     }
   };
 
