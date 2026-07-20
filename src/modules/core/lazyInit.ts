@@ -45,6 +45,8 @@ import {
   initNewCategoryDrop,
   destroyNewCategoryDrop,
 } from "../drag/newCategoryDrop";
+import { destroyCategoryDragSource } from "../drag/categoryDragSource";
+import { destroyCategoryGapPreview } from "../drag/categoryGapPreview";
 import { destroyPreviewState } from "../drag/dropPreview";
 import { destroyCategoryPreviewState } from "../drag/categoryPreview";
 import {
@@ -143,6 +145,8 @@ export async function initVerticalTabs(
           } else {
             destroyMainPaneDrop(w.document);
             destroyNewCategoryDrop(w.document);
+            destroyCategoryDragSource(w.document);
+            destroyCategoryGapPreview(w.document);
             stopTracking();
             // Force-restore the native tab bar so the user keeps a tab UI.
             destroyNativeTabBarToggle(w.document);
@@ -290,6 +294,8 @@ export function destroyVerticalTabs(win: Window): void {
   destroySidebar(win.document);
   destroyMainPaneDrop(win.document);
   destroyNewCategoryDrop(win.document);
+  destroyCategoryDragSource(win.document);
+  destroyCategoryGapPreview(win.document);
   destroyPreviewState(win.document);
   destroyCategoryPreviewState(win.document);
   stopTracking();

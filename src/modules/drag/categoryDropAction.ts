@@ -30,3 +30,22 @@ export function decideCategoryDropAction(
   }
   return { type: "append-end" };
 }
+
+/**
+ * Decide the insertBeforeCategoryId for a category REORDER drop, matching the
+ * gap the preview showed:
+ * - "before" the target category -> the target's own id.
+ * - "after" the target category -> the NEXT visible category's id, or null
+ *   when the target is the last one (reorderCategories appends on null).
+ * Pure and DOM-free; the wrapper list order is supplied by the caller.
+ */
+export function computeCategoryReorderInsertBefore(
+  position: "before" | "after",
+  targetCategoryId: string,
+  orderedCategoryIds: string[],
+): string | null {
+  if (position === "before") return targetCategoryId;
+  const idx = orderedCategoryIds.indexOf(targetCategoryId);
+  if (idx < 0 || idx + 1 >= orderedCategoryIds.length) return null;
+  return orderedCategoryIds[idx + 1];
+}

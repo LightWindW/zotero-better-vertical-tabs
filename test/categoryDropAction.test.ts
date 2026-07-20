@@ -1,36 +1,82 @@
 import { assert } from "chai";
-import { decideCategoryDropAction } from "../src/modules/drag/categoryDropAction";
+import {
+  computeCategoryReorderInsertBefore,
+  decideCategoryDropAction,
+} from "../src/modules/drag/categoryDropAction";
 
-describe("category drop action", function () {
-  it("inserts before the first row when dropped at the first position", function () {
-    // Regression: dropping at the first position used to bubble up to the
-    // wrapper's assign-item handler and append the tab to the END instead.
-    const action = decideCategoryDropAction(0, ["tab-a", "tab-b"]);
-    assert.deepEqual(action, { type: "insert-before", targetTabId: "tab-a" });
+describe("category drop rules", function () {
+  describe("category drop action", function () {
+    it("inserts before the first row when dropped at the first position", function () {
+      // Regression: dropping at the first position used to bubble up to the
+      // wrapper's assign-item handler and append the tab to the END instead.
+      const action = decideCategoryDropAction(0, ["tab-a", "tab-b"]);
+      assert.deepEqual(action, {
+        type: "insert-before",
+        targetTabId: "tab-a",
+      });
+    });
+
+    it("inserts before the row at the hit index", function () {
+      const action = decideCategoryDropAction(1, ["tab-a", "tab-b", "tab-c"]);
+      assert.deepEqual(action, {
+        type: "insert-before",
+        targetTabId: "tab-b",
+      });
+    });
+
+    it("appends to the end when dropped below the last row", function () {
+      const action = decideCategoryDropAction(3, ["tab-a", "tab-b", "tab-c"]);
+      assert.deepEqual(action, { type: "append-end" });
+    });
+
+    it("drops on the category header as the first position (index 0)", function () {
+      const action = decideCategoryDropAction(0, ["tab-a", "tab-b"]);
+      assert.deepEqual(action, {
+        type: "insert-before",
+        targetTabId: "tab-a",
+      });
+    });
+
+    it("appends to the end for an empty category (header or body drop)", function () {
+      const action = decideCategoryDropAction(0, []);
+      assert.deepEqual(action, { type: "append-end" });
+    });
+
+    it("never inserts before a negative index", function () {
+      const action = decideCategoryDropAction(-1, ["tab-a"]);
+      assert.deepEqual(action, { type: "append-end" });
+    });
   });
 
-  it("inserts before the row at the hit index", function () {
-    const action = decideCategoryDropAction(1, ["tab-a", "tab-b", "tab-c"]);
-    assert.deepEqual(action, { type: "insert-before", targetTabId: "tab-b" });
-  });
+  describe("category reorder insert-before rule", function () {
+    const ORDER = ["cat-a", "cat-b", "cat-c"];
 
-  it("appends to the end when dropped below the last row", function () {
-    const action = decideCategoryDropAction(3, ["tab-a", "tab-b", "tab-c"]);
-    assert.deepEqual(action, { type: "append-end" });
-  });
+    it("before a category targets that category itself", function () {
+      assert.equal(
+        computeCategoryReorderInsertBefore("before", "cat-b", ORDER),
+        "cat-b",
+      );
+    });
 
-  it("drops on the category header as the first position (index 0)", function () {
-    const action = decideCategoryDropAction(0, ["tab-a", "tab-b"]);
-    assert.deepEqual(action, { type: "insert-before", targetTabId: "tab-a" });
-  });
+    it("after a category targets the NEXT category (not the list end)", function () {
+      // Regression: the old drop handler passed null for "after", which
+      // appended to the END and contradicted the gap indicator.
+      assert.equal(
+        computeCategoryReorderInsertBefore("after", "cat-b", ORDER),
+        "cat-c",
+      );
+    });
 
-  it("appends to the end for an empty category (header or body drop)", function () {
-    const action = decideCategoryDropAction(0, []);
-    assert.deepEqual(action, { type: "append-end" });
-  });
+    it("after the last category returns null (append to end)", function () {
+      assert.isNull(
+        computeCategoryReorderInsertBefore("after", "cat-c", ORDER),
+      );
+    });
 
-  it("never inserts before a negative index", function () {
-    const action = decideCategoryDropAction(-1, ["tab-a"]);
-    assert.deepEqual(action, { type: "append-end" });
+    it("after an unknown category falls back to append", function () {
+      assert.isNull(
+        computeCategoryReorderInsertBefore("after", "cat-x", ORDER),
+      );
+    });
   });
 });

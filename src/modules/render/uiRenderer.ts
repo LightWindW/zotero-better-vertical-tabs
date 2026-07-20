@@ -30,7 +30,10 @@ import {
   toggleCategoryCollapseAnimated,
 } from "./categoryCollapse";
 import { isInternalVtDrag, VT_DRAG_MIME_TYPE } from "../drag/dropTarget";
-import { decideCategoryDropAction } from "../drag/categoryDropAction";
+import {
+  computeCategoryReorderInsertBefore,
+  decideCategoryDropAction,
+} from "../drag/categoryDropAction";
 import { arrowIcon } from "../ui/iconSvgs";
 import {
   applyDropPreview,
@@ -51,6 +54,23 @@ import {
   consumeNewCategoryEntrance,
   playNewCategoryEntrance,
 } from "./categoryEntrance";
+import {
+  endCategoryDragSource,
+  getCategoryDragSource,
+  isCategoryDragDropped,
+  markCategoryDragDropped,
+  startCategoryDragSource,
+} from "../drag/categoryDragSource";
+import {
+  applyCategoryGapPreview,
+  clearCategoryGapPreview,
+  getCategoryGapInsertBefore,
+} from "../drag/categoryGapPreview";
+import {
+  consumeCategoryRelease,
+  markCategoryRelease,
+  playCategoryRelease,
+} from "../drag/categoryRelease";
 import {
   clearAllItemDropIndicators,
   clearItemDropIndicator,
@@ -193,12 +213,180 @@ function computeCategoryReorderBoundary(wrapper: HTMLElement): number {
   return headerRect.bottom + (wrapperRect.bottom - headerRect.bottom) / 2;
 }
 
+function getOrderedCategoryIds(doc: Document): string[] {
+  const container = getCategoriesContainer(doc);
+  if (!container) return [];
+  return Array.from(
+    container.querySelectorAll(":scope > .vertical-tabs-category"),
+  )
+    .map((el) => (el as HTMLElement).dataset.categoryId || "")
+    .filter(Boolean);
+}
+
+function getLastCategoryWrapper(container: HTMLElement): HTMLElement | null {
+  const wrappers = container.querySelectorAll(
+    ":scope > .vertical-tabs-category",
+  );
+  return wrappers.length
+    ? (wrappers[wrappers.length - 1] as HTMLElement)
+    : null;
+}
+
+function getFirstCategoryWrapper(doc: Document): HTMLElement | null {
+  const container = getCategoriesContainer(doc);
+  return (
+    (container?.querySelector(
+      ":scope > .vertical-tabs-category",
+    ) as HTMLElement | null) ?? null
+  );
+}
+
+/**
+ * Dispatch a category reorder drop at the CURRENT gap position, so the moved
+ * category lands exactly where the green bar is shown (not where the cursor
+ * happens to be at the drop instant). `fallbackInsertBefore` is used only
+ * when no gap state is available. Skips the three no-op cases (gap right
+ * before itself / right after itself / at the end while already last),
+ * returning false so dragend plays the cancel-restore animation instead.
+ */
+function dispatchCategoryReorderAtGap(
+  doc: Document,
+  draggedCatId: string,
+  fallbackInsertBefore: string | null,
+): boolean {
+  const gapInsertBefore = getCategoryGapInsertBefore(doc);
+  const insertBeforeId =
+    gapInsertBefore !== undefined ? gapInsertBefore : fallbackInsertBefore;
+
+  const orderedIds = getOrderedCategoryIds(doc);
+  const draggedIdx = orderedIds.indexOf(draggedCatId);
+  const isNoOp =
+    insertBeforeId === draggedCatId ||
+    (insertBeforeId !== null &&
+      draggedIdx >= 0 &&
+      insertBeforeId === orderedIds[draggedIdx + 1]) ||
+    (insertBeforeId === null &&
+      draggedIdx >= 0 &&
+      draggedIdx === orderedIds.length - 1);
+  if (isNoOp) return false;
+
+  const src = getCategoryDragSource(doc);
+  markCategoryDragDropped(doc);
+  if (src) {
+    markCategoryRelease(doc, {
+      categoryId: draggedCatId,
+      wasCollapsed: src.wasCollapsed,
+    });
+  }
+  dispatchVtEvent(doc, "vertical-tabs:reorder-categories", {
+    categoryId: draggedCatId,
+    insertBeforeCategoryId: insertBeforeId,
+  });
+  return true;
+}
+
+/**
+ * Container-level handlers for the "move to END" position of category
+ * reorder drags: the area below the last category wrapper shows the gap
+ * after it and accepts the drop (gaps between categories are handled by the
+ * per-wrapper listeners). Attached once per container (it persists across
+ * re-renders).
+ *
+ * Also binds SIDEBAR-level handlers (once): the area above the first
+ * category (header / home button) is a valid "before first" position — no
+ * forbidden cursor, the green bar sits at the very top.
+ */
+function attachCategoryContainerDragEvents(
+  doc: Document,
+  container: HTMLElement,
+): void {
+  if (container.dataset.vtCatReorderBound) return;
+  container.dataset.vtCatReorderBound = "1";
+
+  container.addEventListener("dragover", (e: DragEvent) => {
+    if (!isInternalVtDrag(e.dataTransfer)) return;
+    const data = e.dataTransfer?.getData("text/plain");
+    if (!data?.startsWith("cat:")) return;
+    const last = getLastCategoryWrapper(container);
+    if (!last) return;
+    // Always allow the drop over the container — the visual gap hits the
+    // container directly (shifted elements' hit areas move with them), and
+    // the rule is: wherever the green bar shows, dropping must work.
+    e.preventDefault();
+    // Below the last wrapper's (visual) bottom the target is the end gap;
+    // everywhere else the per-wrapper handlers are in charge.
+    if (e.clientY > last.getBoundingClientRect().bottom) {
+      applyCategoryGapPreview(doc, last, "after");
+    }
+  });
+
+  container.addEventListener("drop", (e: DragEvent) => {
+    if (!isInternalVtDrag(e.dataTransfer)) return;
+    const data = e.dataTransfer?.getData("text/plain");
+    if (!data?.startsWith("cat:")) return;
+    const last = getLastCategoryWrapper(container);
+    if (!last) return;
+    e.preventDefault();
+    // Gap intentionally left in place (see the wrapper's cat: drop).
+    dispatchCategoryReorderAtGap(doc, data.slice(4), null);
+  });
+
+  container.addEventListener("dragleave", (e: DragEvent) => {
+    // Moving into the header/home area keeps the drag alive — the
+    // sidebar-level handler re-targets the gap to "before first" instead.
+    const sidebar = doc.getElementById(SIDEBAR_ID);
+    const related = e.relatedTarget as Node | null;
+    if (sidebar && related && sidebar.contains(related)) return;
+    clearCategoryGapPreview(doc, true);
+  });
+
+  const sidebar = doc.getElementById(SIDEBAR_ID) as HTMLElement | null;
+  if (!sidebar || sidebar.dataset.vtCatReorderBound) return;
+  sidebar.dataset.vtCatReorderBound = "1";
+
+  sidebar.addEventListener("dragover", (e: DragEvent) => {
+    if (!isInternalVtDrag(e.dataTransfer)) return;
+    const data = e.dataTransfer?.getData("text/plain");
+    if (!data?.startsWith("cat:")) return;
+    const first = getFirstCategoryWrapper(doc);
+    if (!first) return;
+    // Only the area ABOVE the first category; elsewhere the wrapper and
+    // container handlers are in charge.
+    if (e.clientY >= first.getBoundingClientRect().top) return;
+    e.preventDefault();
+    applyCategoryGapPreview(doc, first, "before");
+  });
+
+  sidebar.addEventListener("drop", (e: DragEvent) => {
+    if (!isInternalVtDrag(e.dataTransfer)) return;
+    const data = e.dataTransfer?.getData("text/plain");
+    if (!data?.startsWith("cat:")) return;
+    const first = getFirstCategoryWrapper(doc);
+    if (!first) return;
+    if (e.clientY >= first.getBoundingClientRect().top) return;
+    e.preventDefault();
+    dispatchCategoryReorderAtGap(
+      doc,
+      data.slice(4),
+      first.dataset.categoryId ?? null,
+    );
+  });
+
+  sidebar.addEventListener("dragleave", (e: DragEvent) => {
+    if (sidebar.contains(e.relatedTarget as Node)) return;
+    clearCategoryGapPreview(doc, true);
+  });
+}
+
 function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
   dropZone.addEventListener("dragover", (e: DragEvent) => {
     if (!isInternalVtDrag(e.dataTransfer)) return;
     e.preventDefault();
     // The top strip is claimed by the quick-create-category drop zone.
     if (isNewCategoryZonePointer(doc, e.clientY)) return;
+    // Category reorder drags get no dashed outline (the gap preview is the
+    // only indicator for them).
+    if (!getDraggedTabId(doc)) return;
     doc
       .querySelectorAll(".vertical-tabs-category.drag-over")
       .forEach((el: Element) => el.classList.remove("drag-over"));
@@ -274,6 +462,9 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
     clearAllItemDropIndicators(doc);
     const dragData = e.dataTransfer?.getData("text/plain");
     if (!dragData) return;
+    // Category reorder drags bubble up to the container-level end-drop
+    // handler; they are not item drops.
+    if (dragData.startsWith("cat:")) return;
 
     const visibleItems = getContainerVisibleItems(dropZone);
     if (visibleItems.length === 0) {
@@ -683,10 +874,13 @@ function createItemElement(
     row.addEventListener("drop", (e: DragEvent) => {
       if (!isInternalVtDrag(e.dataTransfer)) return;
       e.preventDefault();
+      const dragData = e.dataTransfer?.getData("text/plain");
+      // Category drags bubble up to the wrapper's category-reorder listener;
+      // treating "cat:x" as a tabId here would corrupt the category data.
+      if (dragData?.startsWith("cat:")) return;
       e.stopPropagation();
       clearItemDropIndicator(row);
       clearAllItemDropIndicators(doc);
-      const dragData = e.dataTransfer?.getData("text/plain");
       if (!dragData) return;
       const rect = row.getBoundingClientRect();
       const midY = rect.top + rect.height / 2;
@@ -841,17 +1035,27 @@ function createCategoryElement(
 
   // ── Category drag reorder ──
   header.addEventListener("dragstart", (e: DragEvent) => {
-    // Auto-collapse on drag start, and cancel any in-progress expand/collapse
-    // animation so the inline grid-template-rows does not override the
-    // collapsed state during category reordering.
-    cancelCategoryCollapseAnimation(wrapper, { reset: true });
-    wrapper.classList.add("collapsed");
     const dt = e.dataTransfer;
     if (dt) {
       dt.setData("text/plain", `cat:${category.id}`);
       dt.setData(VT_DRAG_MIME_TYPE, "1");
       dt.effectAllowed = "move";
     }
+    // Smoothly collapse the source category (if expanded), then fade its
+    // wrapper out so the original slot disappears. Persisted state is left
+    // untouched; the pre-drag collapsed flag drives the release animation.
+    startCategoryDragSource(doc, wrapper, category.id);
+  });
+
+  header.addEventListener("dragend", () => {
+    // Cancel path (no successful drop): fade the source wrapper back in and
+    // re-expand if needed, and slide the gap preview closed. Drop path: only
+    // clears state; the gap stays put (its shifted geometry matches the
+    // fresh DOM), the re-render destroys it, and the release animation takes
+    // over with the bar handoff.
+    const dropped = isCategoryDragDropped(doc);
+    endCategoryDragSource(doc);
+    if (!dropped) clearCategoryGapPreview(doc, true);
   });
 
   wrapper.addEventListener("dragover", (e: DragEvent) => {
@@ -863,49 +1067,32 @@ function createCategoryElement(
     if (!data?.startsWith("cat:")) return;
     e.preventDefault();
 
-    // Clear indicators from all other categories
-    doc
-      .querySelectorAll(
-        ".vertical-tabs-category.cat-drop-before, .vertical-tabs-category.cat-drop-after",
-      )
-      .forEach((el: Element) => {
-        if (el !== wrapper) {
-          el.classList.remove("cat-drop-before", "cat-drop-after");
-        }
-      });
-
     const boundaryY = computeCategoryReorderBoundary(wrapper);
-    wrapper.classList.remove("cat-drop-before", "cat-drop-after");
-    wrapper.classList.add(
-      e.clientY < boundaryY ? "cat-drop-before" : "cat-drop-after",
+    applyCategoryGapPreview(
+      doc,
+      wrapper,
+      e.clientY < boundaryY ? "before" : "after",
     );
-  });
-
-  wrapper.addEventListener("dragleave", (e: DragEvent) => {
-    if (!wrapper.contains(e.relatedTarget as Node)) {
-      wrapper.classList.remove("cat-drop-before", "cat-drop-after");
-    }
   });
 
   wrapper.addEventListener("drop", (e: DragEvent) => {
     if (!isInternalVtDrag(e.dataTransfer)) return;
-    e.preventDefault();
-    e.stopPropagation();
-    wrapper.classList.remove("cat-drop-before", "cat-drop-after");
-
     const dt = e.dataTransfer;
     if (!dt) return;
     const data = dt.getData("text/plain");
     if (!data?.startsWith("cat:")) return;
-    const draggedCatId = data.slice(4);
-
-    if (draggedCatId === category.id) return;
-
+    e.preventDefault();
+    e.stopPropagation();
+    // Do NOT clear the gap here: the shifted geometry of the old DOM matches
+    // the fresh DOM exactly, so leaving it in place avoids a list flicker.
+    // The release animation destroys it via the re-render and fades the bar.
     const boundaryY = computeCategoryReorderBoundary(wrapper);
-    dispatchVtEvent(wrapper, "vertical-tabs:reorder-categories", {
-      categoryId: draggedCatId,
-      insertBeforeCategoryId: e.clientY < boundaryY ? category.id : null,
-    });
+    const fallback = computeCategoryReorderInsertBefore(
+      e.clientY < boundaryY ? "before" : "after",
+      category.id,
+      getOrderedCategoryIds(doc),
+    );
+    dispatchCategoryReorderAtGap(doc, data.slice(4), fallback);
   });
 
   const chevron = createEl(doc, "span");
@@ -1067,6 +1254,12 @@ function createCategoryElement(
     if (targetItem) return;
     if (itemsContainer.contains(e.target as Node)) return;
 
+    // Item drops only: category reorder drags get no dashed outline or
+    // category preview (their indicator is the reorder gap).
+    const dt = e.dataTransfer;
+    const data = dt?.getData("text/plain");
+    if (!data || data.startsWith("cat:")) return;
+
     // Highlight this category header / empty area.
     doc
       .querySelectorAll(".vertical-tabs-category.drag-over")
@@ -1075,17 +1268,13 @@ function createCategoryElement(
       });
     wrapper.classList.add("drag-over");
 
-    const dt = e.dataTransfer;
-    const data = dt?.getData("text/plain");
-    if (data && !data.startsWith("cat:")) {
-      const draggedTabId = getDraggedTabId(doc) || data;
-      applyCategoryPreview(doc, wrapper, getDragSourceCategoryId(doc), 1);
-      applyDropPreview(doc, {
-        type: "category",
-        categoryWrapper: wrapper,
-        draggedTabId,
-      });
-    }
+    const draggedTabId = getDraggedTabId(doc) || data;
+    applyCategoryPreview(doc, wrapper, getDragSourceCategoryId(doc), 1);
+    applyDropPreview(doc, {
+      type: "category",
+      categoryWrapper: wrapper,
+      draggedTabId,
+    });
   };
   const onDragLeave = (e: DragEvent) => {
     const related = e.relatedTarget as Node | null;
@@ -1310,6 +1499,10 @@ export function renderCategories(
   // This avoids losing manual fold/unfold state when VT collapses/expands.
   container.innerHTML = "";
 
+  // Container-level category-reorder handlers (end-of-list gap + drop), bound
+  // once — the container element itself persists across re-renders.
+  attachCategoryContainerDragEvents(doc, container);
+
   // Categories only contain currently open tabs, so match purely by tabId.
   const assignedTabIds = new Set(
     data.categories.flatMap((c) => c.tabIds).filter(Boolean),
@@ -1487,6 +1680,10 @@ export function subscribeToRenderEvents(
     // Quick-create flow: slide-down + fade-in entrance for the new category.
     const entranceId = consumeNewCategoryEntrance(doc);
     if (entranceId) playNewCategoryEntrance(doc, container, entranceId);
+    // Category reorder flow: release animation for the moved category (fade
+    // the header in at the gap position, then expand if it was expanded).
+    const catRelease = consumeCategoryRelease(doc);
+    if (catRelease) playCategoryRelease(doc, container, catRelease);
     if (isDropRenderPending(doc)) {
       clearDropPreview(doc);
       setDropRenderPending(doc, false);

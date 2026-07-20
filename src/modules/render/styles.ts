@@ -153,12 +153,15 @@ export function getStyles(): string {
       flex-direction: column;
       overflow-y: auto;
       padding: 2px 0;
+      /* Anchors the category-reorder gap indicator (absolute, scrolls with
+         the content) and offsetTop-based layout measurements. */
+      position: relative;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category {
       display: grid;
       grid-template-rows: auto 1fr;
-      transition: grid-template-rows 0s ease, outline-color 0.3s ease, background 0.3s ease;
+      transition: grid-template-rows 0s ease, outline-color 0.3s ease, background 0.3s ease, transform 0.2s ease-out;
       margin-bottom: 2px;
       position: relative;
       outline: 1px dashed transparent;
@@ -245,7 +248,7 @@ export function getStyles(): string {
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category.collapsed {
-      transition: outline-color 0.3s ease, background 0.3s ease;
+      transition: outline-color 0.3s ease, background 0.3s ease, transform 0.2s ease-out;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category.drag-over {
@@ -253,22 +256,46 @@ export function getStyles(): string {
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category.vt-category-preview {
-      transition: outline-color 0.3s ease, background 0.3s ease;
+      transition: outline-color 0.3s ease, background 0.3s ease, transform 0.2s ease-out;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category.vt-height-animating {
-      transition: outline-color 0.3s ease, background 0.3s ease;
+      transition: outline-color 0.3s ease, background 0.3s ease, transform 0.2s ease-out;
     }
 
-    /* Category reorder drop indicators */
-    #${SIDEBAR_ID} .vertical-tabs-category.cat-drop-before {
-      border-top: 2px solid #42614D;
-      transition: none;
+    /* Category reorder gap preview: every container child at and below the
+       gap slides down one header height (categories, separators and the
+       uncategorized drop-zone alike, so nothing stays behind to overlap).
+       Those elements' base rules carry the same transform transition for
+       the return direction. */
+    #${SIDEBAR_ID} .vertical-tabs-categories > .vt-drop-preview-shift {
+      transform: translateY(var(--vt-drop-shift-y, 0px));
+      transition: transform 0.2s ease-out;
     }
 
-    #${SIDEBAR_ID} .vertical-tabs-category.cat-drop-after {
-      border-bottom: 2px solid #42614D;
-      transition: none;
+    /* Green bar vertically centered in the reorder gap. Position jumps
+       instantly (no top transition, same rule as item indicators); only the
+       opacity fades. Absolute in the scroll container, so it scrolls with
+       the content. */
+    #${SIDEBAR_ID} .vertical-tabs-category-gap-indicator {
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      height: 2px;
+      background: #42614D;
+      border-radius: 1px;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* Source wrapper of a category reorder drag: fades/shrinks out after the
+       smooth collapse, and fades back in on cancel. */
+    #${SIDEBAR_ID} .vertical-tabs-category.vt-catdrag-source {
+      overflow: hidden;
+      pointer-events: none;
+      transition: height 0.3s ease, opacity 0.3s ease;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category-header.drag-over {
@@ -592,6 +619,9 @@ export function getStyles(): string {
       height: 1px;
       margin: 4px 12px;
       background: #DBDBDB;
+      /* Must slide with the category-reorder gap shift like every other
+         container child. */
+      transition: transform 0.2s ease-out;
     }
 
     /* Home button block: shown at the top of the sidebar while the native
@@ -661,7 +691,7 @@ export function getStyles(): string {
       flex: 1;
       min-height: 32px;
       padding: 4px 0;
-      transition: background 0.3s ease, outline-color 0.3s ease;
+      transition: background 0.3s ease, outline-color 0.3s ease, transform 0.2s ease-out;
       outline: 1px dashed transparent;
       outline-offset: -1px;
       position: relative;
