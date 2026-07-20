@@ -18,6 +18,7 @@
  */
 
 import { cancelCategoryCollapseAnimation } from "../render/categoryCollapse";
+import { MULTI_SOURCE_CLASS } from "./multiDrag";
 
 const PREVIEW_STATE_KEY = "__vtCategoryPreviewState";
 const CATEGORY_PREVIEW_CLASS = "vt-category-preview";
@@ -62,7 +63,11 @@ function getContainerItems(container: Element): Element[] {
     Array.from(
       container.querySelectorAll(":scope .vertical-tabs-item"),
     ) as Element[]
-  ).filter((el) => !el.classList.contains("vt-drag-source-collapsed"));
+  ).filter(
+    (el) =>
+      !el.classList.contains("vt-drag-source-collapsed") &&
+      !el.classList.contains(MULTI_SOURCE_CLASS),
+  );
 }
 
 function getContainerItemCount(container: Element): number {
@@ -104,15 +109,18 @@ function getContainerCategoryId(container: Element): string {
 
 function computeTnew(
   container: Element,
-  sourceCategoryId: string | null,
+  sourceCategoryId: string | null | Map<string, number>,
   draggedCount: number,
 ): number {
   const targetCategoryId = getContainerCategoryId(container);
   const currentCount = getContainerItemCount(container);
-  const fromTarget =
-    sourceCategoryId && sourceCategoryId === targetCategoryId
-      ? draggedCount
-      : 0;
+  let fromTarget = 0;
+  if (sourceCategoryId instanceof Map) {
+    // Multi-tab drag: per-category counts of dragged-away rows.
+    fromTarget = sourceCategoryId.get(targetCategoryId) ?? 0;
+  } else if (sourceCategoryId && sourceCategoryId === targetCategoryId) {
+    fromTarget = draggedCount;
+  }
   return currentCount - fromTarget + draggedCount;
 }
 
@@ -300,7 +308,7 @@ function enterPreview(container: Element, tNew: number, doc: Document): void {
 export function applyCategoryPreview(
   doc: Document,
   targetContainer: Element,
-  sourceCategoryId: string | null,
+  sourceCategoryId: string | null | Map<string, number>,
   draggedCount = 1,
 ): void {
   const state = getState(doc);

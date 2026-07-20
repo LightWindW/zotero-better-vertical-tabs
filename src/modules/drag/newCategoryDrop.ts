@@ -31,6 +31,8 @@ import { getCategoriesContainer, SIDEBAR_ID } from "../sidebar/sidebar";
 import { showToast } from "../ui/toast";
 import { promptCategoryName } from "../ui/categoryNameDialog";
 import { markNewCategoryEntrance } from "../render/categoryEntrance";
+import { buildMultiEntries, getMultiDragTabIds } from "./multiDrag";
+import { clearTabSelection } from "./multiSelect";
 import { getDraggedTabId } from "./itemDragState";
 import { clearAllDropVisuals, isInternalVtDrag } from "./dropTarget";
 import { clearCategoryPreview } from "./categoryPreview";
@@ -182,6 +184,11 @@ async function onZoneDrop(doc: Document, e: DragEvent): Promise<void> {
     e.preventDefault();
   }
 
+  // Capture the multi-drag ids BEFORE the dialog await: dragend fires while
+  // the naming dialog is open and endMultiDrag clears the stash — reading
+  // them afterwards would silently fall back to the single-tab path.
+  const multiIds = isItemDrag ? getMultiDragTabIds(doc) : null;
+
   const state = peekState(doc);
   if (state) hideZone(doc, state);
 
@@ -194,6 +201,16 @@ async function onZoneDrop(doc: Document, e: DragEvent): Promise<void> {
   if (!name) return;
 
   if (isItemDrag) {
+    // Multi-select drop: the whole ordered block lands in the new category.
+    if (multiIds?.length) {
+      const entries = buildMultiEntries(multiIds);
+      clearTabSelection(doc);
+      dispatchVtEvent(doc, "vertical-tabs:create-category-with-items", {
+        name,
+        entries,
+      });
+      return;
+    }
     const byTab = getOpenedPDFs().find((p) => p.tabId === dragData);
     dispatchVtEvent(doc, "vertical-tabs:create-category-with-item", {
       name,

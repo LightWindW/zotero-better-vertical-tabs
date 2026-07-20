@@ -108,13 +108,19 @@ export function removeLastReadTime(tabId: string): void {
  * to remove and skips its dispatches; lastReadTimes are cleaned here.
  */
 export function removeTabsFromTrackingSilently(tabIds: string[]): void {
+  let removedAny = false;
   for (const tabId of tabIds) {
     _pendingClosedTabIds.delete(tabId);
     const beforeLength = _openedPDFs.length;
     _openedPDFs = _openedPDFs.filter((pdf) => pdf.tabId !== tabId);
     if (_openedPDFs.length !== beforeLength) {
-      removeLastReadTime(tabId);
+      delete _lastReadTimes[tabId];
+      removedAny = true;
     }
+  }
+  // One disk write for the whole batch (close-others can be many tabs).
+  if (removedAny) {
+    void saveLastReadTimes({ ..._lastReadTimes });
   }
 }
 

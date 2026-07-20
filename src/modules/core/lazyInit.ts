@@ -33,7 +33,10 @@ import {
   unsubscribeFromRenderEvents,
   setupCategoryDarkMode,
   teardownCategoryDarkMode,
+  destroySelectionEvents,
 } from "../render/uiRenderer";
+import { destroyTabSelection } from "../drag/multiSelect";
+import { destroyMultiDrag } from "../drag/multiDrag";
 import { destroyAutoClose, initAutoClose } from "../track/autoClose";
 import {
   destroyReaderReleaseTimer,
@@ -147,6 +150,9 @@ export async function initVerticalTabs(
             destroyNewCategoryDrop(w.document);
             destroyCategoryDragSource(w.document);
             destroyCategoryGapPreview(w.document);
+            destroySelectionEvents(w.document);
+            destroyTabSelection(w.document);
+            destroyMultiDrag(w.document);
             stopTracking();
             // Force-restore the native tab bar so the user keeps a tab UI.
             destroyNativeTabBarToggle(w.document);
@@ -296,6 +302,9 @@ export function destroyVerticalTabs(win: Window): void {
   destroyNewCategoryDrop(win.document);
   destroyCategoryDragSource(win.document);
   destroyCategoryGapPreview(win.document);
+  destroySelectionEvents(win.document);
+  destroyTabSelection(win.document);
+  destroyMultiDrag(win.document);
   destroyPreviewState(win.document);
   destroyCategoryPreviewState(win.document);
   stopTracking();

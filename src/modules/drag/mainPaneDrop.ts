@@ -12,6 +12,7 @@ import {
   dropOutlineFadeTargetFromDropTarget,
   markDropOutlineFade,
 } from "./dropOutlineFade";
+import { markMultiTabRelease } from "../render/multiTabRelease";
 import {
   cancelPendingCollapse,
   expandFloatingSidebar,
@@ -453,6 +454,10 @@ async function handleDrop(
     );
   }
 
+  // The dropped tabs fade in with the same cascade release as the multi-tab
+  // drop (single item = N=1 fade-in). Mark before the persist-triggered
+  // re-render that the dispatch kicks off.
+  markMultiTabRelease(doc, openedTabIds);
   dispatchVtEvent(doc, "vertical-tabs:external-items-dropped", {
     data: newData,
     pendingTabIds: openedTabIds,

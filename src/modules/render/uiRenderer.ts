@@ -13,6 +13,7 @@ import {
   getOpenedPDFs,
   getZoteroTabs,
   getSelectedTabId,
+  removeTabsFromTrackingSilently,
 } from "../track/itemTracker";
 import {
   isReaderLoaded,
@@ -54,6 +55,36 @@ import {
   consumeNewCategoryEntrance,
   playNewCategoryEntrance,
 } from "./categoryEntrance";
+import {
+  consumeCategoryColorFade,
+  playCategoryColorFade,
+} from "./categoryColorFade";
+import { animatePopupClose, animatePopupOpen } from "../ui/popupAnimation";
+import { animateTabsExit } from "./tabExit";
+import {
+  consumeMultiTabRelease,
+  markMultiTabRelease,
+  playMultiTabRelease,
+} from "./multiTabRelease";
+import {
+  clearTabSelection,
+  consumeSelectionFadeOut,
+  getOrderedSelectedTabIds,
+  getSelectedTabCount,
+  getSelectedTabIds,
+  isTabSelected,
+  replaySelectionFadeOut,
+  selectTabRange,
+  toggleTabSelection,
+} from "../drag/multiSelect";
+import {
+  collapseMultiDragSource,
+  dispatchMultiDrop,
+  endMultiDrag,
+  getMultiDragSourceCounts,
+  getMultiDragTabIds,
+  startMultiDrag,
+} from "../drag/multiDrag";
 import {
   endCategoryDragSource,
   getCategoryDragSource,
@@ -178,7 +209,9 @@ function getContainerVisibleItems(container: HTMLElement): HTMLElement[] {
     container.querySelectorAll(":scope > .vertical-tabs-item"),
   ) as HTMLElement[];
   return allItems.filter(
-    (el) => !el.classList.contains("vt-drag-source-collapsed"),
+    (el) =>
+      !el.classList.contains("vt-drag-source-collapsed") &&
+      !el.classList.contains("vt-multi-source-collapse"),
   );
 }
 
@@ -239,6 +272,94 @@ function getFirstCategoryWrapper(doc: Document): HTMLElement | null {
       ":scope > .vertical-tabs-category",
     ) as HTMLElement | null) ?? null
   );
+}
+
+/** Visual-order tabIds of every row in the VT (for shift-range selection). */
+function getOrderedVisibleTabIds(doc: Document): string[] {
+  const container = getCategoriesContainer(doc);
+  if (!container) return [];
+  return Array.from(container.querySelectorAll(".vertical-tabs-item"))
+    .map((el) => (el as HTMLElement).dataset.tabId || "")
+    .filter(Boolean);
+}
+
+/**
+ * Preview parameters for the current drag: the gap stays ONE row tall even
+ * for multi drags (per the confirmed behavior). Multi drags use the
+ * per-category source count map (accurate tNew accounting across source
+ * categories) and the selection set to exclude dragged rows from shifts.
+ */
+function getDragPreviewParams(doc: Document): {
+  source: string | null | Map<string, number>;
+  exclude?: ReadonlySet<string>;
+} {
+  const multiIds = getMultiDragTabIds(doc);
+  if (multiIds) {
+    return {
+      source: getMultiDragSourceCounts(doc),
+      exclude: getSelectedTabIds(doc),
+    };
+  }
+  return { source: getDragSourceCategoryId(doc), exclude: undefined };
+}
+
+/**
+ * Document-level click-to-clear for the multi selection: any click that does
+ * not land on a VT tab row clears the selection (per the confirmed
+ * edge-case behavior — "any other position", including outside the sidebar).
+ * Bound once per document, in the CAPTURE phase on BOTH mousedown and click:
+ * Zotero's own handlers (and some VT buttons) stopPropagation on click,
+ * which would otherwise prevent the event from ever reaching a bubble-phase
+ * document listener.
+ *
+ * Rebind-safety across plugin hot reloads: expando flags on the document
+ * SURVIVE a reload while the old JS compartment (and its listeners) dies.
+ * A boolean "bound" flag left by a previous load would permanently block
+ * re-binding, so we key off a per-load token object instead, and remove the
+ * previous handler best-effort (it may be a dead object — never throw).
+ */
+const SELECTION_LISTENER_TOKEN = {};
+
+function attachSelectionEvents(doc: Document): void {
+  if ((doc as any).__vtSelectionToken === SELECTION_LISTENER_TOKEN) return;
+  (doc as any).__vtSelectionToken = SELECTION_LISTENER_TOKEN;
+  try {
+    const old = (doc as any).__vtSelectionHandler as
+      | ((e: MouseEvent) => void)
+      | undefined;
+    if (old) {
+      doc.removeEventListener("mousedown", old, true);
+      doc.removeEventListener("click", old, true);
+    }
+  } catch {
+    // Previous handler is a dead object from a nuked compartment — the
+    // browser drops it with the compartment, nothing to remove.
+  }
+  const handler = (e: MouseEvent) => {
+    const target = e.target as Element | null;
+    if (target?.closest?.(".vertical-tabs-item")) return;
+    clearTabSelection(doc);
+  };
+  doc.addEventListener("mousedown", handler, true);
+  doc.addEventListener("click", handler, true);
+  (doc as any).__vtSelectionHandler = handler;
+}
+
+/** Remove the document-level selection listeners (destroy/disable flow). */
+export function destroySelectionEvents(doc: Document): void {
+  try {
+    const handler = (doc as any).__vtSelectionHandler as
+      | ((e: MouseEvent) => void)
+      | undefined;
+    if (handler) {
+      doc.removeEventListener("mousedown", handler, true);
+      doc.removeEventListener("click", handler, true);
+    }
+  } catch {
+    // dead object — already gone with its compartment
+  }
+  delete (doc as any).__vtSelectionHandler;
+  delete (doc as any).__vtSelectionToken;
 }
 
 /**
@@ -395,7 +516,8 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
     const targetItem = (e.target as Element).closest(".vertical-tabs-item");
     if (targetItem) return;
 
-    applyCategoryPreview(doc, dropZone, getDragSourceCategoryId(doc), 1);
+    const preview = getDragPreviewParams(doc);
+    applyCategoryPreview(doc, dropZone, preview.source, 1);
     clearAllItemDropIndicators(doc);
 
     const visibleItems = getContainerVisibleItems(dropZone);
@@ -424,13 +546,17 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
     // on the item *above* the gap so the bar does not move with the shifted
     // items.
     const targetRow = visibleItems[insertIndex];
-    const shiftHeight = applyDropPreview(doc, {
-      type: "item",
-      container: dropZone,
-      targetRow,
-      before: true,
-      draggedTabId,
-    });
+    const shiftHeight = applyDropPreview(
+      doc,
+      {
+        type: "item",
+        container: dropZone,
+        targetRow,
+        before: true,
+        draggedTabId,
+      },
+      preview.exclude,
+    );
     if (insertIndex === 0) {
       setTopGapIndicator(dropZone, shiftHeight);
     } else {
@@ -466,6 +592,25 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
     // handler; they are not item drops.
     if (dragData.startsWith("cat:")) return;
 
+    // Multi-tab drop: contiguous block into the uncategorized list.
+    const multiIds = getMultiDragTabIds(doc);
+    if (multiIds?.length) {
+      const visibleItems = getContainerVisibleItems(dropZone);
+      const insertIndex = computeDropZoneInsertIndex(dropZone, e.clientY);
+      const action = decideCategoryDropAction(
+        insertIndex,
+        visibleItems.map((el) => el.dataset.tabId || ""),
+      );
+      dispatchMultiDrop(doc, {
+        categoryId: "__uncategorized__",
+        insertBeforeTabId:
+          action.type === "insert-before" ? action.targetTabId : undefined,
+        releaseTabIds: multiIds,
+      });
+      setDropRenderPending(doc, true);
+      return;
+    }
+
     const visibleItems = getContainerVisibleItems(dropZone);
     if (visibleItems.length === 0) {
       // Empty drop-zone: move the item into uncategorized at the end.
@@ -475,6 +620,8 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
         targetTabId: "",
         before: false,
       });
+      // Single-tab drop: same release fade-in as the multi cascade.
+      markMultiTabRelease(doc, [dragData]);
       markDropOutlineFade(doc, { type: "drop-zone" });
       setDropRenderPending(doc, true);
       return;
@@ -491,6 +638,7 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
           targetTabId,
           before: false,
         });
+        markMultiTabRelease(doc, [dragData]);
         markDropOutlineFade(doc, { type: "drop-zone" });
         setDropRenderPending(doc, true);
       }
@@ -505,6 +653,7 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
         targetTabId,
         before: true,
       });
+      markMultiTabRelease(doc, [dragData]);
       markDropOutlineFade(doc, { type: "drop-zone" });
       setDropRenderPending(doc, true);
     }
@@ -643,6 +792,15 @@ function createItemElement(
   row.dataset.tabType = pdf.type;
   if (categoryId) row.dataset.categoryId = categoryId;
 
+  // Multi-select overlay + restored selection state (freshly created rows
+  // commit the visible overlay without playing the fade).
+  const selectionOverlay = createEl(doc, "div");
+  selectionOverlay.className = "vertical-tabs-item-selection-overlay";
+  row.appendChild(selectionOverlay);
+  if (pdf.tabId && isTabSelected(doc, pdf.tabId)) {
+    row.classList.add("vt-selected");
+  }
+
   // ── Reader-loaded indicator (leftmost 4px bar) ──
   const isReader = pdf.type?.startsWith("reader");
   const showIndicator =
@@ -747,14 +905,9 @@ function createItemElement(
   closeBtn.textContent = "×";
   closeBtn.addEventListener("click", (e: MouseEvent) => {
     e.stopPropagation();
-    const tabs = getZoteroTabs();
-    if (tabs && pdf.tabId) {
-      try {
-        tabs.close(pdf.tabId);
-      } catch {
-        // ignore
-      }
-    }
+    // Closing a tab via its × clears the selection (the button swallows the
+    // click, so the document-level clear listener never sees it).
+    if (getSelectedTabCount(doc) > 0) clearTabSelection(doc);
     // Hide hover card immediately so it doesn't linger after the tab is gone
     const hc = doc.getElementById(
       "vertical-tabs-hover-card",
@@ -762,6 +915,25 @@ function createItemElement(
     if (hc) {
       hc.style.opacity = "0";
       hc.style.display = "none";
+    }
+    // Play the fade+collapse exit first; the actual close commits when the
+    // row is already zero-sized and transparent.
+    if (pdf.tabId) {
+      const tabId = pdf.tabId;
+      animateTabsExit(doc, [tabId], () => {
+        const tabs = getZoteroTabs();
+        if (tabs) {
+          try {
+            tabs.close(tabId);
+          } catch {
+            // ignore
+          }
+        }
+        // Stop tracking the closing tab right away (silently): any re-render
+        // before the 100ms close-flush would otherwise resurrect the row at
+        // full height — the "flash back" — before the flush removed it again.
+        removeTabsFromTrackingSilently([tabId]);
+      });
     }
   });
   row.appendChild(closeBtn);
@@ -782,14 +954,8 @@ function createItemElement(
     if (e.button !== 1 || !pdf.tabId) return;
     e.preventDefault();
     e.stopPropagation();
-    const tabs = getZoteroTabs();
-    if (tabs) {
-      try {
-        tabs.close(pdf.tabId);
-      } catch {
-        // ignore
-      }
-    }
+    // Closing a tab clears the selection (same as the × button).
+    if (getSelectedTabCount(doc) > 0) clearTabSelection(doc);
     const hc = doc.getElementById(
       "vertical-tabs-hover-card",
     ) as HTMLElement | null;
@@ -797,6 +963,19 @@ function createItemElement(
       hc.style.opacity = "0";
       hc.style.display = "none";
     }
+    const tabId = pdf.tabId;
+    animateTabsExit(doc, [tabId], () => {
+      const tabs = getZoteroTabs();
+      if (tabs) {
+        try {
+          tabs.close(tabId);
+        } catch {
+          // ignore
+        }
+      }
+      // See the × button for why the silent untracking matters (flash back).
+      removeTabsFromTrackingSilently([tabId]);
+    });
   });
 
   // ── Drag reorder (within category or uncategorized) ──
@@ -822,23 +1001,23 @@ function createItemElement(
       const targetWrapper =
         row.closest(".vertical-tabs-category") ||
         row.closest(".vertical-tabs-drop-zone");
+      const preview = getDragPreviewParams(doc);
       if (targetWrapper) {
-        applyCategoryPreview(
-          doc,
-          targetWrapper,
-          getDragSourceCategoryId(doc),
-          1,
-        );
+        applyCategoryPreview(doc, targetWrapper, preview.source, 1);
         setWrapperDragOver(targetWrapper as HTMLElement, doc);
       }
 
-      const shiftHeight = applyDropPreview(doc, {
-        type: "item",
-        container,
-        targetRow: row,
-        before,
-        draggedTabId,
-      });
+      const shiftHeight = applyDropPreview(
+        doc,
+        {
+          type: "item",
+          container,
+          targetRow: row,
+          before,
+          draggedTabId,
+        },
+        preview.exclude,
+      );
 
       // Use the same centered-gap indicator model for both categories and the
       // uncategorized drop-zone. The green bar is attached to the element above
@@ -885,12 +1064,39 @@ function createItemElement(
       const rect = row.getBoundingClientRect();
       const midY = rect.top + rect.height / 2;
       const insertBefore = e.clientY < midY;
+
+      // Multi-tab drop: contiguous block before/after the target row.
+      const multiIds = getMultiDragTabIds(doc);
+      if (multiIds?.length) {
+        const rowContainer = (row.closest(".vertical-tabs-items") ||
+          row.closest(".vertical-tabs-drop-zone")) as HTMLElement | null;
+        const visibleItems = rowContainer
+          ? getContainerVisibleItems(rowContainer)
+          : [];
+        const rowIndex = visibleItems.indexOf(row);
+        const action = decideCategoryDropAction(
+          insertBefore ? rowIndex : rowIndex + 1,
+          visibleItems.map((el) => el.dataset.tabId || ""),
+        );
+        dispatchMultiDrop(doc, {
+          categoryId: reorderCatId,
+          insertBeforeTabId:
+            action.type === "insert-before" ? action.targetTabId : undefined,
+          releaseTabIds: multiIds,
+        });
+        setDropRenderPending(doc, true);
+        return;
+      }
+
       dispatchVtEvent(row, "vertical-tabs:reorder-item", {
         categoryId: reorderCatId,
         tabId: dragData,
         targetTabId: pdf.tabId,
         before: insertBefore,
       });
+      // Single-tab drop plays the same release fade-in as the multi cascade
+      // (N=1: the row fades in at full height).
+      markMultiTabRelease(doc, [dragData]);
       markSmoothCollapseAfterDrop(doc, row.closest(".vertical-tabs-category"));
       markDropOutlineFade(
         doc,
@@ -915,15 +1121,35 @@ function createItemElement(
     const draggedId = pdf.tabId || String(pdf.itemId);
     setDraggedTabId(doc, draggedId);
     setDragSourceCategoryId(doc, categoryId || "__uncategorized__");
-    // Collapse the source row after the drag image has been generated so the
-    // original slot disappears visually, but the drag image still shows content.
+
+    // Multi mode: dragging a SELECTED tab while the selection has 2+ entries.
+    const multiIds =
+      pdf.tabId && isTabSelected(doc, pdf.tabId) && getSelectedTabCount(doc) > 1
+        ? getOrderedSelectedTabIds(doc)
+        : null;
+    if (multiIds) {
+      startMultiDrag(doc, multiIds);
+    } else if (getSelectedTabCount(doc) > 0) {
+      // Edge case: dragging an UNSELECTED tab clears the selection (0.2s
+      // fade) and proceeds with the normal single-tab drag.
+      clearTabSelection(doc);
+    }
+
+    // Collapse the source row(s) after the drag image has been generated so
+    // the original slot disappears visually, but the drag image still shows
+    // content. Multi mode fades+collapses every selected row instead.
     const raf = doc.defaultView?.requestAnimationFrame;
-    if (raf) {
-      raf(() => {
+    const collapseSource = () => {
+      if (multiIds) {
+        collapseMultiDragSource(doc);
+      } else {
         row.classList.add("vt-drag-source-collapsed");
-      });
+      }
+    };
+    if (raf) {
+      raf(collapseSource);
     } else {
-      row.classList.add("vt-drag-source-collapsed");
+      collapseSource();
     }
     // Hide hover card when dragging
     const hoverCard = doc.getElementById(
@@ -952,6 +1178,9 @@ function createItemElement(
     row.classList.remove("dragging");
     setDraggedTabId(doc, null);
     setDragSourceCategoryId(doc, null);
+    // Multi mode: clear the drag keys; on cancel the selected rows
+    // fade/expand back. No-op for single drags.
+    endMultiDrag(doc, isDropRenderPending(doc));
     if (!isDropRenderPending(doc)) {
       row.classList.remove("vt-drag-source-collapsed");
       clearAllItemDropIndicators(doc);
@@ -973,12 +1202,31 @@ function createItemElement(
     });
   });
 
-  // Click to switch to this tab
+  // Click to switch to this tab — unless a selection modifier is held:
+  // Ctrl toggles the selection (no navigation), Shift selects the range from
+  // the anchor. A plain click always clears the selection (0.2s fade) and,
+  // on a selected row, still navigates to the tab.
   row.addEventListener("click", (e: MouseEvent) => {
     if (!pdf.tabId) return; // dormant item, no active tab
     // Don't switch if user was dragging
     if ((e.target as HTMLElement).closest(".vertical-tabs-resize-handle"))
       return;
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      toggleTabSelection(doc, pdf.tabId);
+      return;
+    }
+    if (e.shiftKey) {
+      e.preventDefault();
+      selectTabRange(doc, pdf.tabId, getOrderedVisibleTabIds(doc));
+      return;
+    }
+    // Plain click: the selection clears (0.2s fade, replayed after the
+    // navigation-triggered re-render) along with the range anchor, and
+    // navigation proceeds.
+    if (getSelectedTabCount(doc) > 0) {
+      clearTabSelection(doc, { forRender: true });
+    }
     // Hide hover card before switching tabs
     const hc = doc.getElementById(
       "vertical-tabs-hover-card",
@@ -1041,6 +1289,9 @@ function createCategoryElement(
       dt.setData(VT_DRAG_MIME_TYPE, "1");
       dt.effectAllowed = "move";
     }
+    // Edge case: dragging a category header clears any tab selection (0.2s
+    // fade) and proceeds with the normal category-reorder drag.
+    if (getSelectedTabCount(doc) > 0) clearTabSelection(doc);
     // Smoothly collapse the source category (if expanded), then fade its
     // wrapper out so the original slot disappears. Persisted state is left
     // untouched; the pre-drag collapsed flag drives the release animation.
@@ -1155,7 +1406,8 @@ function createCategoryElement(
     const draggedTabId = getDraggedTabId(doc);
     if (!draggedTabId) return;
 
-    applyCategoryPreview(doc, wrapper, getDragSourceCategoryId(doc), 1);
+    const preview = getDragPreviewParams(doc);
+    applyCategoryPreview(doc, wrapper, preview.source, 1);
     setWrapperDragOver(wrapper, doc);
 
     const visibleItems = getContainerVisibleItems(itemsContainer);
@@ -1178,13 +1430,17 @@ function createCategoryElement(
     }
 
     const targetRow = visibleItems[insertIndex];
-    const shiftHeight = applyDropPreview(doc, {
-      type: "item",
-      container: itemsContainer,
-      targetRow,
-      before: true,
-      draggedTabId,
-    });
+    const shiftHeight = applyDropPreview(
+      doc,
+      {
+        type: "item",
+        container: itemsContainer,
+        targetRow,
+        before: true,
+        draggedTabId,
+      },
+      preview.exclude,
+    );
 
     clearAllItemDropIndicators(doc);
     if (insertIndex === 0) {
@@ -1218,6 +1474,19 @@ function createCategoryElement(
       visibleItems.map((el) => el.dataset.tabId || ""),
     );
 
+    // Multi-tab drop: contiguous block at the computed index.
+    const multiIds = getMultiDragTabIds(doc);
+    if (multiIds?.length) {
+      dispatchMultiDrop(doc, {
+        categoryId: category.id,
+        insertBeforeTabId:
+          action.type === "insert-before" ? action.targetTabId : undefined,
+        releaseTabIds: multiIds,
+      });
+      setDropRenderPending(doc, true);
+      return;
+    }
+
     if (action.type === "insert-before") {
       dispatchVtEvent(itemsContainer, "vertical-tabs:reorder-item", {
         categoryId: category.id,
@@ -1233,6 +1502,8 @@ function createCategoryElement(
         categoryId: category.id,
       });
     }
+    // Single-tab drop: same release fade-in as the multi cascade.
+    markMultiTabRelease(doc, [dragData]);
     markSmoothCollapseAfterDrop(doc, wrapper);
     markDropOutlineFade(doc, dropOutlineFadeTargetForElement(wrapper));
     setDropRenderPending(doc, true);
@@ -1269,12 +1540,17 @@ function createCategoryElement(
     wrapper.classList.add("drag-over");
 
     const draggedTabId = getDraggedTabId(doc) || data;
-    applyCategoryPreview(doc, wrapper, getDragSourceCategoryId(doc), 1);
-    applyDropPreview(doc, {
-      type: "category",
-      categoryWrapper: wrapper,
-      draggedTabId,
-    });
+    const preview = getDragPreviewParams(doc);
+    applyCategoryPreview(doc, wrapper, preview.source, 1);
+    applyDropPreview(
+      doc,
+      {
+        type: "category",
+        categoryWrapper: wrapper,
+        draggedTabId,
+      },
+      preview.exclude,
+    );
   };
   const onDragLeave = (e: DragEvent) => {
     const related = e.relatedTarget as Node | null;
@@ -1313,6 +1589,19 @@ function createCategoryElement(
       visibleItems.map((el) => el.dataset.tabId || ""),
     );
 
+    // Multi-tab drop: contiguous block at the first position.
+    const multiIds = getMultiDragTabIds(doc);
+    if (multiIds?.length) {
+      dispatchMultiDrop(doc, {
+        categoryId: category.id,
+        insertBeforeTabId:
+          action.type === "insert-before" ? action.targetTabId : undefined,
+        releaseTabIds: multiIds,
+      });
+      setDropRenderPending(doc, true);
+      return;
+    }
+
     if (action.type === "insert-before") {
       dispatchVtEvent(wrapper, "vertical-tabs:reorder-item", {
         categoryId: category.id,
@@ -1329,6 +1618,8 @@ function createCategoryElement(
         categoryId: category.id,
       });
     }
+    // Single-tab drop: same release fade-in as the multi cascade.
+    markMultiTabRelease(doc, [dragData]);
     markSmoothCollapseAfterDrop(doc, wrapper);
     markDropOutlineFade(doc, dropOutlineFadeTargetForElement(wrapper));
     setDropRenderPending(doc, true);
@@ -1383,8 +1674,7 @@ export function showItemContextMenu(
       el.style.background = "";
     });
     el.addEventListener("click", () => {
-      menu.remove();
-      setContextMenuOpen(doc, false);
+      animatePopupClose(menu, () => setContextMenuOpen(doc, false));
       scheduleCollapse(doc);
       action();
     });
@@ -1428,32 +1718,44 @@ export function showItemContextMenu(
 
   addItem(getString("vertical-tabs-close-tab"), () => {
     if (!pdf.tabId) return;
-    const ztabs = getZoteroTabs();
-    if (ztabs) {
-      try {
-        ztabs.close(pdf.tabId);
-      } catch {
-        // ignore
-      }
-    }
-  });
-
-  addItem(getString("vertical-tabs-close-other-tabs"), () => {
-    const ztabs = getZoteroTabs();
-    if (!ztabs) return;
-    const allTabs = getOpenedPDFs();
-    for (const t of allTabs) {
-      if (t.tabId && t.tabId !== pdf.tabId) {
+    const tabId = pdf.tabId;
+    animateTabsExit(doc, [tabId], () => {
+      const ztabs = getZoteroTabs();
+      if (ztabs) {
         try {
-          ztabs.close(t.tabId);
+          ztabs.close(tabId);
         } catch {
           // ignore
         }
       }
-    }
+      // See the × button for why the silent untracking matters (flash back).
+      removeTabsFromTrackingSilently([tabId]);
+    });
+  });
+
+  addItem(getString("vertical-tabs-close-other-tabs"), () => {
+    const tabIds = getOpenedPDFs()
+      .map((t) => t.tabId)
+      .filter((id): id is string => !!id && id !== pdf.tabId);
+    if (!tabIds.length) return;
+    // All rows collapse together, then one commit closes them all.
+    animateTabsExit(doc, tabIds, () => {
+      const ztabs = getZoteroTabs();
+      if (!ztabs) return;
+      for (const id of tabIds) {
+        try {
+          ztabs.close(id);
+        } catch {
+          // ignore
+        }
+      }
+      // See the × button for why the silent untracking matters (flash back).
+      removeTabsFromTrackingSilently(tabIds);
+    });
   });
 
   doc.documentElement?.appendChild(menu);
+  animatePopupOpen(menu, "top left");
   setContextMenuOpen(doc, true);
 
   const menuId = menu.id;
@@ -1472,13 +1774,11 @@ export function showItemContextMenu(
     if (target.closest(`#${menuId}`)) return;
     // Click inside VT → close menu, keep VT open
     if (target.closest(`#${SIDEBAR_ID}`)) {
-      menu.remove();
-      setContextMenuOpen(doc, false);
+      animatePopupClose(menu, () => setContextMenuOpen(doc, false));
       cleanup();
       return;
     }
-    menu.remove();
-    setContextMenuOpen(doc, false);
+    animatePopupClose(menu, () => setContextMenuOpen(doc, false));
     scheduleCollapse(doc);
     cleanup();
   };
@@ -1502,6 +1802,8 @@ export function renderCategories(
   // Container-level category-reorder handlers (end-of-list gap + drop), bound
   // once — the container element itself persists across re-renders.
   attachCategoryContainerDragEvents(doc, container);
+  // Sidebar-level click-to-clear for the multi selection, bound once per doc.
+  attachSelectionEvents(doc);
 
   // Categories only contain currently open tabs, so match purely by tabId.
   const assignedTabIds = new Set(
@@ -1671,6 +1973,11 @@ export function subscribeToRenderEvents(
       });
     }
     renderCategories(doc, container, data, pdfs);
+    // Replay the selection fade-out on the fresh rows: the plain-click
+    // navigation just re-rendered and would otherwise have cut the 0.2s
+    // fade short when the old rows were destroyed.
+    const selectionFadeOut = consumeSelectionFadeOut(doc);
+    if (selectionFadeOut) replaySelectionFadeOut(container, selectionFadeOut);
     // Replay the dashed-outline fade-out on the freshly rendered drop target:
     // the drop-triggered re-render destroys the outlined element, which would
     // otherwise make the outline vanish instantly. Consumed by the FIRST
@@ -1680,10 +1987,18 @@ export function subscribeToRenderEvents(
     // Quick-create flow: slide-down + fade-in entrance for the new category.
     const entranceId = consumeNewCategoryEntrance(doc);
     if (entranceId) playNewCategoryEntrance(doc, container, entranceId);
+    // Color-change flow: cross-fade the category background from the old
+    // color to the new one on the freshly rendered wrapper.
+    const colorFade = consumeCategoryColorFade(doc);
+    if (colorFade) playCategoryColorFade(doc, container, colorFade);
     // Category reorder flow: release animation for the moved category (fade
     // the header in at the gap position, then expand if it was expanded).
     const catRelease = consumeCategoryRelease(doc);
     if (catRelease) playCategoryRelease(doc, container, catRelease);
+    // Multi-tab flow: cascade release — first row fades in, then the rest of
+    // the moved block unfolds with a stagger.
+    const multiRelease = consumeMultiTabRelease(doc);
+    if (multiRelease) playMultiTabRelease(doc, container, multiRelease);
     if (isDropRenderPending(doc)) {
       clearDropPreview(doc);
       setDropRenderPending(doc, false);

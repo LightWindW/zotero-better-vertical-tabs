@@ -357,7 +357,7 @@ export function getStyles(): string {
       box-sizing: border-box;
       overflow: hidden;
       opacity: 1;
-      transition: height 0.45s ease, opacity 0.15s ease-out;
+      transition: height 0.45s ease-out, opacity 0.15s ease-out;
       position: relative;
     }
 
@@ -374,12 +374,12 @@ export function getStyles(): string {
        the height transition from the base rule. */
     #${SIDEBAR_ID} .vertical-tabs-category.vt-height-animating .vertical-tabs-items {
       opacity: 1;
-      transition: height 0.45s ease, opacity 0s;
+      transition: height 0.3s ease-out, opacity 0s;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category.vt-category-preview .vertical-tabs-items {
       opacity: 1;
-      transition: height 0.45s ease, opacity 0.15s ease-out;
+      transition: height 0.3s ease-out, opacity 0.15s ease-out;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-item {
@@ -396,6 +396,64 @@ export function getStyles(): string {
 
     #${SIDEBAR_ID} .vertical-tabs-item:hover {
       background: var(--material-hover, rgba(0, 0, 0, 0.04));
+    }
+
+    /* Tab exit animation: the class only carries the transition (height,
+       opacity, vertical padding); geometry is driven inline by tabExit.ts
+       (content-box + min-height would otherwise block height: 0). The fade
+       finishes first (0.2s); the collapse keeps easing out to 0.3s so the
+       slide-up of the rows below stays visible. */
+    #${SIDEBAR_ID} .vertical-tabs-item.vt-tab-exit {
+      overflow: hidden;
+      pointer-events: none;
+      transition:
+        height 0.3s ease-out,
+        opacity 0.2s ease-out,
+        padding-top 0.3s ease-out,
+        padding-bottom 0.3s ease-out;
+    }
+
+    /* Multi-select overlay: a real child element (the row's ::before/::after
+       are taken by the drop indicator bars). Always present so selecting /
+       deselecting fades opacity over 0.2s; the class only flips opacity.
+       Deliberately deeper than the hover block so selection reads clearly. */
+    #${SIDEBAR_ID} .vertical-tabs-item-selection-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.08);
+      border-radius: 4px;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-item.vt-selected .vertical-tabs-item-selection-overlay {
+      opacity: 1;
+    }
+
+    /* Multi-drag: every selected row fades out and collapses. Inline styles
+       carry the animated values (height / padding / min-height are all
+       driven inline — min-height and padding must be zeroed inline or the
+       collapse stalls at 36px / leaves an 8px sliver); this class provides
+       clipping + the transition list. */
+    #${SIDEBAR_ID} .vertical-tabs-item.vt-multi-source-collapse {
+      overflow: hidden;
+      transition:
+        height 0.25s ease,
+        opacity 0.25s ease,
+        padding-top 0.25s ease,
+        padding-bottom 0.25s ease;
+    }
+
+    /* Multi-drop cascade release: same mechanics while rows unfold. */
+    #${SIDEBAR_ID} .vertical-tabs-item.vt-multi-release {
+      overflow: hidden;
+      transition:
+        height 0.25s ease,
+        opacity 0.25s ease,
+        padding-top 0.25s ease,
+        padding-bottom 0.25s ease;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-item.active {
@@ -699,7 +757,7 @@ export function getStyles(): string {
 
     #${SIDEBAR_ID} .vertical-tabs-drop-zone.vt-drop-zone-preview {
       min-height: var(--vt-category-preview-height, 32px);
-      transition: min-height 0.45s ease, background 0.3s ease, outline-color 0.3s ease;
+      transition: min-height 0.45s ease-out, background 0.3s ease, outline-color 0.3s ease;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-drop-zone.vertical-tabs-drop-zone-empty {
@@ -907,6 +965,17 @@ export function getStyles(): string {
     .vertical-tabs-more-menu-leaving {
       transform-origin: top right;
       animation: vt-more-menu-leave 0.15s ease-out forwards;
+    }
+
+    /* Shared popup open/close animation (context menus) — same keyframes as
+       the more menu; transform-origin is pinned inline per menu. */
+    .vt-popup-appear {
+      animation: vt-more-menu-appear 0.15s ease-out;
+    }
+
+    .vt-popup-leaving {
+      animation: vt-more-menu-leave 0.15s ease-out forwards;
+      pointer-events: none;
     }
 
     .vertical-tabs-more-menu-item img {
@@ -1132,9 +1201,17 @@ export function getStyles(): string {
         background: var(--material-hover, rgba(255, 255, 255, 0.05));
       }
 
-      #${SIDEBAR_ID} .vertical-tabs-item.active,
-      #${SIDEBAR_ID} .vertical-tabs-home-btn.active {
+      #${SIDEBAR_ID} .vertical-tabs-item-selection-overlay {
+        background: rgba(255, 255, 255, 0.12);
+      }
+
+      #${SIDEBAR_ID} .vertical-tabs-item.active {
         background: #626262;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+      }
+
+      #${SIDEBAR_ID} .vertical-tabs-home-btn.active {
+        background: #494949;
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
       }
 
@@ -1143,9 +1220,13 @@ export function getStyles(): string {
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
       }
 
-      #${SIDEBAR_ID} .vertical-tabs-item.active:hover,
-      #${SIDEBAR_ID} .vertical-tabs-home-btn.active:hover {
+      #${SIDEBAR_ID} .vertical-tabs-item.active:hover {
         background: #626262;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+      }
+
+      #${SIDEBAR_ID} .vertical-tabs-home-btn.active:hover {
+        background: #494949;
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
       }
 

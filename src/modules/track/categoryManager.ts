@@ -7,6 +7,8 @@ import {
   cleanStaleTabIds,
   createCategorySnapshot,
   deleteCategory,
+  insertItemsIntoCategoryAt,
+  insertUncategorizedItemsAt,
   loadData,
   removeItemFromAllCategories,
   renameCategory,
@@ -15,6 +17,7 @@ import {
   reorderUncategorized,
   saveData,
   ItemSnapshot,
+  ItemTabEntry,
   VerticalTabsData,
   restoreCategoryTabIdsAndOrder,
 } from "./dataStore";
@@ -55,7 +58,9 @@ import {
 } from "../save/categoryRestore";
 import { openPluginPreferences } from "../save/openPreferences";
 import { promptCategoryName } from "../ui/categoryNameDialog";
+import { animatePopupClose, animatePopupOpen } from "../ui/popupAnimation";
 import { markNewCategoryEntrance } from "../render/categoryEntrance";
+import { markCategoryColorFade } from "../render/categoryColorFade";
 import { animateCategoryExit } from "../render/categoryExit";
 import {
   scheduleCollapse,
@@ -73,6 +78,8 @@ let _syncingFromNative = false;
 interface CategoryHandlers {
   add: EventListener;
   createWithItem: EventListener;
+  createWithItems: EventListener;
+  moveItems: EventListener;
   assign: EventListener;
   context: EventListener;
   reorder: EventListener;
@@ -167,11 +174,17 @@ function showContextMenu(
       border: ${currentColor === c ? mc.swatchBorderSelected : mc.swatchBorder};
     `;
     swatch.addEventListener("click", () => {
-      menu.remove();
-      setContextMenuOpen(doc, false);
+      animatePopupClose(menu, () => setContextMenuOpen(doc, false));
       scheduleCollapse(doc);
       const cat = _data?.categories.find((cat) => cat.id === categoryId);
       if (cat && _data) {
+        // Mark before persist so the render post-processing can replay the
+        // old→new color cross-fade on the freshly rendered wrapper.
+        markCategoryColorFade(doc, {
+          categoryId,
+          oldColor: cat.color,
+          newColor: c === "#F2F2F2" ? undefined : c,
+        });
         _data = {
           ..._data,
           categories: _data.categories.map((cat) =>
@@ -201,8 +214,7 @@ function showContextMenu(
     renameItem.style.background = "";
   });
   renameItem.addEventListener("click", async () => {
-    menu.remove();
-    setContextMenuOpen(doc, false);
+    animatePopupClose(menu, () => setContextMenuOpen(doc, false));
     scheduleCollapse(doc);
     const cat = _data?.categories.find((c) => c.id === categoryId);
     const dialogData: { [key: string]: any } = {
@@ -279,8 +291,7 @@ function showContextMenu(
     saveItem.style.background = "";
   });
   saveItem.addEventListener("click", () => {
-    menu.remove();
-    setContextMenuOpen(doc, false);
+    animatePopupClose(menu, () => setContextMenuOpen(doc, false));
     scheduleCollapse(doc);
     dispatchVtEvent(doc, "vertical-tabs:save-category", { categoryId });
   });
@@ -312,8 +323,7 @@ function showContextMenu(
     deleteItem.style.background = "";
   });
   deleteItem.addEventListener("click", () => {
-    menu.remove();
-    setContextMenuOpen(doc, false);
+    animatePopupClose(menu, () => setContextMenuOpen(doc, false));
     scheduleCollapse(doc);
     dispatchVtEvent(doc, "vertical-tabs:category-context-delete", {
       categoryId,
@@ -322,6 +332,7 @@ function showContextMenu(
   menu.appendChild(deleteItem);
 
   doc.documentElement?.appendChild(menu);
+  animatePopupOpen(menu, "top left");
   setContextMenuOpen(doc, true);
 
   const cleanup = () => {
@@ -337,13 +348,11 @@ function showContextMenu(
     if (target.closest("#vertical-tabs-context-menu")) return;
     // Click inside VT (e.g. right-click another element) → close menu, keep VT open
     if (target.closest(`#${SIDEBAR_ID}`)) {
-      menu.remove();
-      setContextMenuOpen(doc, false);
+      animatePopupClose(menu, () => setContextMenuOpen(doc, false));
       cleanup();
       return;
     }
-    menu.remove();
-    setContextMenuOpen(doc, false);
+    animatePopupClose(menu, () => setContextMenuOpen(doc, false));
     scheduleCollapse(doc);
     cleanup();
   };
@@ -607,6 +616,72 @@ function handleCreateCategoryWithItem(event: Event): void {
   void persist(doc);
 }
 
+/**
+ * Multi-select quick-create: same as the single-tab flow but inserts the
+ * whole ordered block of selected tabs into the new top category.
+ */
+function handleCreateCategoryWithItems(event: Event): void {
+  const customEvent = event as CustomEvent;
+  const { name, entries } = customEvent.detail as {
+    name: string;
+    entries: ItemTabEntry[];
+  };
+  const doc =
+    (event.target as Node).ownerDocument ?? (event.target as Document);
+  if (!_data || !name || !name.trim() || !entries?.length) return;
+
+  const created = addCategoryAtTop(_data, name);
+  _data = insertItemsIntoCategoryAt(
+    created.data,
+    created.categoryId,
+    entries,
+    undefined,
+  );
+
+  markNewCategoryEntrance(doc, created.categoryId);
+
+  syncTabOrderToNative(
+    _data.categories.map((c) => ({ order: c.order, tabIds: c.tabIds })),
+    _data.uncategorizedOrder,
+  );
+  void persist(doc);
+}
+
+/**
+ * Multi-tab move: insert the ordered block of dragged tabs at the target
+ * position (category or uncategorized). insertItemsIntoCategoryAt /
+ * insertUncategorizedItemsAt already handle the contiguous block, tabId
+ * dedup and removal from previous locations.
+ */
+function handleMoveItems(event: Event): void {
+  const customEvent = event as CustomEvent;
+  const { categoryId, entries, insertBeforeTabId } = customEvent.detail as {
+    categoryId: string;
+    entries: ItemTabEntry[];
+    insertBeforeTabId?: string;
+  };
+  const doc =
+    (event.target as Node).ownerDocument ?? (event.target as Document);
+  if (!_data || !entries?.length) return;
+
+  if (categoryId && categoryId !== "__uncategorized__") {
+    _data = insertItemsIntoCategoryAt(
+      _data,
+      categoryId,
+      entries,
+      insertBeforeTabId,
+    );
+  } else {
+    _data = insertUncategorizedItemsAt(_data, entries, insertBeforeTabId);
+  }
+
+  syncTabOrderToNative(
+    _data.categories.map((c) => ({ order: c.order, tabIds: c.tabIds })),
+    _data.uncategorizedOrder,
+  );
+  void persist(doc);
+}
+
 function handleAssignItem(event: Event): void {
   const customEvent = event as CustomEvent;
   const { itemId, categoryId, tabId } = customEvent.detail as {
@@ -731,6 +806,11 @@ function cleanupOldCategoryHandlers(doc: Document): void {
     "vertical-tabs:create-category-with-item",
     old.createWithItem,
   );
+  doc.removeEventListener(
+    "vertical-tabs:create-category-with-items",
+    old.createWithItems,
+  );
+  doc.removeEventListener("vertical-tabs:move-items", old.moveItems);
   doc.removeEventListener("vertical-tabs:assign-item", old.assign);
   doc.removeEventListener("vertical-tabs:category-context", old.context);
   doc.removeEventListener("vertical-tabs:reorder-item", old.reorder);
@@ -854,6 +934,8 @@ export async function initCategoryManager(doc: Document): Promise<void> {
   const handlers: CategoryHandlers = {
     add: handleAddCategory,
     createWithItem: handleCreateCategoryWithItem,
+    createWithItems: handleCreateCategoryWithItems,
+    moveItems: handleMoveItems,
     assign: handleAssignItem,
     context: handleCategoryContext,
     reorder: handleReorderItem,
@@ -881,6 +963,11 @@ export async function initCategoryManager(doc: Document): Promise<void> {
     "vertical-tabs:create-category-with-item",
     handlers.createWithItem,
   );
+  doc.addEventListener(
+    "vertical-tabs:create-category-with-items",
+    handlers.createWithItems,
+  );
+  doc.addEventListener("vertical-tabs:move-items", handlers.moveItems);
   doc.addEventListener("vertical-tabs:assign-item", handlers.assign);
   doc.addEventListener("vertical-tabs:category-context", handlers.context);
   doc.addEventListener("vertical-tabs:reorder-item", handlers.reorder);

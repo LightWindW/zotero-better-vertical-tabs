@@ -69,7 +69,10 @@ export type DropPreviewTarget =
   | CategoryDropPreviewTarget
   | DropZoneEmptyPreviewTarget;
 
-function computeDesiredShifted(target: DropPreviewTarget): {
+function computeDesiredShifted(
+  target: DropPreviewTarget,
+  excludeTabIds?: ReadonlySet<string>,
+): {
   elements: Element[];
   height: number;
 } {
@@ -109,9 +112,18 @@ function computeDesiredShifted(target: DropPreviewTarget): {
   const candidateRows =
     startIndex >= 0 ? rows.slice(startIndex) : rows.length > 0 ? rows : [];
 
+  // Multi-tab drag: exclude every dragged row from the shift set; single
+  // drag keeps the original draggedTabId exclusion.
   const sourceSelector = itemSelectorFor(target.draggedTabId);
-  const elements = candidateRows.filter((el) => !el.matches(sourceSelector));
+  const elements = candidateRows.filter((el) => {
+    if (excludeTabIds) {
+      const id = (el as HTMLElement).dataset.tabId || "";
+      if (excludeTabIds.has(id)) return false;
+    }
+    return !el.matches(sourceSelector);
+  });
 
+  // The gap is always ONE row tall, regardless of how many tabs are dragged.
   const height = elements[0] ? (elements[0] as HTMLElement).offsetHeight : 0;
   return { elements, height };
 }
@@ -119,9 +131,13 @@ function computeDesiredShifted(target: DropPreviewTarget): {
 export function applyDropPreview(
   doc: Document,
   target: DropPreviewTarget,
+  excludeTabIds?: ReadonlySet<string>,
 ): number {
   const state = getState(doc);
-  const { elements: desired, height } = computeDesiredShifted(target);
+  const { elements: desired, height } = computeDesiredShifted(
+    target,
+    excludeTabIds,
+  );
   const desiredSet = new Set(desired);
 
   // Remove shift from elements that are no longer in the desired set.
