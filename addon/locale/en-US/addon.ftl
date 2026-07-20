@@ -72,6 +72,7 @@ vertical-tabs-title = Opened PDFs
 vertical-tabs-empty = No opened PDFs
 vertical-tabs-category-default = Uncategorized
 vertical-tabs-category-new = New Category
+vertical-tabs-new-category-dropzone = + New Category
 
 vertical-tabs-just-now = just now
 vertical-tabs-minutes-ago = { $count } minutes ago

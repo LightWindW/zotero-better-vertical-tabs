@@ -8,6 +8,11 @@ import {
   isInternalVtDrag,
 } from "./dropTarget";
 import {
+  clearDropOutlineFade,
+  dropOutlineFadeTargetFromDropTarget,
+  markDropOutlineFade,
+} from "./dropOutlineFade";
+import {
   cancelPendingCollapse,
   expandFloatingSidebar,
   getFloatingExpanded,
@@ -237,27 +242,27 @@ function handleDragLeave(
   scheduleCollapse(doc);
 }
 
-async function handleDrop(
-  state: MainPaneDropState,
+export interface PreparedExternalDrop {
+  entries: ItemTabEntry[];
+  openedTabIds: string[];
+  currentData: VerticalTabsData;
+  missingLabels: string[];
+}
+
+/**
+ * Shared "open dragged library items and prepare clean data" phase of an
+ * external drop: resolve the selected items' PDF attachments, open them as
+ * lazy reader tabs, wait for them to register in Zotero_Tabs, and return the
+ * cleaned VT data to insert into. Returns null when nothing can be opened
+ * (showing the missing-PDF toast when there were items but no PDFs).
+ * Used by handleDrop and by the new-category drop zone's external path.
+ */
+export async function prepareExternalDropData(
   doc: Document,
-  e: DragEvent,
-): Promise<void> {
-  if (!state.isExternalDrag) return;
-  e.preventDefault();
-  e.stopPropagation();
-
-  const target =
-    state.lastTarget ?? computeDropTarget(doc, e.clientX, e.clientY);
-  ztoolkit.log("[vt-main-pane-drop] target:", JSON.stringify(target));
-  if (target.type === "none") {
-    resetDragState(state, doc);
-    return;
-  }
-
+): Promise<PreparedExternalDrop | null> {
   const items = getSelectedItems(doc);
   if (items.length === 0) {
-    resetDragState(state, doc);
-    return;
+    return null;
   }
 
   const attachments: Zotero.Item[] = [];
@@ -275,8 +280,7 @@ async function handleDrop(
     if (missingLabels.length > 0) {
       showToast(doc, getString("vertical-tabs-drop-missing-pdf"));
     }
-    resetDragState(state, doc);
-    return;
+    return null;
   }
 
   const entries = await openPDFAttachmentsAsTabs(attachments, doc);
@@ -291,8 +295,7 @@ async function handleDrop(
     if (missingLabels.length > 0) {
       showToast(doc, getString("vertical-tabs-drop-missing-pdf"));
     }
-    resetDragState(state, doc);
-    return;
+    return null;
   }
 
   // Wait until the newly opened tabs have actually entered Zotero_Tabs._tabs
@@ -311,6 +314,41 @@ async function handleDrop(
     currentData,
     getLiveUncategorizedEntries(currentData, doc),
   );
+
+  return { entries, openedTabIds, currentData, missingLabels };
+}
+
+async function handleDrop(
+  state: MainPaneDropState,
+  doc: Document,
+  e: DragEvent,
+): Promise<void> {
+  if (!state.isExternalDrag) return;
+  e.preventDefault();
+  e.stopPropagation();
+
+  const target =
+    state.lastTarget ?? computeDropTarget(doc, e.clientX, e.clientY);
+  ztoolkit.log("[vt-main-pane-drop] target:", JSON.stringify(target));
+  if (target.type === "none") {
+    resetDragState(state, doc);
+    return;
+  }
+
+  // The drop re-renders the categories DOM and destroys the outlined element;
+  // record the target now (before any await) so the render post-processing
+  // replays the dashed-outline fade-out on the fresh DOM. Cleared below if
+  // the drop aborts early. Item before/after targets show no dashed outline
+  // and map to null (ignored).
+  markDropOutlineFade(doc, dropOutlineFadeTargetFromDropTarget(target));
+
+  const prepared = await prepareExternalDropData(doc);
+  if (!prepared) {
+    clearDropOutlineFade(doc);
+    resetDragState(state, doc);
+    return;
+  }
+  const { entries, openedTabIds, currentData, missingLabels } = prepared;
 
   let targetCategoryId: string | undefined;
   if (target.type === "category") {

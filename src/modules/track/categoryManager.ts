@@ -2,6 +2,7 @@ import { config } from "../../../package.json";
 import { getString } from "../../utils/locale";
 import {
   addCategory,
+  addCategoryAtTop,
   assignItemToCategory,
   cleanStaleTabIds,
   createCategorySnapshot,
@@ -32,6 +33,7 @@ import {
   getOpenedPDFs,
   getZoteroTabs,
   syncTabOrderToNative,
+  removeTabsFromTrackingSilently,
   loadLastReadTimes,
   getLastReadTimes,
 } from "./itemTracker";
@@ -52,6 +54,9 @@ import {
   showRestoreWarningDialog,
 } from "../save/categoryRestore";
 import { openPluginPreferences } from "../save/openPreferences";
+import { promptCategoryName } from "../ui/categoryNameDialog";
+import { markNewCategoryEntrance } from "../render/categoryEntrance";
+import { animateCategoryExit } from "../render/categoryExit";
 import {
   scheduleCollapse,
   setContextMenuOpen,
@@ -67,6 +72,7 @@ let _syncingFromNative = false;
 
 interface CategoryHandlers {
   add: EventListener;
+  createWithItem: EventListener;
   assign: EventListener;
   context: EventListener;
   reorder: EventListener;
@@ -560,65 +566,45 @@ async function handleAddCategory(event: Event): Promise<void> {
   _lastAddCatTime = now;
   const doc =
     (event.target as Node).ownerDocument ?? (event.target as Document);
-  const defaultName = getString("vertical-tabs-category-new");
 
-  const dialogData: { [key: string]: any } = {
-    inputValue: defaultName,
-  };
-
-  const dialog = new ztoolkit.Dialog(2, 1)
-    .addCell(0, 0, {
-      tag: "label",
-      namespace: "html",
-      properties: {
-        innerHTML: getString("vertical-tabs-add-category"),
-      },
-    })
-    .addCell(1, 0, {
-      tag: "input",
-      namespace: "html",
-      id: "vt-add-category-input",
-      attributes: {
-        "data-bind": "inputValue",
-        "data-prop": "value",
-        type: "text",
-      },
-    })
-    .addButton(getString("vertical-tabs-confirm"), "confirm")
-    .addButton(getString("vertical-tabs-cancel"), "cancel")
-    .setDialogData(dialogData)
-    .open(getString("vertical-tabs-add-category"));
-
-  setDialogOpen(doc, true);
-  dialogData.loadCallback = () => {
-    const input = dialog.window.document.getElementById(
-      "vt-add-category-input",
-    ) as HTMLInputElement | null;
-    if (!input) return;
-    input.focus();
-    input.select();
-    input.addEventListener("keydown", (e: KeyboardEvent) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        dialogData._lastButtonId = "confirm";
-        dialog.window.close();
-      }
-    });
-  };
-
-  try {
-    await dialogData.unloadLock.promise;
-  } finally {
-    setDialogOpen(doc, false);
+  const name = await promptCategoryName(doc, {
+    title: getString("vertical-tabs-add-category"),
+    initial: getString("vertical-tabs-category-new"),
+    inputId: "vt-add-category-input",
+  });
+  if (name) {
+    _data = addCategory(_data!, name);
+    void persist(doc);
   }
+}
 
-  if (dialogData._lastButtonId === "confirm") {
-    const name = (dialogData.inputValue as string) || "";
-    if (name.trim()) {
-      _data = addCategory(_data!, name.trim());
-      void persist(doc);
-    }
-  }
+/**
+ * Quick-create flow from the top drop zone: create a category with the given
+ * name, move the dragged tab into it, and place it at the TOP of the list.
+ */
+function handleCreateCategoryWithItem(event: Event): void {
+  const customEvent = event as CustomEvent;
+  const { name, itemId, tabId } = customEvent.detail as {
+    name: string;
+    itemId: number;
+    tabId?: string;
+  };
+  const doc =
+    (event.target as Node).ownerDocument ?? (event.target as Document);
+  if (!_data || !name || !name.trim()) return;
+
+  const created = addCategoryAtTop(_data, name);
+  _data = assignItemToCategory(created.data, itemId, created.categoryId, tabId);
+
+  // The persist below triggers a re-render; mark the new category so the
+  // render post-processing plays its slide-down + fade-in entrance.
+  markNewCategoryEntrance(doc, created.categoryId);
+
+  syncTabOrderToNative(
+    _data.categories.map((c) => ({ order: c.order, tabIds: c.tabIds })),
+    _data.uncategorizedOrder,
+  );
+  void persist(doc);
 }
 
 function handleAssignItem(event: Event): void {
@@ -741,6 +727,10 @@ function cleanupOldCategoryHandlers(doc: Document): void {
   const old = (doc as any)[HANDLERS_KEY] as CategoryHandlers | undefined;
   if (!old) return;
   doc.removeEventListener("vertical-tabs:add-category", old.add);
+  doc.removeEventListener(
+    "vertical-tabs:create-category-with-item",
+    old.createWithItem,
+  );
   doc.removeEventListener("vertical-tabs:assign-item", old.assign);
   doc.removeEventListener("vertical-tabs:category-context", old.context);
   doc.removeEventListener("vertical-tabs:reorder-item", old.reorder);
@@ -790,19 +780,30 @@ export async function initCategoryManager(doc: Document): Promise<void> {
 
   const deleteHandler: EventListener = ((e: CustomEvent) => {
     const { categoryId } = e.detail as { categoryId: string };
-    const category = _data?.categories.find((c) => c.id === categoryId);
-    if (category && category.tabIds.length > 0) {
-      const ztabs = getZoteroTabs();
-      const tabIdsToClose = category.tabIds.filter((tabId) => {
-        const tabInfo = ztabs?.getTabInfo(tabId);
-        return tabInfo && tabInfo.type !== "library";
-      });
-      if (tabIdsToClose.length > 0) {
-        ztabs?.close(tabIdsToClose);
+    // Play the collapse+fade exit first; the data commit (closing tabs,
+    // deleting the category, persisting) runs only after the animation, so
+    // the wrapper is already zero-sized when the re-render removes it.
+    animateCategoryExit(doc, categoryId, () => {
+      const category = _data?.categories.find((c) => c.id === categoryId);
+      if (category && category.tabIds.length > 0) {
+        const ztabs = getZoteroTabs();
+        const tabIdsToClose = category.tabIds.filter((tabId) => {
+          const tabInfo = ztabs?.getTabInfo(tabId);
+          return tabInfo && tabInfo.type !== "library";
+        });
+        if (tabIdsToClose.length > 0) {
+          ztabs?.close(tabIdsToClose);
+          // Stop tracking the closing tabs right away (silently). Otherwise
+          // the data-changed re-render below would still see them in
+          // _openedPDFs (the 100ms close-flush has not run) and briefly
+          // resurrect them in the uncategorized area — a visible flash back
+          // to the pre-delete state.
+          removeTabsFromTrackingSilently(tabIdsToClose);
+        }
       }
-    }
-    _data = deleteCategory(_data!, categoryId);
-    void persist(doc);
+      _data = deleteCategory(_data!, categoryId);
+      void persist(doc);
+    });
   }) as EventListener;
 
   const colorHandler: EventListener = ((e: CustomEvent) => {
@@ -852,6 +853,7 @@ export async function initCategoryManager(doc: Document): Promise<void> {
 
   const handlers: CategoryHandlers = {
     add: handleAddCategory,
+    createWithItem: handleCreateCategoryWithItem,
     assign: handleAssignItem,
     context: handleCategoryContext,
     reorder: handleReorderItem,
@@ -875,6 +877,10 @@ export async function initCategoryManager(doc: Document): Promise<void> {
   };
 
   doc.addEventListener("vertical-tabs:add-category", handlers.add);
+  doc.addEventListener(
+    "vertical-tabs:create-category-with-item",
+    handlers.createWithItem,
+  );
   doc.addEventListener("vertical-tabs:assign-item", handlers.assign);
   doc.addEventListener("vertical-tabs:category-context", handlers.context);
   doc.addEventListener("vertical-tabs:reorder-item", handlers.reorder);

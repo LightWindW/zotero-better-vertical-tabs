@@ -13,6 +13,11 @@ import {
   type VerticalTabsData,
 } from "../src/modules/track/dataStore";
 
+// Node-based runners have no Zotero toolkit global; keep the real one when
+// running inside Zotero. Only the warn-log paths (e.g. assign without tabId)
+// touch it.
+(globalThis as any).ztoolkit ??= { log: () => {} };
+
 function makeData(): VerticalTabsData {
   return {
     version: 3,
@@ -34,6 +39,7 @@ function makeData(): VerticalTabsData {
     ],
     uncategorizedOrder: ["tU1", "tU2"],
     uncategorizedItemIds: [301, 302],
+    lastReadTimes: {},
   };
 }
 
@@ -58,6 +64,7 @@ function makeStaleData(): VerticalTabsData {
     ],
     uncategorizedOrder: ["staleU", "tU1"],
     uncategorizedItemIds: [401, 301],
+    lastReadTimes: {},
   };
 }
 

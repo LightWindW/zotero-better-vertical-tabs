@@ -38,6 +38,19 @@ import {
   clearItemShiftPreview,
 } from "../drag/dropPreview";
 import { applyCategoryPreview } from "../drag/categoryPreview";
+import { getDraggedTabId, setDraggedTabId } from "../drag/itemDragState";
+import {
+  clearDropOutlineFade,
+  consumeDropOutlineFade,
+  dropOutlineFadeTargetForElement,
+  markDropOutlineFade,
+  playDropOutlineFade,
+} from "../drag/dropOutlineFade";
+import { isNewCategoryZonePointer } from "../drag/newCategoryDrop";
+import {
+  consumeNewCategoryEntrance,
+  playNewCategoryEntrance,
+} from "./categoryEntrance";
 import {
   clearAllItemDropIndicators,
   clearItemDropIndicator,
@@ -64,16 +77,7 @@ interface ItemInfo {
   tags: string[];
 }
 
-const DRAGGED_TAB_ID_KEY = "__vtDraggedTabId";
 const DRAG_SOURCE_CATEGORY_ID_KEY = "__vtDragSourceCategoryId";
-
-function setDraggedTabId(doc: Document, tabId: string | null): void {
-  (doc as any)[DRAGGED_TAB_ID_KEY] = tabId;
-}
-
-function getDraggedTabId(doc: Document): string | null {
-  return (doc as any)[DRAGGED_TAB_ID_KEY] || null;
-}
 
 function setDragSourceCategoryId(
   doc: Document,
@@ -106,6 +110,7 @@ function setDropRenderPending(doc: Document, pending: boolean): void {
         clearDropPreview(doc);
         (doc as any)[DROP_RENDER_PENDING_KEY] = false;
         delete (doc as any)[SMOOTH_COLLAPSE_KEY];
+        clearDropOutlineFade(doc);
       }
     }, DROP_RENDER_FALLBACK_MS);
     (doc as any)[DROP_RENDER_TIMEOUT_KEY] = timeout;
@@ -192,6 +197,8 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
   dropZone.addEventListener("dragover", (e: DragEvent) => {
     if (!isInternalVtDrag(e.dataTransfer)) return;
     e.preventDefault();
+    // The top strip is claimed by the quick-create-category drop zone.
+    if (isNewCategoryZonePointer(doc, e.clientY)) return;
     doc
       .querySelectorAll(".vertical-tabs-category.drag-over")
       .forEach((el: Element) => el.classList.remove("drag-over"));
@@ -277,6 +284,7 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
         targetTabId: "",
         before: false,
       });
+      markDropOutlineFade(doc, { type: "drop-zone" });
       setDropRenderPending(doc, true);
       return;
     }
@@ -292,6 +300,7 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
           targetTabId,
           before: false,
         });
+        markDropOutlineFade(doc, { type: "drop-zone" });
         setDropRenderPending(doc, true);
       }
       return;
@@ -305,6 +314,7 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
         targetTabId,
         before: true,
       });
+      markDropOutlineFade(doc, { type: "drop-zone" });
       setDropRenderPending(doc, true);
     }
   });
@@ -604,6 +614,8 @@ function createItemElement(
     row.addEventListener("dragover", (e: DragEvent) => {
       if (!isInternalVtDrag(e.dataTransfer)) return;
       e.preventDefault();
+      // The top strip is claimed by the quick-create-category drop zone.
+      if (isNewCategoryZonePointer(doc, e.clientY)) return;
       const rect = row.getBoundingClientRect();
       const midY = rect.top + rect.height / 2;
       const before = e.clientY < midY;
@@ -686,6 +698,13 @@ function createItemElement(
         before: insertBefore,
       });
       markSmoothCollapseAfterDrop(doc, row.closest(".vertical-tabs-category"));
+      markDropOutlineFade(
+        doc,
+        dropOutlineFadeTargetForElement(
+          row.closest(".vertical-tabs-category") ??
+            row.closest(".vertical-tabs-drop-zone"),
+        ),
+      );
       setDropRenderPending(doc, true);
     });
   }
@@ -943,6 +962,8 @@ function createCategoryElement(
     // Directly over an item: let the item's own listener handle it.
     if ((e.target as Element).closest(".vertical-tabs-item")) return;
     e.preventDefault();
+    // The top strip is claimed by the quick-create-category drop zone.
+    if (isNewCategoryZonePointer(doc, e.clientY)) return;
 
     const draggedTabId = getDraggedTabId(doc);
     if (!draggedTabId) return;
@@ -1026,6 +1047,7 @@ function createCategoryElement(
       });
     }
     markSmoothCollapseAfterDrop(doc, wrapper);
+    markDropOutlineFade(doc, dropOutlineFadeTargetForElement(wrapper));
     setDropRenderPending(doc, true);
   });
 
@@ -1035,6 +1057,8 @@ function createCategoryElement(
   const onDragOver = (e: DragEvent) => {
     if (!isInternalVtDrag(e.dataTransfer)) return;
     e.preventDefault();
+    // The top strip is claimed by the quick-create-category drop zone.
+    if (isNewCategoryZonePointer(doc, e.clientY)) return;
 
     // If the cursor is over an item or inside the items container, dedicated
     // listeners handle the local shift preview; do not fall back to
@@ -1117,6 +1141,7 @@ function createCategoryElement(
       });
     }
     markSmoothCollapseAfterDrop(doc, wrapper);
+    markDropOutlineFade(doc, dropOutlineFadeTargetForElement(wrapper));
     setDropRenderPending(doc, true);
   };
 
@@ -1453,6 +1478,15 @@ export function subscribeToRenderEvents(
       });
     }
     renderCategories(doc, container, data, pdfs);
+    // Replay the dashed-outline fade-out on the freshly rendered drop target:
+    // the drop-triggered re-render destroys the outlined element, which would
+    // otherwise make the outline vanish instantly. Consumed by the FIRST
+    // render after the drop, for internal and external drops alike.
+    const outlineFadeTarget = consumeDropOutlineFade(doc);
+    if (outlineFadeTarget) playDropOutlineFade(container, outlineFadeTarget);
+    // Quick-create flow: slide-down + fade-in entrance for the new category.
+    const entranceId = consumeNewCategoryEntrance(doc);
+    if (entranceId) playNewCategoryEntrance(doc, container, entranceId);
     if (isDropRenderPending(doc)) {
       clearDropPreview(doc);
       setDropRenderPending(doc, false);

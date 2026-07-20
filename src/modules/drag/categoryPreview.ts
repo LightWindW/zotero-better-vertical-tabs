@@ -348,11 +348,15 @@ export function clearCategoryPreview(doc: Document, animate = false): void {
   }
 
   cancelPendingClear(state, doc);
-  state.naturalHeights.delete(target);
 
   if (animate) {
+    // schedulePreviewClear reads the recorded natural height to transition
+    // back to — do NOT delete it here; its own timeout deletes the entry
+    // after the animation completes. (Deleting it first froze the height at
+    // the preview value and snapped it when the cleanup ran.)
     schedulePreviewClear(state, target, doc);
   } else {
+    state.naturalHeights.delete(target);
     removePreviewClassAndVars(target);
   }
 

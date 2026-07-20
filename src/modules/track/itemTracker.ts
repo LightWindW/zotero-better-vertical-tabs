@@ -93,6 +93,31 @@ export function removeLastReadTime(tabId: string): void {
   void saveLastReadTimes({ ..._lastReadTimes });
 }
 
+/**
+ * Synchronously stop tracking the given tabs WITHOUT dispatching
+ * tab-closed / pdfs-changed events.
+ *
+ * Used by category deletion: the tabs are being closed and their category is
+ * deleted in the same commit. Without this, the data-changed re-render would
+ * still see them in _openedPDFs (the 100ms close-flush has not run yet) and
+ * briefly resurrect them in the uncategorized area — a visible "flash back"
+ * before the flush removed them again. The caller is responsible for the
+ * single covering re-render that follows.
+ *
+ * Safe against the later close-flush: actuallyRemoveClosedTab finds nothing
+ * to remove and skips its dispatches; lastReadTimes are cleaned here.
+ */
+export function removeTabsFromTrackingSilently(tabIds: string[]): void {
+  for (const tabId of tabIds) {
+    _pendingClosedTabIds.delete(tabId);
+    const beforeLength = _openedPDFs.length;
+    _openedPDFs = _openedPDFs.filter((pdf) => pdf.tabId !== tabId);
+    if (_openedPDFs.length !== beforeLength) {
+      removeLastReadTime(tabId);
+    }
+  }
+}
+
 export function applyLastReadTimesToOpenedPDFs(): void {
   let changed = false;
   for (const pdf of _openedPDFs) {

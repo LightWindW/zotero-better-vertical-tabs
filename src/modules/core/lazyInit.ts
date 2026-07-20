@@ -41,6 +41,10 @@ import {
 } from "../track/readerReleaseTimer";
 import { dispatchVtEvent } from "./events";
 import { initMainPaneDrop, destroyMainPaneDrop } from "../drag/mainPaneDrop";
+import {
+  initNewCategoryDrop,
+  destroyNewCategoryDrop,
+} from "../drag/newCategoryDrop";
 import { destroyPreviewState } from "../drag/dropPreview";
 import { destroyCategoryPreviewState } from "../drag/categoryPreview";
 import {
@@ -123,6 +127,7 @@ export async function initVerticalTabs(
             startTracking();
             setSidebarVisibility(w.document, true);
             initMainPaneDrop(w.document);
+            initNewCategoryDrop(w.document);
             ws.visible = true;
             // Re-apply the hidden native tab bar + home button if persisted.
             applyNativeTabBarVisibility(w.document);
@@ -137,6 +142,7 @@ export async function initVerticalTabs(
             });
           } else {
             destroyMainPaneDrop(w.document);
+            destroyNewCategoryDrop(w.document);
             stopTracking();
             // Force-restore the native tab bar so the user keeps a tab UI.
             destroyNativeTabBarToggle(w.document);
@@ -249,6 +255,10 @@ export async function initVerticalTabs(
 
   // Enable dragging items from the main Zotero item pane into the VT sidebar.
   initMainPaneDrop(win.document);
+  // Quick-create-category drop zone at the top of the sidebar (internal and
+  // external drags). Registered after mainPaneDrop so its sidebar dragover
+  // handler runs last within the same tick.
+  initNewCategoryDrop(win.document);
 
   // Restore the native tab bar visibility from prefs. When hidden, show the
   // VT home button instantly (no animation) and keep it in sync with the
@@ -279,6 +289,7 @@ export function destroyVerticalTabs(win: Window): void {
   destroyCategoryManager(win.document);
   destroySidebar(win.document);
   destroyMainPaneDrop(win.document);
+  destroyNewCategoryDrop(win.document);
   destroyPreviewState(win.document);
   destroyCategoryPreviewState(win.document);
   stopTracking();

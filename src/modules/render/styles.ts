@@ -221,6 +221,29 @@ export function getStyles(): string {
       opacity: 0;
     }
 
+    /* Category deletion exit: while this class is present the wrapper
+       collapses its inline height/opacity/margin (fade-out + slide-up of the
+       content below) before the data commit removes it. Same specificity
+       trick as the entrance class. pointer-events are blocked so a vanishing
+       category stays inert. */
+    #${SIDEBAR_ID} .vertical-tabs-category.vt-category-exit {
+      overflow: hidden;
+      pointer-events: none;
+      transition:
+        height 0.3s ease,
+        opacity 0.3s ease,
+        margin-bottom 0.3s ease;
+    }
+
+    /* Quick-create entrance: while this class is present the wrapper animates
+       its inline height/opacity (slide-down + fade-in). Higher specificity
+       than the base .vertical-tabs-category transition rule, so it wins for
+       the duration of the animation; removed when the animation completes. */
+    #${SIDEBAR_ID} .vertical-tabs-category.vt-new-category-entrance {
+      overflow: hidden;
+      transition: height 0.3s ease, opacity 0.3s ease;
+    }
+
     #${SIDEBAR_ID} .vertical-tabs-category.collapsed {
       transition: outline-color 0.3s ease, background 0.3s ease;
     }
@@ -660,6 +683,42 @@ export function getStyles(): string {
       outline-color: #999;
     }
 
+    /* Quick-create-category drop zone pinned above the categories container.
+       The element is collapsed (height 0, invisible) by default; the
+       newCategoryDrop module drives inline height/opacity through these
+       transitions to expand/collapse it smoothly. */
+    #${SIDEBAR_ID} .vertical-tabs-new-category-zone {
+      flex: 0 0 auto;
+      overflow: hidden;
+      height: 0;
+      opacity: 0;
+      transition: height 0.3s ease, opacity 0.3s ease;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-new-category-inner {
+      box-sizing: border-box;
+      height: 32px;
+      margin: 2px 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: #6C6C6C;
+      outline: 1px dashed #999;
+      outline-offset: -1px;
+      border-radius: 4px;
+      user-select: none;
+      overflow: hidden;
+    }
+
+    /* Fade the label with the rest of the content in the 35px collapsed
+       sidebar (same mechanism as item titles). */
+    #${SIDEBAR_ID} .vertical-tabs-new-category-inner span {
+      opacity: var(--vt-content-opacity, 1);
+      transition: opacity 0.15s ease;
+      white-space: nowrap;
+    }
+
     #${SIDEBAR_ID} .vertical-tabs-drop-zone.vt-drop-preview-empty,
     #${SIDEBAR_ID} .vertical-tabs-drop-zone.vt-drop-preview-top-gap {
       position: relative;
@@ -1079,6 +1138,11 @@ export function getStyles(): string {
       }
 
       #${SIDEBAR_ID} .vertical-tabs-drop-zone.drag-over {
+        outline-color: #888;
+      }
+
+      #${SIDEBAR_ID} .vertical-tabs-new-category-inner {
+        color: #A2A2A2;
         outline-color: #888;
       }
 

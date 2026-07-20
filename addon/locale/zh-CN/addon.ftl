@@ -73,6 +73,7 @@ vertical-tabs-title = 已打开标签
 vertical-tabs-empty = 暂无打开的标签
 vertical-tabs-category-default = 未分类
 vertical-tabs-category-new = 新分类
+vertical-tabs-new-category-dropzone = + 新建分类
 
 vertical-tabs-just-now = 刚刚
 vertical-tabs-minutes-ago = { $count } 分钟前

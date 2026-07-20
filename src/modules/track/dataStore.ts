@@ -201,6 +201,25 @@ export function addCategory(
   };
 }
 
+/**
+ * Create a category and place it at the TOP of the list (used by the
+ * quick-create drop zone, whose zone sits above the first category).
+ * Returns the new data and the new category's id so the caller can insert
+ * the dragged items by id.
+ */
+export function addCategoryAtTop(
+  data: VerticalTabsData,
+  name: string,
+): { data: VerticalTabsData; categoryId: string } {
+  let next = addCategory(data, name);
+  const newCategory = next.categories[next.categories.length - 1];
+  const firstOther = next.categories.find((c) => c.id !== newCategory.id);
+  if (firstOther) {
+    next = reorderCategories(next, newCategory.id, firstOther.id);
+  }
+  return { data: next, categoryId: newCategory.id };
+}
+
 export function renameCategory(
   data: VerticalTabsData,
   categoryId: string,

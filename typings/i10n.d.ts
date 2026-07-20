@@ -120,6 +120,7 @@ export type FluentMessageId =
   | 'vertical-tabs-just-now'
   | 'vertical-tabs-minutes-ago'
   | 'vertical-tabs-more-menu'
+  | 'vertical-tabs-new-category-dropzone'
   | 'vertical-tabs-no-saved-categories'
   | 'vertical-tabs-overwrite-confirm'
   | 'vertical-tabs-overwrite-title'
