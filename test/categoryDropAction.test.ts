@@ -2,6 +2,7 @@ import { assert } from "chai";
 import {
   computeCategoryReorderInsertBefore,
   decideCategoryDropAction,
+  resolveAfterInsertBefore,
 } from "../src/modules/drag/categoryDropAction";
 
 describe("category drop rules", function () {
@@ -77,6 +78,27 @@ describe("category drop rules", function () {
       assert.isNull(
         computeCategoryReorderInsertBefore("after", "cat-x", ORDER),
       );
+    });
+  });
+
+  describe("resolveAfterInsertBefore", function () {
+    const ORDER = ["t1", "t2", "t3"];
+
+    it("resolves after a middle row to the row right after it", function () {
+      // Regression: the uncategorized reorder branch used to pass null for
+      // "after", dumping the tab at the very END while the green bar showed
+      // the middle position.
+      assert.equal(resolveAfterInsertBefore(ORDER, "t1"), "t2");
+      assert.equal(resolveAfterInsertBefore(ORDER, "t2"), "t3");
+    });
+
+    it("after the last row returns null (append to end)", function () {
+      assert.isNull(resolveAfterInsertBefore(ORDER, "t3"));
+    });
+
+    it("unknown target returns null (append to end)", function () {
+      assert.isNull(resolveAfterInsertBefore(ORDER, "tX"));
+      assert.isNull(resolveAfterInsertBefore([], "t1"));
     });
   });
 });

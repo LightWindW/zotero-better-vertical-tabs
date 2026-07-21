@@ -49,3 +49,19 @@ export function computeCategoryReorderInsertBefore(
   if (idx < 0 || idx + 1 >= orderedCategoryIds.length) return null;
   return orderedCategoryIds[idx + 1];
 }
+
+/**
+ * Resolve "insert AFTER targetTabId" to an insertBeforeTabId within the same
+ * ordered list: the id of the row right after the target, or null when the
+ * target is last / unknown (append to end). Shared by the reorder handler's
+ * category and uncategorized branches so an "after the middle row" drop
+ * lands right after that row instead of at the very end.
+ */
+export function resolveAfterInsertBefore(
+  orderedIds: string[],
+  targetTabId: string,
+): string | null {
+  const idx = orderedIds.indexOf(targetTabId);
+  if (idx < 0 || idx + 1 >= orderedIds.length) return null;
+  return orderedIds[idx + 1];
+}

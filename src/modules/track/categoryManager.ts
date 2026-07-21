@@ -62,6 +62,7 @@ import { animatePopupClose, animatePopupOpen } from "../ui/popupAnimation";
 import { markNewCategoryEntrance } from "../render/categoryEntrance";
 import { markCategoryColorFade } from "../render/categoryColorFade";
 import { animateCategoryExit } from "../render/categoryExit";
+import { resolveAfterInsertBefore } from "../drag/categoryDropAction";
 import {
   scheduleCollapse,
   setContextMenuOpen,
@@ -744,27 +745,23 @@ function handleReorderItem(event: Event): void {
     _data = removeItemFromAllCategories(_data!, movedItemId || 0, tabId);
   }
 
-  // Then reorder within the target
+  // Then reorder within the target. "after" resolves to the row right after
+  // the target via the shared helper — previously the uncategorized branch
+  // passed null and dumped the tab at the very END while the green bar
+  // showed the middle position.
   if (categoryId && categoryId !== "__uncategorized__") {
     const cat = _data?.categories.find((c) => c.id === categoryId);
-    let beforeTabId: string | null = null;
-    if (cat && before) {
-      beforeTabId = targetTabId;
-    } else if (cat && targetTabId) {
-      const targetIdx = cat.tabIds.indexOf(targetTabId);
-      beforeTabId =
-        targetIdx >= 0 && targetIdx < cat.tabIds.length - 1
-          ? cat.tabIds[targetIdx + 1]
-          : null;
-    }
+    const beforeTabId = cat
+      ? before
+        ? targetTabId
+        : resolveAfterInsertBefore(cat.tabIds, targetTabId)
+      : null;
     _data = reorderItemInCategory(_data!, categoryId, tabId, beforeTabId);
   } else {
-    _data = reorderUncategorized(
-      _data!,
-      tabId,
-      movedItemId || 0,
-      before ? targetTabId : null,
-    );
+    const beforeTabId = before
+      ? targetTabId
+      : resolveAfterInsertBefore(_data!.uncategorizedOrder, targetTabId);
+    _data = reorderUncategorized(_data!, tabId, movedItemId || 0, beforeTabId);
   }
 
   const doc =

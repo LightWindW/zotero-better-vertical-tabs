@@ -1973,6 +1973,13 @@ export function subscribeToRenderEvents(
       });
     }
     renderCategories(doc, container, data, pdfs);
+    // Multi-tab flow FIRST: the cascade pins rows at opacity 0, and any
+    // earlier reflow (the consumers below all force one) would commit the
+    // fresh rows at opacity 1 and turn the intended fade-in into a
+    // barely-visible 1→0→1 dip. Single drops mark BOTH this and the outline
+    // fade, so the order matters.
+    const multiRelease = consumeMultiTabRelease(doc);
+    if (multiRelease) playMultiTabRelease(doc, container, multiRelease);
     // Replay the selection fade-out on the fresh rows: the plain-click
     // navigation just re-rendered and would otherwise have cut the 0.2s
     // fade short when the old rows were destroyed.
@@ -1995,10 +2002,6 @@ export function subscribeToRenderEvents(
     // the header in at the gap position, then expand if it was expanded).
     const catRelease = consumeCategoryRelease(doc);
     if (catRelease) playCategoryRelease(doc, container, catRelease);
-    // Multi-tab flow: cascade release — first row fades in, then the rest of
-    // the moved block unfolds with a stagger.
-    const multiRelease = consumeMultiTabRelease(doc);
-    if (multiRelease) playMultiTabRelease(doc, container, multiRelease);
     if (isDropRenderPending(doc)) {
       clearDropPreview(doc);
       setDropRenderPending(doc, false);
