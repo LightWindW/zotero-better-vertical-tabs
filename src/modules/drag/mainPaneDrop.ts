@@ -108,6 +108,18 @@ function getInsertBeforeTabId(
   return undefined;
 }
 
+/** The category an external drop lands in, or undefined for uncategorized. */
+function resolveDropCategoryId(target: DropTarget): string | undefined {
+  if (target.type === "category") return target.categoryId;
+  if (
+    (target.type === "item-before" || target.type === "item-after") &&
+    target.categoryId !== "__uncategorized__"
+  ) {
+    return target.categoryId;
+  }
+  return undefined;
+}
+
 function isPDFAttachment(item: Zotero.Item): boolean {
   const contentType =
     ((item.getField("contentType") as string | undefined) ||
@@ -188,7 +200,6 @@ async function waitForTabIds(
     if (tabIds.every((id) => currentIds.has(id))) return;
     await new Promise((resolve) => setTimeout(resolve, interval));
   }
-  ztoolkit.log("[vt-main-pane-drop] timeout waiting for tabIds:", tabIds);
 }
 
 function handleDragEnter(state: MainPaneDropState, doc: Document): void {
@@ -286,12 +297,6 @@ export async function prepareExternalDropData(
 
   const entries = await openPDFAttachmentsAsTabs(attachments, doc);
   const openedTabIds = entries.map((e) => e.tabId);
-  ztoolkit.log(
-    "[vt-main-pane-drop] opened entries:",
-    entries,
-    "openedTabIds:",
-    openedTabIds,
-  );
   if (entries.length === 0) {
     if (missingLabels.length > 0) {
       showToast(doc, getString("vertical-tabs-drop-missing-pdf"));
@@ -330,7 +335,6 @@ async function handleDrop(
 
   const target =
     state.lastTarget ?? computeDropTarget(doc, e.clientX, e.clientY);
-  ztoolkit.log("[vt-main-pane-drop] target:", JSON.stringify(target));
   if (target.type === "none") {
     resetDragState(state, doc);
     return;
@@ -351,33 +355,10 @@ async function handleDrop(
   }
   const { entries, openedTabIds, currentData, missingLabels } = prepared;
 
-  let targetCategoryId: string | undefined;
-  if (target.type === "category") {
-    targetCategoryId = target.categoryId;
-  } else if (
-    (target.type === "item-before" || target.type === "item-after") &&
-    target.categoryId !== "__uncategorized__"
-  ) {
-    targetCategoryId = target.categoryId;
-  }
-
-  ztoolkit.log(
-    "[vt-main-pane-drop] prepared data for target",
-    targetCategoryId || "__uncategorized__",
-    "categories",
-    currentData.categories.map((c) => ({ id: c.id, tabIds: c.tabIds })),
-    "uncategorizedOrder",
-    currentData.uncategorizedOrder,
-  );
-
   let newData: VerticalTabsData;
 
   if (target.type === "category") {
     const insertBeforeTabId = getInsertBeforeTabId(target, currentData);
-    ztoolkit.log(
-      "[vt-main-pane-drop] category insertBeforeTabId:",
-      insertBeforeTabId,
-    );
     newData = insertItemsIntoCategoryAt(
       currentData,
       target.categoryId,
@@ -386,12 +367,6 @@ async function handleDrop(
     );
   } else if (target.type === "item-before" || target.type === "item-after") {
     const insertBeforeTabId = getInsertBeforeTabId(target, currentData);
-    ztoolkit.log(
-      "[vt-main-pane-drop] item insertBeforeTabId:",
-      insertBeforeTabId,
-      "categoryId:",
-      target.categoryId,
-    );
     if (target.categoryId === "__uncategorized__") {
       newData = insertUncategorizedItemsAt(
         currentData,
@@ -408,10 +383,6 @@ async function handleDrop(
     }
   } else if (target.type === "drop-zone") {
     const insertBeforeTabId = getInsertBeforeTabId(target, currentData);
-    ztoolkit.log(
-      "[vt-main-pane-drop] drop-zone insertBeforeTabId:",
-      insertBeforeTabId,
-    );
     newData = insertUncategorizedItemsAt(
       currentData,
       entries,
@@ -422,36 +393,17 @@ async function handleDrop(
     return;
   }
 
-  const targetCat =
-    target.type !== "drop-zone" && target.categoryId !== "__uncategorized__"
-      ? newData.categories.find((c) => c.id === target.categoryId)
-      : undefined;
-  if (targetCat) {
-    ztoolkit.log(
-      "[vt-main-pane-drop] result category tabIds:",
-      targetCat.tabIds,
-    );
-  } else {
-    ztoolkit.log(
-      "[vt-main-pane-drop] result uncategorizedOrder:",
-      newData.uncategorizedOrder,
-    );
-  }
-
-  // Log the actual insertion indices of the newly opened tabs for diagnosis.
-  const orderToSearch = targetCat
-    ? targetCat.tabIds
-    : newData.uncategorizedOrder;
-  for (const tabId of openedTabIds) {
-    const idx = orderToSearch.indexOf(tabId);
-    ztoolkit.log(
-      "[vt-main-pane-drop] inserted tab",
-      tabId,
-      "at index",
-      idx,
-      "of",
-      targetCat ? `category ${targetCat.id}` : "uncategorized",
-    );
+  // Dropping into a collapsed category expands it (persisted): the dropped
+  // tabs' cascade release must play visibly instead of disappearing into a
+  // folded category.
+  const dropCategoryId = resolveDropCategoryId(target);
+  if (dropCategoryId) {
+    newData = {
+      ...newData,
+      categories: newData.categories.map((c) =>
+        c.id === dropCategoryId ? { ...c, collapsed: false } : c,
+      ),
+    };
   }
 
   // The dropped tabs fade in with the same cascade release as the multi-tab

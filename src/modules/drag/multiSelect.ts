@@ -146,22 +146,27 @@ export function clearTabSelection(
   opts?: { forRender?: boolean },
 ): void {
   const state = (doc as any)[STATE_KEY] as MultiSelectState | undefined;
-  if (state) {
-    if (opts?.forRender && state.selected.size > 0) {
-      (doc as any)[FADE_OUT_KEY] = Array.from(state.selected);
-      const win = doc.defaultView;
-      const previous = (doc as any)[FADE_OUT_STALE_KEY] as number | undefined;
-      if (previous !== undefined && win) win.clearTimeout(previous);
-      if (win) {
-        (doc as any)[FADE_OUT_STALE_KEY] = win.setTimeout(() => {
-          delete (doc as any)[FADE_OUT_KEY];
-          delete (doc as any)[FADE_OUT_STALE_KEY];
-        }, FADE_OUT_STALE_MS);
-      }
+  // Fast path: no selection — skip the document-wide scan entirely. The
+  // document-level capture listener calls this on EVERY mousedown/click
+  // anywhere in the window. Invariant: rows only carry SELECTED_CLASS while
+  // their tabId is in state.selected (creation, setRowVisual, range toggle
+  // and the fade replay all keep it in sync), so an empty set guarantees no
+  // stale classes — and the anchor is always null when the set is empty.
+  if (!state || state.selected.size === 0) return;
+  if (opts?.forRender) {
+    (doc as any)[FADE_OUT_KEY] = Array.from(state.selected);
+    const win = doc.defaultView;
+    const previous = (doc as any)[FADE_OUT_STALE_KEY] as number | undefined;
+    if (previous !== undefined && win) win.clearTimeout(previous);
+    if (win) {
+      (doc as any)[FADE_OUT_STALE_KEY] = win.setTimeout(() => {
+        delete (doc as any)[FADE_OUT_KEY];
+        delete (doc as any)[FADE_OUT_STALE_KEY];
+      }, FADE_OUT_STALE_MS);
     }
-    state.selected.clear();
-    state.anchor = null;
   }
+  state.selected.clear();
+  state.anchor = null;
   doc
     .querySelectorAll(`.vertical-tabs-item.${SELECTED_CLASS}`)
     .forEach((el: Element) => el.classList.remove(SELECTED_CLASS));

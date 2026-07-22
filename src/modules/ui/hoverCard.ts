@@ -373,44 +373,41 @@ function handleExpandAnimationComplete(event: Event): void {
 }
 
 /**
- * Re-render invalidated the rows: the events fire BEFORE the async rebuild,
- * so defer the check one task — by then the new DOM is in place. Retarget to
- * the fresh row for the same item, or hide the card when the item is gone
- * (its tab was closed) — a card pointing at a dead row would otherwise get
- * stuck open forever (nothing left to hover-leave).
+ * Re-render invalidated the rows: fires AFTER the rebuild (the renderer
+ * dispatches "vertical-tabs:rendered" once the fresh DOM is in place).
+ * Retarget to the fresh row for the same item, or hide the card when the
+ * item is gone (its tab was closed) — a card pointing at a dead row would
+ * otherwise get stuck open forever (nothing left to hover-leave).
  */
 function handleRenderInvalidated(event: Event): void {
   const doc =
     (event.target as Node).ownerDocument ?? (event.target as Document);
-  const win = doc.defaultView;
-  if (!doc || !win) return;
-  win.setTimeout(() => {
-    if (!_currentTarget || _currentTarget.isConnected) return;
-    const replacement = _currentItemId
-      ? (doc.querySelector(
-          `.vertical-tabs-item[data-item-id="${_currentItemId}"]`,
-        ) as HTMLElement | null)
-      : null;
-    if (replacement) {
-      _currentTarget = replacement;
-      return;
-    }
-    if (_showTimeout) {
-      clearTimeout(_showTimeout);
-      _showTimeout = null;
-    }
-    if (_hideTimeout) {
-      clearTimeout(_hideTimeout);
-      _hideTimeout = null;
-    }
-    const card = doc.getElementById(CARD_ID) as HTMLElement | null;
-    if (card) {
-      card.style.opacity = "0";
-      card.style.display = "none";
-    }
-    _currentTarget = null;
-    _currentItemId = null;
-  }, 0);
+  if (!doc) return;
+  if (!_currentTarget || _currentTarget.isConnected) return;
+  const replacement = _currentItemId
+    ? (doc.querySelector(
+        `.vertical-tabs-item[data-item-id="${_currentItemId}"]`,
+      ) as HTMLElement | null)
+    : null;
+  if (replacement) {
+    _currentTarget = replacement;
+    return;
+  }
+  if (_showTimeout) {
+    clearTimeout(_showTimeout);
+    _showTimeout = null;
+  }
+  if (_hideTimeout) {
+    clearTimeout(_hideTimeout);
+    _hideTimeout = null;
+  }
+  const card = doc.getElementById(CARD_ID) as HTMLElement | null;
+  if (card) {
+    card.style.opacity = "0";
+    card.style.display = "none";
+  }
+  _currentTarget = null;
+  _currentItemId = null;
 }
 
 export function initHoverCard(doc: Document): void {
@@ -420,8 +417,7 @@ export function initHoverCard(doc: Document): void {
     "vertical-tabs:expand-animation-complete",
     handleExpandAnimationComplete,
   );
-  doc.addEventListener("vertical-tabs:pdfs-changed", handleRenderInvalidated);
-  doc.addEventListener("vertical-tabs:data-changed", handleRenderInvalidated);
+  doc.addEventListener("vertical-tabs:rendered", handleRenderInvalidated);
 
   // Watch dark mode switch to update card colors in real time
   const existingDark = (doc as any).__vtHoverDarkCleanup as
@@ -473,14 +469,7 @@ export function destroyHoverCard(doc: Document): void {
     "vertical-tabs:expand-animation-complete",
     handleExpandAnimationComplete,
   );
-  doc.removeEventListener(
-    "vertical-tabs:pdfs-changed",
-    handleRenderInvalidated,
-  );
-  doc.removeEventListener(
-    "vertical-tabs:data-changed",
-    handleRenderInvalidated,
-  );
+  doc.removeEventListener("vertical-tabs:rendered", handleRenderInvalidated);
 
   const darkCleanup = (doc as any).__vtHoverDarkCleanup as
     | (() => void)

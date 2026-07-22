@@ -10,6 +10,8 @@ import { clearCategoryPreview } from "./categoryPreview";
 
 const SHIFT_CLASS = "vt-drop-preview-shift";
 const PREVIEW_STATE_KEY = "__vtDropPreviewState";
+const ROW_ANCHOR_KEY = "__vtDropPreviewRowAnchor";
+const GAP_ANCHOR_KEY = "__vtDropPreviewGapAnchor";
 
 interface PreviewState {
   shifted: Set<Element>;
@@ -22,6 +24,76 @@ function getState(doc: Document): PreviewState {
   const state: PreviewState = { shifted: new Set(), shiftHeight: 0 };
   (doc as any)[PREVIEW_STATE_KEY] = state;
   return state;
+}
+
+// ── Dragover early-exit anchors ──
+//
+// dragover events fire continuously while the cursor moves, but the preview
+// outcome only changes when the cursor crosses a row boundary (row anchor)
+// or the computed gap index changes (gap anchor). The handlers record the
+// last applied anchor and skip the whole recompute — querySelectorAll scans,
+// layout reads and class writes — while it is unchanged. Anchors hold
+// element references, so a mid-drag re-render (which destroys the rows)
+// invalidates them automatically. Both anchors are cleared by
+// clearItemShiftPreview, which every clear/drop/dragend path goes through.
+
+interface RowAnchor {
+  row: Element;
+  before: boolean;
+}
+
+interface GapAnchor {
+  container: Element;
+  index: number;
+}
+
+/** True when the row-level preview for exactly this (row, before) is applied. */
+export function isSameRowPreviewAnchor(
+  doc: Document,
+  row: Element,
+  before: boolean,
+): boolean {
+  const anchor = (doc as any)[ROW_ANCHOR_KEY] as RowAnchor | undefined;
+  return !!anchor && anchor.row === row && anchor.before === before;
+}
+
+export function setRowPreviewAnchor(
+  doc: Document,
+  row: Element,
+  before: boolean,
+): void {
+  const anchor: RowAnchor = { row, before };
+  (doc as any)[ROW_ANCHOR_KEY] = anchor;
+  // The two anchor kinds are one logical "last applied position" cursor:
+  // applying one kind must invalidate the other, or switching row→gap→row
+  // would skip the re-apply on the way back (stale anchor, missing preview).
+  delete (doc as any)[GAP_ANCHOR_KEY];
+}
+
+/** True when the gap preview for exactly this (container, index) is applied. */
+export function isSameGapPreviewAnchor(
+  doc: Document,
+  container: Element,
+  index: number,
+): boolean {
+  const anchor = (doc as any)[GAP_ANCHOR_KEY] as GapAnchor | undefined;
+  return !!anchor && anchor.container === container && anchor.index === index;
+}
+
+export function setGapPreviewAnchor(
+  doc: Document,
+  container: Element,
+  index: number,
+): void {
+  const anchor: GapAnchor = { container, index };
+  (doc as any)[GAP_ANCHOR_KEY] = anchor;
+  // See setRowPreviewAnchor — the anchor kinds are mutually exclusive.
+  delete (doc as any)[ROW_ANCHOR_KEY];
+}
+
+function clearPreviewAnchors(doc: Document): void {
+  delete (doc as any)[ROW_ANCHOR_KEY];
+  delete (doc as any)[GAP_ANCHOR_KEY];
 }
 
 function getItemRows(container: Element): Element[] {
@@ -147,8 +219,12 @@ export function applyDropPreview(
     }
   }
 
-  // Apply shift to new or remaining elements.
+  // Apply shift only to newly shifted elements, or to all of them when the
+  // height changed. (Previously every dragover re-wrote the class and the
+  // CSS variable on every shifted row — pure style churn.)
+  const heightChanged = state.shiftHeight !== height;
   for (const el of desired) {
+    if (!heightChanged && state.shifted.has(el)) continue;
     applyShift(el, height);
   }
 
@@ -163,6 +239,7 @@ export function clearDropPreview(doc: Document): void {
 }
 
 export function clearItemShiftPreview(doc: Document): void {
+  clearPreviewAnchors(doc);
   const state = (doc as any)[PREVIEW_STATE_KEY] as PreviewState | undefined;
   if (!state) return;
   for (const el of state.shifted) {

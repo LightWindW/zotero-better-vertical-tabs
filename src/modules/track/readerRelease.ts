@@ -63,12 +63,61 @@ export function isReaderLoaded(tabId: string): boolean {
 }
 
 /**
- * Wait until the reader for the given tab has finished initializing.
- * Returns immediately if the reader is already loaded.
+ * Snapshot of every tabId whose reader is currently loaded and initialized
+ * (released readers excluded). Building this once per render and testing
+ * with Set.has is O(N+R) — calling isReaderLoaded per row is O(N×R) because
+ * each Zotero.Reader.getByTabID scans the _readers array.
  */
-export async function waitForReaderLoaded(
+export function getLoadedReaderTabIds(): Set<string> {
+  const ids = new Set<string>();
+  try {
+    const readers = (Zotero.Reader as any)._readers as
+      | _ZoteroTypes.ReaderInstance[]
+      | undefined;
+    for (const reader of readers ?? []) {
+      const tabId = (reader as any).tabID as string | undefined;
+      if (!tabId || _releasedReaderTabIds.has(tabId)) continue;
+      if ((reader as any)._isReaderInitialized === false) continue;
+      ids.add(tabId);
+    }
+  } catch {
+    // ignore — return whatever was collected
+  }
+  return ids;
+}
+
+/**
+ * In-flight load waits, keyed by tabId. Selecting a reader tab used to start
+ * a fresh 100ms-polling loop on EVERY select (up to 15s each), so flipping
+ * back and forth between readers stacked duplicate loops that each fired a
+ * full indicator rescan on completion. First caller wins; late callers share
+ * the same promise (and its original timeout).
+ */
+const _pendingReaderWaits = new Map<string, Promise<boolean>>();
+
+/**
+ * Wait until the reader for the given tab has finished initializing.
+ * Returns immediately if the reader is already loaded. Concurrent calls for
+ * the same tab share one polling loop (see _pendingReaderWaits). NOT async:
+ * an async wrapper would return a fresh promise each call and break the
+ * identity-based dedup.
+ */
+export function waitForReaderLoaded(
   tabId: string,
   timeoutMs = 30000,
+): Promise<boolean> {
+  const pending = _pendingReaderWaits.get(tabId);
+  if (pending) return pending;
+  const promise = doWaitForReaderLoaded(tabId, timeoutMs).finally(() => {
+    _pendingReaderWaits.delete(tabId);
+  });
+  _pendingReaderWaits.set(tabId, promise);
+  return promise;
+}
+
+async function doWaitForReaderLoaded(
+  tabId: string,
+  timeoutMs: number,
 ): Promise<boolean> {
   const start = Date.now();
 
@@ -187,16 +236,7 @@ function setTabTypeUnloaded(tabId: string): void {
     if (!internalTabs) return;
     const tab = internalTabs.find((t) => t.id === tabId);
     if (tab && tab.type === "reader") {
-      const beforeType = tab.type;
       tab.type = "reader-unloaded";
-      ztoolkit.log(
-        "[BVT-readerRelease] setTabTypeUnloaded:",
-        tabId,
-        "before=",
-        beforeType,
-        "after=",
-        tab.type,
-      );
     }
   } catch (err) {
     vtLog("setTabTypeUnloaded failed: " + String(err));
@@ -212,24 +252,12 @@ export function releaseReaderForTab(tabId: string): boolean {
   if (_releasedReaderTabIds.has(tabId)) return false;
 
   const pdf = getOpenedPDFByTabId(tabId);
-  ztoolkit.log(
-    "[BVT-readerRelease] releaseReaderForTab START:",
-    tabId,
-    "pdf.type=",
-    pdf?.type,
-    "pdf.readerReleased=",
-    pdf?.readerReleased,
-  );
   if (!pdf || !pdf.type?.startsWith("reader")) return false;
 
   try {
     const reader = Zotero.Reader.getByTabID(tabId);
     if (!reader) {
       // Reader is already gone; nothing to release.
-      ztoolkit.log(
-        "[BVT-readerRelease] releaseReaderForTab no reader instance:",
-        tabId,
-      );
       markReaderReleased(tabId);
       return true;
     }
@@ -255,13 +283,6 @@ export function releaseReaderForTab(tabId: string): boolean {
     markReaderReleased(tabId);
     setReaderReleased(tabId, true);
 
-    ztoolkit.log(
-      "[BVT-readerRelease] releaseReaderForTab DONE:",
-      tabId,
-      "type after=",
-      getOpenedPDFByTabId(tabId)?.type,
-    );
-
     for (const win of getMainWindows()) {
       dispatchVtEvent(win.document, "vertical-tabs:reader-released", { tabId });
     }
@@ -270,6 +291,70 @@ export function releaseReaderForTab(tabId: string): boolean {
   } catch (err) {
     vtLog("releaseReaderForTab failed: " + String(err));
     return false;
+  }
+}
+
+/**
+ * Load the PDF reader for a tab WITHOUT switching to it (the context-menu
+ * "Open Reader" action). Mirrors what Zotero_Tabs.select() does for an
+ * unloaded tab — flip to `reader-loading`, call Zotero.Reader.open into the
+ * SAME tab slot, then markAsLoaded — but passes `openInBackground: true` so
+ * ReaderTab does not select the tab, and skips the white #zotero-tab-cover
+ * loading mask entirely. Works for lazy (never loaded) and released tabs.
+ */
+export async function openReaderInBackground(tabId: string): Promise<boolean> {
+  const pdf = getOpenedPDFByTabId(tabId);
+  if (!pdf || !pdf.type?.startsWith("reader")) return false;
+  if (isReaderLoaded(tabId)) return true;
+
+  const ztabs = getZoteroTabs();
+  const internalTabs = (ztabs as any)?._tabs as
+    | Array<{ id: string; type: string; title?: string; data?: any }>
+    | undefined;
+  const tabIndex = internalTabs?.findIndex((t) => t.id === tabId) ?? -1;
+  const tab = tabIndex >= 0 ? internalTabs![tabIndex] : undefined;
+  if (!ztabs || !tab) return false;
+  // reader-loading/reader means Zotero is already handling it.
+  if (tab.type !== "reader-unloaded") return false;
+
+  try {
+    // Show the indicator immediately so the user sees feedback.
+    dispatchReaderLoadingEvent(tabId);
+    // Do not let VT order sync fight Zotero's internal tab layout while the
+    // reader is being created (same guard as restoreReaderForTab).
+    pauseNativeOrderSync();
+    // Clear released flags up front (same rationale as restoreReaderForTab:
+    // even if loading later fails, the next attempt simply retries).
+    markReaderRestored(tabId);
+    setReaderReleased(tabId, false);
+
+    tab.type = "reader-loading";
+    const reader = (await (Zotero.Reader as any).open(pdf.itemId, undefined, {
+      tabID: tabId,
+      title: pdf.title || tab.title,
+      tabIndex,
+      allowDuplicate: true,
+      openInBackground: true,
+      secondViewState: tab.data?.secondViewState,
+      preventJumpback: true,
+    })) as _ZoteroTypes.ReaderInstance | void;
+    await (reader as any)?._initPromise;
+    // Flips type back to "reader" and fires the native 'load' notifier.
+    (ztabs as any).markAsLoaded?.(tabId);
+    if (pdf.type === "reader-unloaded") {
+      pdf.type = "reader";
+    }
+    for (const win of getMainWindows()) {
+      dispatchVtEvent(win.document, "vertical-tabs:reader-restored", {
+        tabId,
+      });
+    }
+    return true;
+  } catch (err) {
+    vtLog("openReaderInBackground failed: " + String(err));
+    return false;
+  } finally {
+    resumeNativeOrderSync();
   }
 }
 
@@ -286,14 +371,6 @@ export async function restoreReaderForTab(tabId: string): Promise<boolean> {
   if (!_releasedReaderTabIds.has(tabId)) return false;
 
   const pdf = getOpenedPDFByTabId(tabId);
-  ztoolkit.log(
-    "[BVT-readerRelease] restoreReaderForTab START:",
-    tabId,
-    "pdf.type=",
-    pdf?.type,
-    "pdf.readerReleased=",
-    pdf?.readerReleased,
-  );
   if (!pdf || !pdf.type?.startsWith("reader")) {
     markReaderRestored(tabId);
     return false;
@@ -317,12 +394,6 @@ export async function restoreReaderForTab(tabId: string): Promise<boolean> {
     // Wait for it in the background and update the UI when it finishes.
     waitForReaderLoaded(tabId, 30000)
       .then((loaded) => {
-        ztoolkit.log(
-          "[BVT-readerRelease] restoreReaderForTab waitForReaderLoaded:",
-          loaded,
-          "tabId=",
-          tabId,
-        );
         if (loaded) {
           if (pdf.type === "reader-unloaded") {
             pdf.type = "reader";
@@ -337,11 +408,6 @@ export async function restoreReaderForTab(tabId: string): Promise<boolean> {
       .finally(() => {
         resumeNativeOrderSync();
       });
-
-    ztoolkit.log(
-      "[BVT-readerRelease] restoreReaderForTab DONE (async):",
-      tabId,
-    );
 
     return true;
   } catch (err) {

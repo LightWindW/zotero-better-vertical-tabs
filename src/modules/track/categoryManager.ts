@@ -58,14 +58,20 @@ import {
 } from "../save/categoryRestore";
 import { openPluginPreferences } from "../save/openPreferences";
 import { promptCategoryName } from "../ui/categoryNameDialog";
-import { animatePopupClose, animatePopupOpen } from "../ui/popupAnimation";
+import {
+  animatePopupClose,
+  animatePopupOpen,
+  placePopupWithinWindow,
+} from "../ui/popupAnimation";
 import { markNewCategoryEntrance } from "../render/categoryEntrance";
+import { holdRenders, releaseRenders } from "../render/uiRenderer";
 import { markCategoryColorFade } from "../render/categoryColorFade";
 import { animateCategoryExit } from "../render/categoryExit";
 import { resolveAfterInsertBefore } from "../drag/categoryDropAction";
 import {
+  claimContextMenuOpen,
+  releaseContextMenuOpen,
   scheduleCollapse,
-  setContextMenuOpen,
   setDialogOpen,
   SIDEBAR_ID,
 } from "../sidebar/sidebar";
@@ -98,6 +104,8 @@ interface CategoryHandlers {
   showHelpDialog: EventListener;
   importCategory: EventListener;
   openPreferences: EventListener;
+  nativeOrderChanged: EventListener;
+  forceReload: EventListener;
 }
 
 const HANDLERS_KEY = "__vtCategoryHandlers";
@@ -109,12 +117,6 @@ function dispatchDataChanged(doc: Document): void {
 async function persist(doc: Document): Promise<void> {
   if (!_data) return;
   _data = { ..._data, lastReadTimes: getLastReadTimes() };
-  ztoolkit.log(
-    "[BVT-cat] persist categories=",
-    _data.categories.map((c) => ({ id: c.id, tabIds: c.tabIds })),
-    "uncategorizedOrder=",
-    _data.uncategorizedOrder,
-  );
   await saveData(_data);
   dispatchDataChanged(doc);
 }
@@ -146,6 +148,10 @@ function showContextMenu(
     ${getPopupStyleSheet(doc)}
   `;
 
+  // Assigned when the suppression is claimed below; the item/closeMenu
+  // callbacks only run afterwards, so this is always the real token.
+  let menuToken: object = {};
+
   // ── Color picker row ──
   const prefColors = getCategoryColors();
   const colorRow = doc.createElementNS(
@@ -175,8 +181,7 @@ function showContextMenu(
       border: ${currentColor === c ? mc.swatchBorderSelected : mc.swatchBorder};
     `;
     swatch.addEventListener("click", () => {
-      animatePopupClose(menu, () => setContextMenuOpen(doc, false));
-      scheduleCollapse(doc);
+      animatePopupClose(menu, () => releaseContextMenuOpen(doc, menuToken));
       const cat = _data?.categories.find((cat) => cat.id === categoryId);
       if (cat && _data) {
         // Mark before persist so the render post-processing can replay the
@@ -215,8 +220,7 @@ function showContextMenu(
     renameItem.style.background = "";
   });
   renameItem.addEventListener("click", async () => {
-    animatePopupClose(menu, () => setContextMenuOpen(doc, false));
-    scheduleCollapse(doc);
+    animatePopupClose(menu, () => releaseContextMenuOpen(doc, menuToken));
     const cat = _data?.categories.find((c) => c.id === categoryId);
     const dialogData: { [key: string]: any } = {
       inputValue: cat?.name ?? "",
@@ -292,8 +296,7 @@ function showContextMenu(
     saveItem.style.background = "";
   });
   saveItem.addEventListener("click", () => {
-    animatePopupClose(menu, () => setContextMenuOpen(doc, false));
-    scheduleCollapse(doc);
+    animatePopupClose(menu, () => releaseContextMenuOpen(doc, menuToken));
     dispatchVtEvent(doc, "vertical-tabs:save-category", { categoryId });
   });
   menu.appendChild(saveItem);
@@ -324,8 +327,7 @@ function showContextMenu(
     deleteItem.style.background = "";
   });
   deleteItem.addEventListener("click", () => {
-    animatePopupClose(menu, () => setContextMenuOpen(doc, false));
-    scheduleCollapse(doc);
+    animatePopupClose(menu, () => releaseContextMenuOpen(doc, menuToken));
     dispatchVtEvent(doc, "vertical-tabs:category-context-delete", {
       categoryId,
     });
@@ -333,8 +335,11 @@ function showContextMenu(
   menu.appendChild(deleteItem);
 
   doc.documentElement?.appendChild(menu);
-  animatePopupOpen(menu, "top left");
-  setContextMenuOpen(doc, true);
+  // Clamp inside the window so categories near the right/bottom edge cannot
+  // push the menu off-screen.
+  const menuOrigin = placePopupWithinWindow(menu, x, y);
+  animatePopupOpen(menu, menuOrigin);
+  menuToken = claimContextMenuOpen(doc);
 
   const cleanup = () => {
     doc.removeEventListener("mousedown", closeMenu, true);
@@ -347,14 +352,18 @@ function showContextMenu(
     const target = e.target as HTMLElement;
     // Don't close if clicking inside the menu
     if (target.closest("#vertical-tabs-context-menu")) return;
-    // Click inside VT (e.g. right-click another element) → close menu, keep VT open
+    // Click inside VT → close menu, keep VT open (normal rules apply).
     if (target.closest(`#${SIDEBAR_ID}`)) {
-      animatePopupClose(menu, () => setContextMenuOpen(doc, false));
+      animatePopupClose(menu, () => releaseContextMenuOpen(doc, menuToken));
       cleanup();
       return;
     }
-    animatePopupClose(menu, () => setContextMenuOpen(doc, false));
-    scheduleCollapse(doc);
+    // Click outside VT and the menu → close menu AND collapse VT (scheduled
+    // only after the suppression is released, or it would be blocked).
+    animatePopupClose(menu, () => {
+      releaseContextMenuOpen(doc, menuToken);
+      scheduleCollapse(doc);
+    });
     cleanup();
   };
   setTimeout(() => doc.addEventListener("mousedown", closeMenu, true), 150);
@@ -496,18 +505,7 @@ function cleanupClosedTabId(tabId: string): void {
   const liveTabIds = new Set(
     getLiveOpenTabIds().filter((id) => id && id !== tabId),
   );
-  const cleaned = cleanStaleTabIds(_data, liveTabIds);
-  ztoolkit.log(
-    "[BVT-cat] cleanupClosedTabId:",
-    tabId,
-    "changed=",
-    cleaned !== _data,
-    "categories=",
-    cleaned.categories.map((c) => ({ id: c.id, tabIds: c.tabIds })),
-    "uncategorizedOrder=",
-    cleaned.uncategorizedOrder,
-  );
-  _data = cleaned;
+  _data = cleanStaleTabIds(_data, liveTabIds);
 }
 
 function handleShowMoreMenu(event: Event): void {
@@ -545,23 +543,48 @@ async function handleImportCategory(event: Event): Promise<void> {
   );
   if (!savedCategory) return;
 
-  const { data: newData, result } = await restoreCategory(_data, savedCategory);
+  // Hold renders while the restore opens each tab: their add-notifier
+  // re-renders would otherwise trickle the items into the uncategorized
+  // area one by one before the imported category itself appears. Everything
+  // coalesces into a single render after persist, which also plays the
+  // new-category entrance (category + its tabs fade in, content below
+  // slides down).
+  holdRenders(doc);
+  try {
+    const beforeIds = new Set(_data.categories.map((c) => c.id));
+    const { data: newData, result } = await restoreCategory(
+      _data,
+      savedCategory,
+    );
 
-  if (!result.success) {
-    await showRestoreWarningDialog(doc, result);
-    return;
-  }
+    if (!result.success) {
+      await showRestoreWarningDialog(doc, result);
+      return;
+    }
 
-  _data = newData;
-  void persist(doc);
+    const imported = newData.categories.find((c) => !beforeIds.has(c.id));
+    if (imported) {
+      markNewCategoryEntrance(doc, imported.id);
+    }
+    _data = newData;
+    await persist(doc);
 
-  syncTabOrderToNative(
-    _data.categories.map((c) => ({ order: c.order, tabIds: c.tabIds })),
-    _data.uncategorizedOrder,
-  );
+    syncTabOrderToNative(
+      _data.categories.map((c) => ({ order: c.order, tabIds: c.tabIds })),
+      _data.uncategorizedOrder,
+    );
 
-  if (result.missingItemIds.length > 0 || result.updatedItemIds.length > 0) {
-    await showRestoreWarningDialog(doc, result);
+    // Let the trailing add-notifiers (itemTracker debounces tab-adds by
+    // 200ms) register every imported tab before the held render fires, so
+    // the rows fade in together with the category instead of popping in
+    // afterwards.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    if (result.missingItemIds.length > 0 || result.updatedItemIds.length > 0) {
+      await showRestoreWarningDialog(doc, result);
+    }
+  } finally {
+    releaseRenders(doc);
   }
 }
 
@@ -788,6 +811,11 @@ function handleToggleCollapsed(event: Event): void {
     categories: _data.categories.map((cat) =>
       cat.id === categoryId ? { ...cat, collapsed } : cat,
     ),
+    // Merge live lastReadTimes like persist() does — this direct saveData
+    // bypasses persist, and writing the stale _data field here reverted the
+    // file's lastReadTimes to an older map (wiping times recorded since
+    // startup: the file-side clobber of the restart-time-reset bug).
+    lastReadTimes: getLastReadTimes(),
   };
   // Persist without dispatching data-changed: the UI already toggled the
   // collapsed class in place, and re-rendering the whole container would
@@ -837,6 +865,11 @@ function cleanupOldCategoryHandlers(doc: Document): void {
     "vertical-tabs:open-preferences",
     old.openPreferences,
   );
+  doc.removeEventListener(
+    "vertical-tabs:native-order-changed",
+    old.nativeOrderChanged,
+  );
+  doc.removeEventListener("vertical-tabs:force-reload", old.forceReload);
   delete (doc as any)[HANDLERS_KEY];
 }
 
@@ -918,14 +951,65 @@ export async function initCategoryManager(doc: Document): Promise<void> {
 
   const requestSyncOrderHandler: EventListener = (() => {
     if (!_data) return;
-    ztoolkit.log(
-      "[BVT-cat] request-sync-order received, syncing native order to VT",
-    );
     syncTabOrderToNative(
       _data.categories.map((c) => ({ order: c.order, tabIds: c.tabIds })),
       _data.uncategorizedOrder,
       { doc },
     );
+  }) as EventListener;
+
+  const nativeOrderChangedHandler: EventListener = ((e: CustomEvent) => {
+    if (_syncingFromNative || isReaderRestoreInProgress()) return;
+    const { nativeOrder } = (e.detail || {}) as {
+      nativeOrder?: string[];
+    };
+    if (!nativeOrder || !_data) return;
+
+    const sorted = [..._data.categories].sort((a, b) => a.order - b.order);
+    const expected: string[] = [];
+    for (const cat of sorted) {
+      for (const tabId of cat.tabIds) {
+        if (tabId) expected.push(tabId);
+      }
+    }
+    for (const tabId of _data.uncategorizedOrder) {
+      if (tabId) expected.push(tabId);
+    }
+
+    if (
+      nativeOrder.length === expected.length &&
+      nativeOrder.every((id, i) => id === expected[i])
+    )
+      return;
+
+    _syncingFromNative = true;
+    try {
+      const newOrder = nativeOrder.filter(
+        (id) =>
+          _data!.categories.some((c) => c.tabIds.includes(id)) ||
+          _data!.uncategorizedOrder.includes(id),
+      );
+
+      _data = {
+        ..._data!,
+        categories: _data!.categories.map((cat) => ({
+          ...cat,
+          tabIds: newOrder.filter((id) => cat.tabIds.includes(id)),
+        })),
+        uncategorizedOrder: newOrder.filter((id) =>
+          _data!.uncategorizedOrder.includes(id),
+        ),
+      };
+
+      void persist(doc);
+    } finally {
+      _syncingFromNative = false;
+    }
+  }) as EventListener;
+
+  const forceReloadHandler: EventListener = (async () => {
+    _data = await loadData();
+    dispatchDataChanged(doc);
   }) as EventListener;
 
   const handlers: CategoryHandlers = {
@@ -953,6 +1037,8 @@ export async function initCategoryManager(doc: Document): Promise<void> {
     showHelpDialog: handleShowHelpDialog,
     importCategory: handleImportCategory,
     openPreferences: handleOpenPreferences,
+    nativeOrderChanged: nativeOrderChangedHandler,
+    forceReload: forceReloadHandler,
   };
 
   doc.addEventListener("vertical-tabs:add-category", handlers.add);
@@ -1006,80 +1092,17 @@ export async function initCategoryManager(doc: Document): Promise<void> {
     handlers.openPreferences,
   );
 
-  doc.addEventListener("vertical-tabs:native-order-changed", ((
-    e: CustomEvent,
-  ) => {
-    if (_syncingFromNative || isReaderRestoreInProgress()) return;
-    const { nativeOrder } = (e.detail || {}) as {
-      nativeOrder?: string[];
-    };
-    ztoolkit.log(
-      "[BVT-cat] native-order-changed received, nativeOrder=",
-      nativeOrder,
-      "current categories=",
-      _data?.categories.map((c) => ({ id: c.id, tabIds: c.tabIds })),
-      "uncategorizedOrder=",
-      _data?.uncategorizedOrder,
-    );
-    if (!nativeOrder || !_data) return;
-
-    const sorted = [..._data.categories].sort((a, b) => a.order - b.order);
-    const expected: string[] = [];
-    for (const cat of sorted) {
-      for (const tabId of cat.tabIds) {
-        if (tabId) expected.push(tabId);
-      }
-    }
-    for (const tabId of _data.uncategorizedOrder) {
-      if (tabId) expected.push(tabId);
-    }
-
-    if (
-      nativeOrder.length === expected.length &&
-      nativeOrder.every((id, i) => id === expected[i])
-    )
-      return;
-
-    _syncingFromNative = true;
-    try {
-      const newOrder = nativeOrder.filter(
-        (id) =>
-          _data!.categories.some((c) => c.tabIds.includes(id)) ||
-          _data!.uncategorizedOrder.includes(id),
-      );
-
-      _data = {
-        ..._data!,
-        categories: _data!.categories.map((cat) => ({
-          ...cat,
-          tabIds: newOrder.filter((id) => cat.tabIds.includes(id)),
-        })),
-        uncategorizedOrder: newOrder.filter((id) =>
-          _data!.uncategorizedOrder.includes(id),
-        ),
-      };
-      ztoolkit.log(
-        "[BVT-cat] native-order-changed applied new _data categories=",
-        _data.categories.map((c) => ({ id: c.id, tabIds: c.tabIds })),
-        "uncategorizedOrder=",
-        _data.uncategorizedOrder,
-      );
-
-      void persist(doc);
-    } finally {
-      _syncingFromNative = false;
-    }
-  }) as EventListener);
+  doc.addEventListener(
+    "vertical-tabs:native-order-changed",
+    handlers.nativeOrderChanged,
+  );
 
   doc.addEventListener(
     "vertical-tabs:request-sync-order",
     handlers.requestSync,
   );
 
-  doc.addEventListener("vertical-tabs:force-reload", async () => {
-    _data = await loadData();
-    dispatchDataChanged(doc);
-  });
+  doc.addEventListener("vertical-tabs:force-reload", handlers.forceReload);
 
   (doc as any)[HANDLERS_KEY] = handlers;
 

@@ -17,6 +17,7 @@
 
 import { getPref, setPref } from "../../utils/prefs";
 import {
+  hasLibraryHomeButton,
   hideLibraryHomeButton,
   removeLibraryHomeButton,
   showLibraryHomeButton,
@@ -178,12 +179,19 @@ function destroyNativeTabBarObserver(doc: Document): void {
 /**
  * Watch the native tab bar and mirror the library tab into the home button
  * whenever React re-renders it (title/icon/selection changes).
+ *
+ * The observer is only connected while the home button EXISTS: the native
+ * tab bar is a React component that re-renders on every tab switch, so a
+ * permanently-connected subtree+attributes observer fires (and queries the
+ * DOM) on each switch for nothing. Call syncNativeTabBarObserver after
+ * showing/hiding the button to re-evaluate.
  */
 export function initNativeTabBarObserver(doc: Document): void {
   destroyNativeTabBarObserver(doc);
   const tabBar = doc.getElementById(TAB_BAR_CONTAINER_ID) as HTMLElement | null;
   const win = doc.defaultView;
   if (!tabBar || !win) return;
+  if (!hasLibraryHomeButton(doc)) return;
   const observer = new win.MutationObserver(() => {
     // Read-only against the tab bar; writes only touch the VT sidebar, so
     // this cannot retrigger itself.
@@ -196,6 +204,16 @@ export function initNativeTabBarObserver(doc: Document): void {
     attributes: true,
   });
   (doc as any)[OBSERVER_KEY] = observer;
+}
+
+/** Connect/disconnect the observer to match the home button's existence. */
+export function syncNativeTabBarObserver(doc: Document): void {
+  const connected = !!(doc as any)[OBSERVER_KEY];
+  if (hasLibraryHomeButton(doc)) {
+    if (!connected) initNativeTabBarObserver(doc);
+  } else if (connected) {
+    destroyNativeTabBarObserver(doc);
+  }
 }
 
 /**
@@ -211,8 +229,13 @@ export function toggleNativeTabBar(doc: Document): void {
     setNativeTabBarHiddenAnimated(winDoc, hidden);
     if (hidden) {
       showLibraryHomeButton(winDoc, true);
+      // Connect the mirror observer (the button now exists).
+      syncNativeTabBarObserver(winDoc);
     } else {
       hideLibraryHomeButton(winDoc, true);
+      // The button animates away over 300ms and still exists during the
+      // animation — disconnect explicitly instead of checking existence.
+      destroyNativeTabBarObserver(winDoc);
     }
   }
 }

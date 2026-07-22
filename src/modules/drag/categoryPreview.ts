@@ -70,8 +70,20 @@ function getContainerItems(container: Element): Element[] {
   );
 }
 
+/**
+ * Per-container item-count cache. A dragover fires computeTnew (and thus
+ * this count) on every event, but the DOM only changes between drags — and
+ * a mid-drag re-render destroys the container element, so the WeakMap entry
+ * dies with it. Entries never need explicit invalidation.
+ */
+let _itemCountCache = new WeakMap<Element, number>();
+
 function getContainerItemCount(container: Element): number {
-  return container.querySelectorAll(":scope .vertical-tabs-item").length;
+  const cached = _itemCountCache.get(container);
+  if (cached !== undefined) return cached;
+  const count = container.querySelectorAll(":scope .vertical-tabs-item").length;
+  _itemCountCache.set(container, count);
+  return count;
 }
 
 function getItemHeight(container: Element, doc: Document): number {
@@ -376,4 +388,5 @@ export function destroyCategoryPreviewState(doc: Document): void {
   state.naturalHeights.clear();
   clearCategoryPreview(doc, false);
   delete (doc as any)[PREVIEW_STATE_KEY];
+  _itemCountCache = new WeakMap();
 }

@@ -14,6 +14,10 @@ import {
 } from "./orderSyncControl";
 import { saveLastReadTimes, type VerticalTabsData } from "./dataStore";
 import type { ItemTabEntry } from "./dataStore";
+import {
+  clearItemInfoCache,
+  invalidateItemInfo,
+} from "../render/itemInfoCache";
 
 export interface OpenedPDF {
   itemId: number;
@@ -65,8 +69,25 @@ export function isStartupRestoreDone(): boolean {
   return _startupRestoreDone;
 }
 
+/**
+ * Merge persisted times into memory, keeping the NEWEST timestamp per tabId.
+ *
+ * This used to be a wholesale replace of the in-memory map. The startup
+ * retry loop re-invokes it with the `_data.lastReadTimes` field, which lags
+ * behind memory — a replace wiped times that tab selections had written
+ * between two restore passes (one of the "times reset to just now after
+ * restart" failure modes). Merge-max is safe for the old→new tabId
+ * migration because startup-restored tabs never get a fresh timestamp
+ * written before the migration runs (see handleTabAdded).
+ */
 export function loadLastReadTimes(times: Record<string, number>): void {
-  _lastReadTimes = { ...times };
+  for (const [tabId, time] of Object.entries(times)) {
+    if (typeof time !== "number") continue;
+    const existing = _lastReadTimes[tabId];
+    if (existing === undefined || time > existing) {
+      _lastReadTimes[tabId] = time;
+    }
+  }
 }
 
 export function getLastReadTimes(): Record<string, number> {
@@ -95,17 +116,20 @@ export function removeLastReadTime(tabId: string): void {
 
 /**
  * Synchronously stop tracking the given tabs WITHOUT dispatching
- * tab-closed / pdfs-changed events.
+ * tab-closed events.
  *
- * Used by category deletion: the tabs are being closed and their category is
- * deleted in the same commit. Without this, the data-changed re-render would
- * still see them in _openedPDFs (the 100ms close-flush has not run yet) and
- * briefly resurrect them in the uncategorized area — a visible "flash back"
- * before the flush removed them again. The caller is responsible for the
- * single covering re-render that follows.
- *
- * Safe against the later close-flush: actuallyRemoveClosedTab finds nothing
- * to remove and skips its dispatches; lastReadTimes are cleaned here.
+ * Used by category deletion and by every VT-internal close commit (×,
+ * middle-click, context menu, close-others): the exit animation has already
+ * finished when this runs, so the closed rows must not come back. Dispatching
+ * pdfs-changed here is safe — the tabs are already out of _openedPDFs, so the
+ * re-render cannot resurrect them (the flash-back this silence was designed
+ * to prevent came from re-rendering BEFORE removal). The re-render is also
+ * what refreshes category header counts: tab selection no longer triggers
+ * full re-renders (active-changed targeted update), so without this dispatch
+ * nothing would update the count. Category data itself is left untouched;
+ * the next normal persist writes the cleaned state, and the 100ms
+ * close-flush finds nothing to remove and skips its own dispatches.
+ * lastReadTimes are cleaned here with a single disk write for the batch.
  */
 export function removeTabsFromTrackingSilently(tabIds: string[]): void {
   let removedAny = false;
@@ -118,9 +142,10 @@ export function removeTabsFromTrackingSilently(tabIds: string[]): void {
       removedAny = true;
     }
   }
-  // One disk write for the whole batch (close-others can be many tabs).
   if (removedAny) {
+    // One disk write for the whole batch (close-others can be many tabs).
     void saveLastReadTimes({ ..._lastReadTimes });
+    dispatchPDFsChanged();
   }
 }
 
@@ -222,6 +247,28 @@ export function dispatchPDFsChanged(): void {
   }
 }
 
+/**
+ * Lightweight tab-selection event: only the active-row highlight (and the
+ * selected row's relative-time label) need updating — no full list rebuild.
+ */
+export function dispatchActiveTabChanged(tabId: string): void {
+  for (const win of getMainWindows()) {
+    dispatchVtEvent(win.document, "vertical-tabs:active-changed", { tabId });
+  }
+}
+
+/**
+ * Periodic lightweight tick for the display timers: rows update their
+ * relative-time labels in place ("1 分钟前" → "2 分钟前"). Used instead of
+ * a full re-render so the DOM — and any in-progress drag/hover state — is
+ * left untouched.
+ */
+export function dispatchTimeTick(): void {
+  for (const win of getMainWindows()) {
+    dispatchVtEvent(win.document, "vertical-tabs:time-tick");
+  }
+}
+
 function getSelectedTabIdFromTabs(): string {
   const ztabs = getZoteroTabs();
   if (!ztabs) return "";
@@ -250,14 +297,6 @@ async function handleTabAdded(tabId: string): Promise<void> {
   if (!tabId || tabId === "undefined") return;
   const ztabs = getZoteroTabs();
   const tabInfo = ztabs?.getTabInfo(tabId);
-  ztoolkit.log(
-    "[BVT-tracker] handleTabAdded:",
-    tabId,
-    "type=",
-    tabInfo?.type,
-    "exists=",
-    _openedPDFs.some((p) => p.tabId === tabId),
-  );
   if (!tabInfo) return;
 
   // Track all tab types: reader (PDF), note, etc.
@@ -307,6 +346,7 @@ async function handleTabAdded(tabId: string): Promise<void> {
     : tabInfo.title || "";
 
   const time = _lastReadTimes[tabId];
+  const openedAt = time ?? Date.now();
   _openedPDFs.push({
     itemId,
     parentItemId,
@@ -314,18 +354,19 @@ async function handleTabAdded(tabId: string): Promise<void> {
     tabId,
     type: tabInfo.type,
     title,
-    openedAt: time ?? Date.now(),
+    openedAt,
     isNew: _startupRestoreDone,
     readerReleased: false,
   });
-  ztoolkit.log(
-    "[BVT-tracker] handleTabAdded pushed:",
-    tabId,
-    "type=",
-    tabInfo.type,
-    "total=",
-    _openedPDFs.length,
-  );
+  // Genuinely new tab (opened after startup restore completed): persist its
+  // initial time right away. Otherwise a tab the user never selects again
+  // has nothing stored, and the next restart shows "just now" instead of its
+  // real age. Startup-restored tabs are deliberately skipped: their
+  // timestamps come from the old→new tabId migration, and a fresh "now"
+  // entry would win the merge against the migrated old time.
+  if (time === undefined && _startupRestoreDone) {
+    setLastReadTime(tabId, openedAt);
+  }
 
   dispatchPDFsChanged();
 
@@ -387,19 +428,8 @@ function flushPendingClosedTabs(): void {
 
 function actuallyRemoveClosedTab(tabId: string): void {
   const beforeLength = _openedPDFs.length;
-  const closedPdf = _openedPDFs.find((p) => p.tabId === tabId);
   _openedPDFs = _openedPDFs.filter((pdf) => pdf.tabId !== tabId);
   _pendingClosedTabIds.delete(tabId);
-  ztoolkit.log(
-    "[BVT-tracker] actuallyRemoveClosedTab:",
-    tabId,
-    "type=",
-    closedPdf?.type,
-    "before=",
-    beforeLength,
-    "after=",
-    _openedPDFs.length,
-  );
   if (_openedPDFs.length !== beforeLength) {
     // Notify categoryManager to remove this closed tabId from categories.
     for (const win of getMainWindows()) {
@@ -428,14 +458,6 @@ export function startTracking(): void {
             const tabId = String(id);
             _selectedTabId = tabId;
             const pdf = _openedPDFs.find((p) => p.tabId === tabId);
-            ztoolkit.log(
-              "[BVT-tracker] select:",
-              tabId,
-              "pdf.type=",
-              pdf?.type,
-              "readerReleased=",
-              pdf?.readerReleased,
-            );
             if (pdf?.readerReleased) {
               void restoreReaderForTab(tabId).then(() => {
                 updateOpenedAtForTab(tabId);
@@ -464,7 +486,13 @@ export function startTracking(): void {
                 });
               }
               updateOpenedAtForTab(tabId);
-              dispatchPDFsChanged(); // re-render to update active highlight
+              // Targeted highlight update instead of a full re-render: tab
+              // selection only moves the .active class and refreshes that
+              // row's relative-time label. (Previously dispatchPDFsChanged()
+              // rebuilt every row on every tab switch — O(N) Zotero API
+              // calls + DOM churn on the main thread, the main source of
+              // jank with many tabs open.)
+              dispatchActiveTabChanged(tabId);
             }
           }
         } else if (event === "close") {
@@ -492,6 +520,13 @@ export function startTracking(): void {
             itemIds.has(pdf.itemId) ||
             (pdf.parentItemId !== undefined && itemIds.has(pdf.parentItemId));
           if (matches) {
+            // Drop the cached display fields so the next render recomputes
+            // them (journal/date/extra changes don't alter the title, but
+            // must not go stale in the cache either).
+            invalidateItemInfo(pdf.itemId);
+            if (pdf.parentItemId !== undefined) {
+              invalidateItemInfo(pdf.parentItemId);
+            }
             const tabItem = Zotero.Items.get(pdf.itemId) as Zotero.Item | false;
             if (tabItem) {
               const newTitle = getItemDisplayTitle(tabItem);
@@ -540,7 +575,12 @@ export function stopTracking(): void {
   _openedPDFs = [];
   _selectedTabId = "";
   _lastReadTimes = {};
+  // Full state reset: a later re-init must run the startup restore flow
+  // again (isNew flags, category/order migration) instead of treating every
+  // existing tab as new.
+  _startupRestoreDone = false;
   clearReleasedReaderState();
+  clearItemInfoCache();
 }
 
 export function getOpenedPDFs(): OpenedPDF[] {
@@ -713,10 +753,7 @@ function doSyncTabOrderToNative(
   options?: { doc?: Document; pendingTabIds?: string[] },
 ): void {
   const ztabs = getZoteroTabs(options?.doc);
-  if (!ztabs) {
-    ztoolkit.log("[vt-sync] no Zotero_Tabs available");
-    return;
-  }
+  if (!ztabs) return;
 
   let internalTabs = (ztabs as any)?._tabs as any[] | undefined;
   if (!internalTabs || internalTabs.length < 2) return;
@@ -751,22 +788,8 @@ function doSyncTabOrderToNative(
   const pendingTabIds = options?.pendingTabIds ?? [];
   const missingPending = pendingTabIds.filter((id) => !currentIdSet.has(id));
 
-  ztoolkit.log(
-    "[vt-sync] attempt",
-    attempt,
-    "desiredOpenOrder",
-    desiredOpenOrder,
-    "currentIds",
-    currentIds,
-    "pending",
-    pendingTabIds,
-    "missingPending",
-    missingPending,
-  );
-
   // If newly opened tabs haven't been added yet, schedule a retry.
   if (missingPending.length > 0) {
-    ztoolkit.log("[vt-sync] waiting for pending tabs:", missingPending);
     if (attempt < MAX_SYNC_RETRIES) {
       _syncTabOrderTimer = setTimeout(() => {
         doSyncTabOrderToNative(
@@ -778,12 +801,10 @@ function doSyncTabOrderToNative(
       }, 200);
       return;
     }
-    ztoolkit.log("[vt-sync] gave up waiting for pending tabs");
   }
 
   // Skip if already correct
   if (arraysEqual(desiredOpenOrder, currentIds)) {
-    ztoolkit.log("[vt-sync] already correct");
     return;
   }
 
@@ -805,28 +826,17 @@ function doSyncTabOrderToNative(
         if (currentIdx < 0) continue;
         const safeTargetIdx = Math.min(targetIdx, internalTabs.length - 1);
         if (currentIdx !== safeTargetIdx) {
-          ztoolkit.log(
-            "[vt-sync] move",
-            tabId,
-            "from",
-            currentIdx,
-            "to",
-            safeTargetIdx,
-          );
           ztabs.move(tabId, safeTargetIdx);
         }
       }
     } catch (err) {
       ztoolkit.log("[vt-sync] move() failed:", err);
     }
-  } else {
-    ztoolkit.log("[vt-sync] move() not available");
   }
 
   // Re-fetch _tabs after move() in case it swapped the array.
   internalTabs = (ztabs as any)?._tabs as any[] | undefined;
   currentIds = getTabIds(internalTabs);
-  ztoolkit.log("[vt-sync] after move currentIds:", currentIds);
 
   // Fallback / ensure: rebuild the current _tabs array in the desired order.
   if (
@@ -852,7 +862,6 @@ function doSyncTabOrderToNative(
         }
       }
       internalTabs.splice(0, internalTabs.length, ...orderedTabs);
-      ztoolkit.log("[vt-sync] rebuilt _tabs order:", getTabIds(internalTabs));
     } catch (err) {
       ztoolkit.log("[vt-sync] rebuild failed:", err);
     }
@@ -861,13 +870,11 @@ function doSyncTabOrderToNative(
   // Refresh both internal state and the visible tab bar.
   try {
     (ztabs as any)?._update?.();
-    ztoolkit.log("[vt-sync] _update() called");
   } catch (err) {
     ztoolkit.log("[vt-sync] _update() failed:", err);
   }
   try {
     (ztabs as any)?._updateTabBar?.();
-    ztoolkit.log("[vt-sync] _updateTabBar() called");
   } catch (err) {
     ztoolkit.log("[vt-sync] _updateTabBar() failed:", err);
   }
@@ -885,24 +892,9 @@ export function syncTabOrderToNative(
 ): void {
   if (isReaderRestoreInProgress()) {
     markPendingSyncTabOrder();
-    ztoolkit.log(
-      "[BVT-sync] syncTabOrderToNative deferred due to reader restore",
-    );
     return;
   }
 
-  const ztabs = getZoteroTabs(options?.doc);
-  const currentIds = ((ztabs as any)?._tabs as any[] | undefined)?.map((t) =>
-    String(t.id ?? ""),
-  );
-  ztoolkit.log(
-    "[BVT-sync] syncTabOrderToNative called, currentIds=",
-    currentIds,
-    "categories=",
-    categories.map((c) => ({ order: c.order, tabIds: c.tabIds })),
-    "uncategorizedOrder=",
-    uncategorizedOrder,
-  );
   if (_syncTabOrderTimer) clearTimeout(_syncTabOrderTimer);
   _syncTabOrderTimer = setTimeout(() => {
     _syncTabOrderTimer = null;

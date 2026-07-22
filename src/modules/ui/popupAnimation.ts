@@ -22,6 +22,35 @@ export function animatePopupOpen(el: HTMLElement, origin: string): void {
 }
 
 /**
+ * Clamp a fixed-position popup so it stays fully inside the window. Context
+ * menus are positioned at the cursor, so rows near the window's right/bottom
+ * edge would otherwise push the menu off-screen and make items unclickable.
+ * Call AFTER the element is appended (its size must be measurable) and
+ * BEFORE animatePopupOpen; returns the transform-origin to use ("bottom
+ * left" when the menu had to flip above the cursor).
+ */
+export function placePopupWithinWindow(
+  el: HTMLElement,
+  x: number,
+  y: number,
+): string {
+  const win = el.ownerDocument?.defaultView;
+  if (!win) return "top left";
+  const rect = el.getBoundingClientRect();
+  let left = x;
+  let top = y;
+  if (left + rect.width > win.innerWidth - 4) {
+    left = Math.max(4, win.innerWidth - rect.width - 4);
+  }
+  if (top + rect.height > win.innerHeight - 4) {
+    top = Math.max(4, win.innerHeight - rect.height - 4);
+  }
+  el.style.left = `${left}px`;
+  el.style.top = `${top}px`;
+  return top < y ? "bottom left" : "top left";
+}
+
+/**
  * Play the leave animation, then remove the element and invoke `onDone`
  * (exactly once, even if the animation event is lost). Calling this on an
  * element already closing is a no-op.

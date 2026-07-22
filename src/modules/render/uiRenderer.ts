@@ -1,24 +1,34 @@
 import { config } from "../../../package.json";
 import { getString } from "../../utils/locale";
 import {
+  claimContextMenuOpen,
   collapseFloatingSidebar,
   getCategoriesContainer,
+  releaseContextMenuOpen,
   scheduleCollapse,
-  setContextMenuOpen,
   SIDEBAR_ID,
 } from "../sidebar/sidebar";
 import type { Category, VerticalTabsData } from "../track/dataStore";
 import type { OpenedPDF } from "../track/itemTracker";
 import {
   getOpenedPDFs,
+  getOpenedPDFByTabId,
   getZoteroTabs,
   getSelectedTabId,
   removeTabsFromTrackingSilently,
 } from "../track/itemTracker";
 import {
+  getLoadedReaderTabIds,
   isReaderLoaded,
   isShowReaderLoadedIndicatorEnabled,
+  openReaderInBackground,
+  releaseReaderForTab,
 } from "../track/readerRelease";
+import {
+  getItemInfo,
+  getItemTypeImageSrc,
+  clearItemTypeImageSrc,
+} from "./itemInfoCache";
 import { openItemAsNewTab } from "../track/tabOpener";
 import { dispatchVtEvent } from "../core/events";
 import {
@@ -40,6 +50,10 @@ import {
   applyDropPreview,
   clearDropPreview,
   clearItemShiftPreview,
+  isSameGapPreviewAnchor,
+  isSameRowPreviewAnchor,
+  setGapPreviewAnchor,
+  setRowPreviewAnchor,
 } from "../drag/dropPreview";
 import { applyCategoryPreview } from "../drag/categoryPreview";
 import { getDraggedTabId, setDraggedTabId } from "../drag/itemDragState";
@@ -59,7 +73,11 @@ import {
   consumeCategoryColorFade,
   playCategoryColorFade,
 } from "./categoryColorFade";
-import { animatePopupClose, animatePopupOpen } from "../ui/popupAnimation";
+import {
+  animatePopupClose,
+  animatePopupOpen,
+  placePopupWithinWindow,
+} from "../ui/popupAnimation";
 import { animateTabsExit } from "./tabExit";
 import {
   consumeMultiTabRelease,
@@ -117,16 +135,7 @@ import {
   getContextMenuColors,
 } from "./colorUtils";
 import { getPopupStyleSheet } from "./popupStyleUtils";
-
-interface ItemInfo {
-  title: string;
-  authors: string;
-  year: string;
-  journal: string;
-  university: string;
-  extra: string;
-  tags: string[];
-}
+import { promptCategoryName } from "../ui/categoryNameDialog";
 
 const DRAG_SOURCE_CATEGORY_ID_KEY = "__vtDragSourceCategoryId";
 
@@ -145,6 +154,34 @@ const DROP_RENDER_PENDING_KEY = "__vtDropRenderPending";
 const DROP_RENDER_TIMEOUT_KEY = "__vtDropRenderPendingTimeout";
 const DROP_RENDER_FALLBACK_MS = 500;
 const SMOOTH_COLLAPSE_KEY = "__vtSmoothCollapseCategoryId";
+const RENDER_SCHEDULED_KEY = "__vtRenderScheduled";
+const RENDER_HOLD_KEY = "__vtRenderHoldCount";
+const RENDER_HELD_KEY = "__vtRenderHeldPending";
+
+/**
+ * Hold/release re-renders around a multi-step operation (category import):
+ * the steps (opening each tab) would each render an intermediate state —
+ * tabs trickling into the uncategorized area before jumping into the new
+ * category — which shreds the entrance animation. While held, render events
+ * are collapsed into a single "pending" flag; release renders once.
+ */
+export function holdRenders(doc: Document): void {
+  const count = ((doc as any)[RENDER_HOLD_KEY] as number | undefined) ?? 0;
+  (doc as any)[RENDER_HOLD_KEY] = count + 1;
+}
+
+export function releaseRenders(doc: Document): void {
+  const count =
+    (((doc as any)[RENDER_HOLD_KEY] as number | undefined) ?? 0) - 1;
+  (doc as any)[RENDER_HOLD_KEY] = Math.max(0, count);
+  if (count <= 0 && (doc as any)[RENDER_HELD_KEY]) {
+    delete (doc as any)[RENDER_HELD_KEY];
+    const scheduleRender = (doc as any).__verticalTabsRenderHandler as
+      | (() => void)
+      | undefined;
+    scheduleRender?.();
+  }
+}
 
 function setDropRenderPending(doc: Document, pending: boolean): void {
   const win = doc.defaultView;
@@ -194,6 +231,9 @@ function consumeSmoothCollapseAfterDrop(doc: Document): string | null {
 
 function setWrapperDragOver(wrapper: HTMLElement | null, doc: Document): void {
   if (!wrapper) return;
+  // Fast path: the invariant "at most one .drag-over at a time" means there
+  // is nothing to scan for when this wrapper already carries the class.
+  if (wrapper.classList.contains("drag-over")) return;
   doc
     .querySelectorAll(
       ".vertical-tabs-category.drag-over, .vertical-tabs-drop-zone.drag-over",
@@ -524,45 +564,46 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
     const draggedTabId = getDraggedTabId(doc);
     if (!draggedTabId) return;
 
+    // Early-exit: the preview for exactly this gap position is already
+    // applied — dragover fires continuously while the cursor stays put.
+    const insertIndex = computeDropZoneInsertIndex(dropZone, e.clientY);
+    if (isSameGapPreviewAnchor(doc, dropZone, insertIndex)) return;
+
     if (visibleItems.length === 0) {
       setEmptyDropZoneIndicator(dropZone);
       clearItemShiftPreview(doc);
-      return;
-    }
-
-    const insertIndex = computeDropZoneInsertIndex(dropZone, e.clientY);
-    if (insertIndex >= visibleItems.length) {
+    } else if (insertIndex >= visibleItems.length) {
       // Blank append area below the last tag: no item shift, indicator centered
       // in the one-tag-height blank space.
       clearItemShiftPreview(doc);
       const lastItem = visibleItems[visibleItems.length - 1];
       const shiftHeight = lastItem.offsetHeight || 0;
       setItemDropIndicator(lastItem, false, shiftHeight);
-      return;
-    }
-
-    // The cursor is inside a gap opened between visible items (target drag
-    // area). Shift items below downward and center the green bar in the gap
-    // on the item *above* the gap so the bar does not move with the shifted
-    // items.
-    const targetRow = visibleItems[insertIndex];
-    const shiftHeight = applyDropPreview(
-      doc,
-      {
-        type: "item",
-        container: dropZone,
-        targetRow,
-        before: true,
-        draggedTabId,
-      },
-      preview.exclude,
-    );
-    if (insertIndex === 0) {
-      setTopGapIndicator(dropZone, shiftHeight);
     } else {
-      const prevItem = visibleItems[insertIndex - 1];
-      setItemDropIndicator(prevItem, false, shiftHeight);
+      // The cursor is inside a gap opened between visible items (target drag
+      // area). Shift items below downward and center the green bar in the gap
+      // on the item *above* the gap so the bar does not move with the shifted
+      // items.
+      const targetRow = visibleItems[insertIndex];
+      const shiftHeight = applyDropPreview(
+        doc,
+        {
+          type: "item",
+          container: dropZone,
+          targetRow,
+          before: true,
+          draggedTabId,
+        },
+        preview.exclude,
+      );
+      if (insertIndex === 0) {
+        setTopGapIndicator(dropZone, shiftHeight);
+      } else {
+        const prevItem = visibleItems[insertIndex - 1];
+        setItemDropIndicator(prevItem, false, shiftHeight);
+      }
     }
+    setGapPreviewAnchor(doc, dropZone, insertIndex);
   });
 
   dropZone.addEventListener("dragleave", (e: DragEvent) => {
@@ -685,44 +726,6 @@ export function createEl(doc: Document, tag: string): HTMLElement {
   ) as HTMLElement;
 }
 
-function getItemInfo(item: Zotero.Item): ItemInfo {
-  const title = (item.getField("title") as string) || "Untitled";
-
-  const creators = item.getCreators();
-  const authors = creators
-    .slice(0, 3)
-    .map((creator) => {
-      if (creator.fieldMode === 1) return creator.lastName;
-      return `${creator.lastName} ${creator.firstName}`.trim();
-    })
-    .join(", ");
-  const authorsLabel = creators.length > 3 ? `${authors} et al.` : authors;
-
-  const date = (item.getField("date") as string) || "";
-  const year = date ? date.slice(0, 4) : "";
-  const journal =
-    (item.getField("publicationTitle") as string) ||
-    (item.getField("proceedingsTitle") as string) ||
-    "";
-  const university =
-    (item.getField("university") as string) ||
-    (item.getField("institution") as string) ||
-    "";
-
-  const tags = item.getTags().map((tag) => tag.tag);
-  const extra = (item.getField("extra") as string) || "";
-
-  return {
-    title,
-    authors: authorsLabel,
-    year,
-    journal,
-    university,
-    extra,
-    tags,
-  };
-}
-
 function renderIconWithFallback(
   doc: Document,
   row: HTMLElement,
@@ -734,9 +737,7 @@ function renderIconWithFallback(
   try {
     const iconItem = Zotero.Items.get(iconItemId);
     if (iconItem) {
-      const src = Zotero.ItemTypes.getImageSrc(
-        (iconItem as Zotero.Item).itemType,
-      );
+      const src = getItemTypeImageSrc((iconItem as Zotero.Item).itemType);
       if (src) {
         iconEl.src = src;
         iconEl.addEventListener(
@@ -761,11 +762,24 @@ function renderIconWithFallback(
   row.appendChild(iconEl);
 }
 
+/**
+ * Values that used to be re-read per row (Zotero.Prefs lookups, per-row
+ * Zotero.Reader registry scans) and are now read once per render and passed
+ * down the row-creation chain.
+ */
+interface RowRenderOptions {
+  showExtra: boolean;
+  showReaderIndicator: boolean;
+  /** Snapshot of loaded-reader tabIds for this render (empty when hidden). */
+  loadedReaderTabIds: ReadonlySet<string>;
+}
+
 function createItemElement(
   doc: Document,
   pdf: OpenedPDF,
   categoryId: string | null,
-  categoryColors?: { light: string; dark: string },
+  categoryColors: { light: string; dark: string } | undefined,
+  opts: RowRenderOptions,
 ): HTMLElement {
   // Use parent item for metadata (attachments don't have journal etc.)
   const metadataItemId = pdf.parentItemId ?? pdf.itemId;
@@ -805,8 +819,8 @@ function createItemElement(
   const isReader = pdf.type?.startsWith("reader");
   const showIndicator =
     isReader &&
-    isShowReaderLoadedIndicatorEnabled() &&
-    isReaderLoaded(pdf.tabId);
+    opts.showReaderIndicator &&
+    opts.loadedReaderTabIds.has(pdf.tabId);
   if (showIndicator) {
     row.classList.add("reader-loaded");
   }
@@ -842,11 +856,7 @@ function createItemElement(
   contentEl.appendChild(titleEl);
 
   // PDF reader tabs: show extra ("其他") + separator when pref enabled AND extra non-empty
-  const showExtra = Zotero.Prefs.get(
-    `${config.prefsPrefix}.verticalTabs.showExtra`,
-    true,
-  ) as boolean;
-  if (isReader && showExtra && info.extra) {
+  if (isReader && opts.showExtra && info.extra) {
     const extraEl = createEl(doc, "div");
     extraEl.className = "vertical-tabs-item-extra";
     extraEl.textContent = info.extra;
@@ -998,6 +1008,12 @@ function createItemElement(
       const draggedTabId = getDraggedTabId(doc);
       if (!draggedTabId) return;
 
+      // Early-exit: the preview for exactly this (row, before) is already
+      // applied — dragover fires continuously while the cursor stays over
+      // the same half of the same row.
+      if (isSameRowPreviewAnchor(doc, row, before)) return;
+      setRowPreviewAnchor(doc, row, before);
+
       const targetWrapper =
         row.closest(".vertical-tabs-category") ||
         row.closest(".vertical-tabs-drop-zone");
@@ -1040,6 +1056,12 @@ function createItemElement(
     });
 
     row.addEventListener("dragleave", (e: DragEvent) => {
+      // Moving INTO a child element (title, icon, close button…) fires
+      // dragleave on the row even though the drag never left it. Clearing
+      // the indicator there made the green bar fade out on every micro-move
+      // inside the row — and with the preview anchor still set, it stayed
+      // gone until the cursor crossed a row boundary.
+      if (row.contains(e.relatedTarget as Node | null)) return;
       clearItemDropIndicator(row);
       const sidebar = doc.getElementById(SIDEBAR_ID);
       if (!sidebar?.contains(e.relatedTarget as Node)) {
@@ -1253,6 +1275,7 @@ function createCategoryElement(
   category: Category,
   items: OpenedPDF[],
   collapsed: boolean,
+  opts: RowRenderOptions,
 ): HTMLElement {
   const wrapper = createEl(doc, "div");
   wrapper.className = `vertical-tabs-category${collapsed ? " collapsed" : ""}`;
@@ -1386,7 +1409,7 @@ function createCategoryElement(
   itemsContainer.className = "vertical-tabs-items";
   for (const pdf of items) {
     itemsContainer.appendChild(
-      createItemElement(doc, pdf, category.id, categoryColors),
+      createItemElement(doc, pdf, category.id, categoryColors, opts),
     );
   }
 
@@ -1411,44 +1434,45 @@ function createCategoryElement(
     setWrapperDragOver(wrapper, doc);
 
     const visibleItems = getContainerVisibleItems(itemsContainer);
+    const insertIndex = computeDropZoneInsertIndex(itemsContainer, e.clientY);
+    // Early-exit: the preview for exactly this gap position is already
+    // applied — dragover fires continuously while the cursor stays put.
+    if (isSameGapPreviewAnchor(doc, itemsContainer, insertIndex)) return;
+
     if (visibleItems.length === 0) {
       clearItemShiftPreview(doc);
       clearAllItemDropIndicators(doc);
       setTopGapIndicator(itemsContainer, getDefaultItemHeight(itemsContainer));
-      return;
-    }
-
-    const insertIndex = computeDropZoneInsertIndex(itemsContainer, e.clientY);
-    if (insertIndex >= visibleItems.length) {
+    } else if (insertIndex >= visibleItems.length) {
       // Append-to-end: no item shift, indicator centered below the last item.
       clearItemShiftPreview(doc);
       const lastItem = visibleItems[visibleItems.length - 1];
       const shiftHeight = lastItem.offsetHeight || 0;
       clearAllItemDropIndicators(doc);
       setItemDropIndicator(lastItem, false, shiftHeight);
-      return;
-    }
-
-    const targetRow = visibleItems[insertIndex];
-    const shiftHeight = applyDropPreview(
-      doc,
-      {
-        type: "item",
-        container: itemsContainer,
-        targetRow,
-        before: true,
-        draggedTabId,
-      },
-      preview.exclude,
-    );
-
-    clearAllItemDropIndicators(doc);
-    if (insertIndex === 0) {
-      setTopGapIndicator(itemsContainer, shiftHeight);
     } else {
-      const prevItem = visibleItems[insertIndex - 1];
-      setItemDropIndicator(prevItem, false, shiftHeight);
+      const targetRow = visibleItems[insertIndex];
+      const shiftHeight = applyDropPreview(
+        doc,
+        {
+          type: "item",
+          container: itemsContainer,
+          targetRow,
+          before: true,
+          draggedTabId,
+        },
+        preview.exclude,
+      );
+
+      clearAllItemDropIndicators(doc);
+      if (insertIndex === 0) {
+        setTopGapIndicator(itemsContainer, shiftHeight);
+      } else {
+        const prevItem = visibleItems[insertIndex - 1];
+        setItemDropIndicator(prevItem, false, shiftHeight);
+      }
     }
+    setGapPreviewAnchor(doc, itemsContainer, insertIndex);
   });
 
   // Drop counterpart of the dragover above. Without it, drops on the gaps
@@ -1532,12 +1556,12 @@ function createCategoryElement(
     if (!data || data.startsWith("cat:")) return;
 
     // Highlight this category header / empty area.
-    doc
-      .querySelectorAll(".vertical-tabs-category.drag-over")
-      .forEach((el: Element) => {
-        if (el !== wrapper) el.classList.remove("drag-over");
-      });
-    wrapper.classList.add("drag-over");
+    setWrapperDragOver(wrapper, doc);
+
+    // Early-exit: the whole-category preview is already applied (it only
+    // changes when entering/leaving, not per cursor move).
+    if (isSameGapPreviewAnchor(doc, wrapper, 0)) return;
+    setGapPreviewAnchor(doc, wrapper, 0);
 
     const draggedTabId = getDraggedTabId(doc) || data;
     const preview = getDragPreviewParams(doc);
@@ -1636,12 +1660,21 @@ function createCategoryElement(
 
 // ── Item right-click context menu ──
 
-export function showItemContextMenu(
-  doc: Document,
-  pdf: OpenedPDF,
-  x: number,
-  y: number,
-): void {
+interface MenuShell {
+  menu: HTMLElement;
+  addItem: (label: string, action: () => void) => void;
+  addDivider: () => void;
+  /** Append to the document, clamp inside the window, animate open, and wire
+   *  the outside-mousedown closer. */
+  open: () => void;
+}
+
+/**
+ * Shared chrome for the tab context menus (single-tab and multi-select):
+ * fixed popup at the cursor with hover items, dividers, window-edge clamping
+ * and the popup open/close animations.
+ */
+function createMenuShell(doc: Document, x: number, y: number): MenuShell {
   // Close any open category context menu
   doc.getElementById("vt-reader-cat-menu")?.remove();
   // Close own menu if already open
@@ -1662,6 +1695,10 @@ export function showItemContextMenu(
     ${getPopupStyleSheet(doc)}
   `;
 
+  // Assigned by open() when the suppression is claimed; addItem/closeMenu
+  // callbacks only ever run after open(), so this is always the real token.
+  let menuToken: object = {};
+
   const addItem = (label: string, action: () => void): void => {
     const el = createEl(doc, "div");
     el.textContent = label;
@@ -1674,12 +1711,89 @@ export function showItemContextMenu(
       el.style.background = "";
     });
     el.addEventListener("click", () => {
-      animatePopupClose(menu, () => setContextMenuOpen(doc, false));
-      scheduleCollapse(doc);
+      // After a menu action VT stays open — nothing is scheduled here. It
+      // collapses only when the mouse returns to VT and leaves again (the
+      // normal rule), per the confirmed context-menu behavior.
+      animatePopupClose(menu, () => releaseContextMenuOpen(doc, menuToken));
       action();
     });
     menu.appendChild(el);
   };
+
+  const addDivider = (): void => {
+    const div = createEl(doc, "div");
+    div.style.cssText = `height: 1px; margin: 4px 12px; background: ${
+      isDarkMode(doc) ? "#555" : "#DBDBDB"
+    }; pointer-events: none;`;
+    menu.appendChild(div);
+  };
+
+  const open = (): void => {
+    doc.documentElement?.appendChild(menu);
+    // Clamp inside the window so rows near the right/bottom edge cannot push
+    // the menu off-screen (items would become unclickable).
+    const origin = placePopupWithinWindow(menu, x, y);
+    animatePopupOpen(menu, origin);
+    menuToken = claimContextMenuOpen(doc);
+
+    const menuId = menu.id;
+    const cleanup = () => {
+      doc.removeEventListener("mousedown", closeMenu, true);
+      for (const w of Zotero.getMainWindows())
+        w.document.removeEventListener("mousedown", closeMenu, true);
+    };
+    const closeMenu = (e: MouseEvent) => {
+      if (!menu.isConnected) {
+        cleanup();
+        return;
+      }
+      const target = e.target as HTMLElement;
+      // Don't close if clicking inside the menu
+      if (target.closest(`#${menuId}`)) return;
+      // Click inside VT → close menu, keep VT open (normal rules apply).
+      if (target.closest(`#${SIDEBAR_ID}`)) {
+        animatePopupClose(menu, () => releaseContextMenuOpen(doc, menuToken));
+        cleanup();
+        return;
+      }
+      // Click outside VT and the menu → close menu AND collapse VT. The
+      // collapse is scheduled only after the suppression is released,
+      // otherwise scheduleCollapse would be blocked by it.
+      animatePopupClose(menu, () => {
+        releaseContextMenuOpen(doc, menuToken);
+        scheduleCollapse(doc);
+      });
+      cleanup();
+    };
+    setTimeout(() => {
+      doc.addEventListener("mousedown", closeMenu, true);
+      for (const w of Zotero.getMainWindows())
+        w.document.addEventListener("mousedown", closeMenu, true);
+    }, 150);
+  };
+
+  return { menu, addItem, addDivider, open };
+}
+
+export function showItemContextMenu(
+  doc: Document,
+  pdf: OpenedPDF,
+  x: number,
+  y: number,
+): void {
+  // Right-clicking an already-selected row with a live multi selection opens
+  // the multi-select menu instead — every action there applies to the whole
+  // selection.
+  if (
+    pdf.tabId &&
+    getSelectedTabCount(doc) > 1 &&
+    isTabSelected(doc, pdf.tabId)
+  ) {
+    showMultiSelectContextMenu(doc, x, y);
+    return;
+  }
+
+  const { addItem, addDivider, open } = createMenuShell(doc, x, y);
 
   addItem(getString("vertical-tabs-show-in-library"), () => {
     const win = Zotero.getMainWindows()[0] as
@@ -1715,6 +1829,35 @@ export function showItemContextMenu(
       }
     }
   });
+
+  // Reader tabs only: open/close the PDF reader WITHOUT closing the tab
+  // (closing frees the reader's memory; the native tab stays). Sits above
+  // "Close" with a divider between them.
+  if (pdf.tabId && pdf.type?.startsWith("reader")) {
+    const tabId = pdf.tabId;
+    if (isReaderLoaded(tabId)) {
+      addItem(getString("vertical-tabs-close-reader"), () => {
+        // If the user is currently on this reader page, jump back to the
+        // library first — releasing the reader tears down its iframe.
+        if (getSelectedTabId() === tabId) {
+          try {
+            getZoteroTabs()?.select("zotero-pane");
+          } catch {
+            // ignore
+          }
+        }
+        // The green loaded indicator fades out via the reader-released event.
+        releaseReaderForTab(tabId);
+      });
+    } else {
+      addItem(getString("vertical-tabs-open-reader"), () => {
+        // Load the reader in the BACKGROUND — stay on the current page
+        // instead of jumping to the reader tab.
+        void openReaderInBackground(tabId);
+      });
+    }
+    addDivider();
+  }
 
   addItem(getString("vertical-tabs-close-tab"), () => {
     if (!pdf.tabId) return;
@@ -1754,39 +1897,134 @@ export function showItemContextMenu(
     });
   });
 
-  doc.documentElement?.appendChild(menu);
-  animatePopupOpen(menu, "top left");
-  setContextMenuOpen(doc, true);
+  open();
+}
 
-  const menuId = menu.id;
-  const cleanup = () => {
-    doc.removeEventListener("mousedown", closeMenu, true);
-    for (const w of Zotero.getMainWindows())
-      w.document.removeEventListener("mousedown", closeMenu, true);
-  };
-  const closeMenu = (e: MouseEvent) => {
-    if (!menu.isConnected) {
-      cleanup();
-      return;
-    }
-    const target = e.target as HTMLElement;
-    // Don't close if clicking inside the menu
-    if (target.closest(`#${menuId}`)) return;
-    // Click inside VT → close menu, keep VT open
-    if (target.closest(`#${SIDEBAR_ID}`)) {
-      animatePopupClose(menu, () => setContextMenuOpen(doc, false));
-      cleanup();
-      return;
-    }
-    animatePopupClose(menu, () => setContextMenuOpen(doc, false));
-    scheduleCollapse(doc);
-    cleanup();
-  };
-  setTimeout(() => {
-    doc.addEventListener("mousedown", closeMenu, true);
-    for (const w of Zotero.getMainWindows())
-      w.document.addEventListener("mousedown", closeMenu, true);
-  }, 150);
+/**
+ * Context menu shown when right-clicking a row that belongs to a live multi
+ * selection (2+ tabs). Every action applies to the whole selection:
+ * new-category-from-selection (same flow as the quick-create drop zone),
+ * open/close readers (reader tabs in the selection), close selected, close
+ * others.
+ */
+function showMultiSelectContextMenu(doc: Document, x: number, y: number): void {
+  const { addItem, addDivider, open } = createMenuShell(doc, x, y);
+
+  // Snapshot the selection up front (visual order) — later actions must not
+  // re-read it after awaits or other events.
+  const selectedTabIds = getOrderedSelectedTabIds(doc);
+  const selectedPdfs = selectedTabIds
+    .map((id) => getOpenedPDFByTabId(id))
+    .filter((p): p is OpenedPDF => !!p && !!p.tabId);
+  const isReaderTab = (p: OpenedPDF) => !!p.type?.startsWith("reader");
+  const hasUnloadedReader = selectedPdfs.some(
+    (p) => isReaderTab(p) && !isReaderLoaded(p.tabId),
+  );
+  const hasLoadedReader = selectedPdfs.some(
+    (p) => isReaderTab(p) && isReaderLoaded(p.tabId),
+  );
+
+  // ── New category from the selection (same as the quick-create flow) ──
+  addItem(getString("vertical-tabs-add-category"), async () => {
+    const entries = selectedPdfs.map((p) => ({
+      itemId: p.itemId,
+      tabId: p.tabId,
+    }));
+    if (!entries.length) return;
+    const name = await promptCategoryName(doc, {
+      title: getString("vertical-tabs-add-category"),
+      initial: getString("vertical-tabs-category-new"),
+      inputId: "vt-multi-new-category-input",
+    });
+    if (!name) return;
+    dispatchVtEvent(doc, "vertical-tabs:create-category-with-items", {
+      name,
+      entries,
+    });
+  });
+
+  // ── Open readers (background — stay on the current page) ──
+  if (hasUnloadedReader) {
+    addItem(getString("vertical-tabs-open-reader"), () => {
+      for (const p of selectedPdfs) {
+        if (isReaderTab(p) && !isReaderLoaded(p.tabId)) {
+          void openReaderInBackground(p.tabId);
+        }
+      }
+    });
+  }
+
+  // ── Close readers (free memory, keep the tabs) ──
+  if (hasLoadedReader) {
+    addItem(getString("vertical-tabs-close-reader"), () => {
+      // If the user is currently viewing one of these readers, jump back to
+      // the library first — releasing tears down its iframe.
+      const currentTabId = getSelectedTabId();
+      const releasingCurrent = selectedPdfs.some(
+        (p) =>
+          isReaderTab(p) && isReaderLoaded(p.tabId) && p.tabId === currentTabId,
+      );
+      if (releasingCurrent) {
+        try {
+          getZoteroTabs()?.select("zotero-pane");
+        } catch {
+          // ignore
+        }
+      }
+      for (const p of selectedPdfs) {
+        if (isReaderTab(p) && isReaderLoaded(p.tabId)) {
+          releaseReaderForTab(p.tabId);
+        }
+      }
+    });
+  }
+
+  if (hasUnloadedReader || hasLoadedReader) {
+    addDivider();
+  }
+
+  // ── Close the selected tabs ──
+  addItem(getString("vertical-tabs-close-selected-tabs"), () => {
+    const tabIds = selectedTabIds;
+    if (!tabIds.length) return;
+    // The rows are going away — the selection must not outlive them.
+    clearTabSelection(doc);
+    animateTabsExit(doc, tabIds, () => {
+      const ztabs = getZoteroTabs();
+      if (!ztabs) return;
+      for (const id of tabIds) {
+        try {
+          ztabs.close(id);
+        } catch {
+          // ignore
+        }
+      }
+      removeTabsFromTrackingSilently(tabIds);
+    });
+  });
+
+  // ── Close every tab NOT in the selection (selection survives) ──
+  addItem(getString("vertical-tabs-close-other-tabs"), () => {
+    const keep = new Set(selectedTabIds);
+    const tabIds = getOpenedPDFs()
+      .map((t) => t.tabId)
+      .filter((id): id is string => !!id && !keep.has(id));
+    if (!tabIds.length) return;
+    animateTabsExit(doc, tabIds, () => {
+      const ztabs = getZoteroTabs();
+      if (!ztabs) return;
+      for (const id of tabIds) {
+        try {
+          ztabs.close(id);
+        } catch {
+          // ignore
+        }
+      }
+      removeTabsFromTrackingSilently(tabIds);
+    });
+  });
+
+  open();
 }
 
 export function renderCategories(
@@ -1852,6 +2090,20 @@ export function renderCategories(
     return;
   }
 
+  // Read per-render values once instead of per row (Zotero.Prefs lookup and
+  // a Zotero.Reader registry scan used to run for every single row created).
+  const showReaderIndicator = isShowReaderLoadedIndicatorEnabled();
+  const rowOpts: RowRenderOptions = {
+    showExtra: !!Zotero.Prefs.get(
+      `${config.prefsPrefix}.verticalTabs.showExtra`,
+      true,
+    ),
+    showReaderIndicator,
+    loadedReaderTabIds: showReaderIndicator
+      ? getLoadedReaderTabIds()
+      : new Set<string>(),
+  };
+
   const sortedCategories = [...data.categories].sort(
     (a, b) => a.order - b.order,
   );
@@ -1862,7 +2114,7 @@ export function renderCategories(
         ?.items || [];
     const collapsed = category.collapsed ?? false;
     container.appendChild(
-      createCategoryElement(doc, category, items, collapsed),
+      createCategoryElement(doc, category, items, collapsed, rowOpts),
     );
   }
 
@@ -1881,7 +2133,9 @@ export function renderCategories(
 
     // Render uncategorized items in the drop zone
     for (const pdf of uncategorizedPdfs) {
-      dropZone.appendChild(createItemElement(doc, pdf, null));
+      dropZone.appendChild(
+        createItemElement(doc, pdf, null, undefined, rowOpts),
+      );
     }
     container.appendChild(dropZone);
   } else if (sortedCategories.length > 0) {
@@ -1905,14 +2159,17 @@ let _searchQuery = "";
 /**
  * Update the reader-loaded indicator class on existing tab rows without
  * rebuilding the whole categories DOM, so opacity transitions play smoothly.
+ * The loaded set is snapshotted once per pass (O(N+R) instead of O(N×R)).
  */
 function updateReaderLoadedIndicators(doc: Document): void {
+  const enabled = isShowReaderLoadedIndicatorEnabled();
+  const loaded = enabled ? getLoadedReaderTabIds() : new Set<string>();
   doc.querySelectorAll(".vertical-tabs-item").forEach((el: Element) => {
     const row = el as HTMLElement;
     const tabId = row.dataset.tabId;
     const tabType = row.dataset.tabType;
     if (!tabId || !tabType?.startsWith("reader")) return;
-    if (isShowReaderLoadedIndicatorEnabled() && isReaderLoaded(tabId)) {
+    if (loaded.has(tabId)) {
       row.classList.add("reader-loaded");
     } else {
       row.classList.remove("reader-loaded");
@@ -1944,12 +2201,62 @@ function setReaderLoadedIndicatorForTab(
   }
 }
 
+/**
+ * In-place refresh of every row's relative-time label (the periodic display
+ * timers' "aging" pass). Replaces the old full re-render per timer tick, so
+ * the DOM — and any in-progress drag session, selection, or hover card — is
+ * left untouched.
+ */
+function refreshRelativeTimes(doc: Document): void {
+  doc.querySelectorAll(".vertical-tabs-item").forEach((el: Element) => {
+    const row = el as HTMLElement;
+    const tabId = row.dataset.tabId;
+    if (!tabId) return;
+    const timeEl = row.querySelector(".vertical-tabs-item-time");
+    if (!timeEl) return;
+    const pdf = getOpenedPDFByTabId(tabId);
+    if (pdf) {
+      timeEl.textContent = formatRelativeTime(pdf.openedAt);
+    }
+  });
+}
+
+/**
+ * Targeted active-row update for tab selection: move the .active class onto
+ * the newly selected row and refresh its relative-time label, without
+ * rebuilding the whole list. The folded-category highlight bar tracks the
+ * active row, so it is recomputed too. Falls back gracefully when the row
+ * does not exist (e.g. the library tab was selected): every row loses
+ * .active, matching what a full render would produce.
+ */
+function updateActiveTabRow(doc: Document, tabId: string): void {
+  doc.querySelectorAll(".vertical-tabs-item.active").forEach((el: Element) => {
+    if ((el as HTMLElement).dataset.tabId !== tabId) {
+      el.classList.remove("active");
+    }
+  });
+  if (tabId) {
+    const row = doc.querySelector(
+      `.vertical-tabs-item[data-tab-id="${CSS.escape(tabId)}"]`,
+    ) as HTMLElement | null;
+    if (row) {
+      row.classList.add("active");
+      const pdf = getOpenedPDFByTabId(tabId);
+      const timeEl = row.querySelector(".vertical-tabs-item-time");
+      if (pdf && timeEl) {
+        timeEl.textContent = formatRelativeTime(pdf.openedAt);
+      }
+    }
+  }
+  updateActiveCategoryHighlight(doc);
+}
+
 export function subscribeToRenderEvents(
   doc: Document,
   getData: () => Promise<VerticalTabsData>,
   getPDFs: () => OpenedPDF[],
 ): void {
-  const handler = async () => {
+  const renderOnce = async () => {
     const container = getCategoriesContainer(doc);
     if (!container) return;
     const data = await getData();
@@ -2034,6 +2341,35 @@ export function subscribeToRenderEvents(
         }
       }
     }
+
+    // Post-render signal for listeners that must inspect the fresh DOM
+    // (hoverCard retargets or hides its card once the rows are rebuilt).
+    dispatchVtEvent(doc, "vertical-tabs:rendered");
+  };
+
+  // Coalesce bursts of render events into one render per animation frame:
+  // a single user action (drop, tab close, startup restore, …) often fires
+  // several pdfs-changed/data-changed events in the same tick, and each used
+  // to trigger its own full rebuild.
+  const scheduleRender = () => {
+    // Renders held by holdRenders (e.g. during a category import) coalesce
+    // into a single render on release.
+    if ((doc as any)[RENDER_HOLD_KEY]) {
+      (doc as any)[RENDER_HELD_KEY] = true;
+      return;
+    }
+    if ((doc as any)[RENDER_SCHEDULED_KEY]) return;
+    (doc as any)[RENDER_SCHEDULED_KEY] = true;
+    const win = doc.defaultView;
+    const run = () => {
+      delete (doc as any)[RENDER_SCHEDULED_KEY];
+      void renderOnce();
+    };
+    if (win) {
+      win.requestAnimationFrame(run);
+    } else {
+      run();
+    }
   };
 
   const readerIndicatorHandler = () => updateReaderLoadedIndicators(doc);
@@ -2049,47 +2385,83 @@ export function subscribeToRenderEvents(
       setReaderLoadedIndicatorForTab(doc, tabId, false);
     }
   }) as EventListener;
-
-  doc.addEventListener("vertical-tabs:pdfs-changed", handler);
-  doc.addEventListener("vertical-tabs:data-changed", handler);
-  doc.addEventListener("vertical-tabs:reader-loading", readerLoadingHandler);
-  doc.addEventListener("vertical-tabs:reader-released", readerReleasedHandler);
-  doc.addEventListener("vertical-tabs:reader-restored", readerIndicatorHandler);
   // Collapse/expand should not rebuild the categories DOM: we want the
   // existing content to be clipped by the width animation instead of
   // vanishing instantly. Only render when becoming visible (initial load).
-  doc.addEventListener("vertical-tabs:visibility-changed", ((
-    e: CustomEvent,
-  ) => {
+  const visibilityHandler = ((e: CustomEvent) => {
     if (e.detail?.visible === false) return;
-    void handler();
-  }) as EventListener);
-
-  // Search event
-  doc.addEventListener("vertical-tabs:search", ((e: CustomEvent) => {
+    scheduleRender();
+  }) as EventListener;
+  const searchHandler = ((e: CustomEvent) => {
     _searchQuery = (e.detail?.query as string) || "";
-    void handler();
-  }) as EventListener);
+    scheduleRender();
+  }) as EventListener;
+  // Tab selection: targeted .active-class update — no list rebuild.
+  const activeChangedHandler = ((e: CustomEvent) => {
+    updateActiveTabRow(doc, (e.detail?.tabId as string) || "");
+  }) as EventListener;
+  // Display timers: in-place relative-time refresh — no list rebuild.
+  const timeTickHandler = (() => {
+    refreshRelativeTimes(doc);
+  }) as EventListener;
 
-  (doc as any).__verticalTabsRenderHandler = handler;
+  doc.addEventListener("vertical-tabs:pdfs-changed", scheduleRender);
+  doc.addEventListener("vertical-tabs:data-changed", scheduleRender);
+  doc.addEventListener("vertical-tabs:reader-loading", readerLoadingHandler);
+  doc.addEventListener("vertical-tabs:reader-released", readerReleasedHandler);
+  doc.addEventListener("vertical-tabs:reader-restored", readerIndicatorHandler);
+  doc.addEventListener("vertical-tabs:visibility-changed", visibilityHandler);
+  doc.addEventListener("vertical-tabs:search", searchHandler);
+  doc.addEventListener("vertical-tabs:active-changed", activeChangedHandler);
+  doc.addEventListener("vertical-tabs:time-tick", timeTickHandler);
+
+  (doc as any).__verticalTabsRenderHandler = scheduleRender;
+  (doc as any).__verticalTabsVisibilityHandler = visibilityHandler;
+  (doc as any).__verticalTabsSearchHandler = searchHandler;
+  (doc as any).__verticalTabsActiveChangedHandler = activeChangedHandler;
+  (doc as any).__verticalTabsTimeTickHandler = timeTickHandler;
   (doc as any).__verticalTabsReaderLoadingHandler = readerLoadingHandler;
   (doc as any).__verticalTabsReaderReleasedHandler = readerReleasedHandler;
   (doc as any).__verticalTabsReaderRestoredHandler = readerIndicatorHandler;
 }
 
 export function unsubscribeFromRenderEvents(doc: Document): void {
-  const handler = (doc as any).__verticalTabsRenderHandler;
+  const renderHandler = (doc as any).__verticalTabsRenderHandler;
+  const visibilityHandler = (doc as any).__verticalTabsVisibilityHandler;
+  const searchHandler = (doc as any).__verticalTabsSearchHandler;
+  const activeChangedHandler = (doc as any).__verticalTabsActiveChangedHandler;
   const readerLoadingHandler = (doc as any).__verticalTabsReaderLoadingHandler;
   const readerReleasedHandler = (doc as any)
     .__verticalTabsReaderReleasedHandler;
   const readerRestoredHandler = (doc as any)
     .__verticalTabsReaderRestoredHandler;
-  if (handler) {
-    doc.removeEventListener("vertical-tabs:pdfs-changed", handler);
-    doc.removeEventListener("vertical-tabs:data-changed", handler);
-    doc.removeEventListener("vertical-tabs:visibility-changed", handler);
-    doc.removeEventListener("vertical-tabs:search", handler);
+  if (renderHandler) {
+    doc.removeEventListener("vertical-tabs:pdfs-changed", renderHandler);
+    doc.removeEventListener("vertical-tabs:data-changed", renderHandler);
     delete (doc as any).__verticalTabsRenderHandler;
+  }
+  if (visibilityHandler) {
+    doc.removeEventListener(
+      "vertical-tabs:visibility-changed",
+      visibilityHandler,
+    );
+    delete (doc as any).__verticalTabsVisibilityHandler;
+  }
+  if (searchHandler) {
+    doc.removeEventListener("vertical-tabs:search", searchHandler);
+    delete (doc as any).__verticalTabsSearchHandler;
+  }
+  if (activeChangedHandler) {
+    doc.removeEventListener(
+      "vertical-tabs:active-changed",
+      activeChangedHandler,
+    );
+    delete (doc as any).__verticalTabsActiveChangedHandler;
+  }
+  const timeTickHandler = (doc as any).__verticalTabsTimeTickHandler;
+  if (timeTickHandler) {
+    doc.removeEventListener("vertical-tabs:time-tick", timeTickHandler);
+    delete (doc as any).__verticalTabsTimeTickHandler;
   }
   if (readerLoadingHandler) {
     doc.removeEventListener(
@@ -2112,6 +2484,9 @@ export function unsubscribeFromRenderEvents(doc: Document): void {
     );
     delete (doc as any).__verticalTabsReaderRestoredHandler;
   }
+  delete (doc as any)[RENDER_SCHEDULED_KEY];
+  delete (doc as any)[RENDER_HOLD_KEY];
+  delete (doc as any)[RENDER_HELD_KEY];
   _searchQuery = "";
 }
 
@@ -2164,6 +2539,11 @@ export function setupCategoryDarkMode(doc: Document): void {
 
   const cleanup = watchDarkMode(doc, (isDark) => {
     applyCategoryColors(doc, isDark);
+    // Item-type icons are theme-aware: drop the cached srcs and re-render so
+    // every row picks up the new theme's icons (tab selection no longer
+    // triggers full re-renders, so nothing else would refresh them).
+    clearItemTypeImageSrc();
+    dispatchVtEvent(doc, "vertical-tabs:data-changed");
   });
   (doc as any).__vtDarkModeCleanup = cleanup;
 }
@@ -2179,5 +2559,5 @@ export function teardownCategoryDarkMode(doc: Document): void {
   }
 }
 
-export { getItemInfo };
-export type { ItemInfo };
+export { getItemInfo } from "./itemInfoCache";
+export type { ItemInfo } from "./itemInfoCache";

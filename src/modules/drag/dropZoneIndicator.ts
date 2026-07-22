@@ -13,6 +13,23 @@ const INDICATOR_OFFSET_VAR = "--vt-drop-indicator-offset";
 const TOP_GAP_OFFSET_VAR = "--vt-drop-indicator-top-offset";
 const EMPTY_PREVIEW_CLASS = "vt-drop-preview-empty";
 const TOP_GAP_PREVIEW_CLASS = "vt-drop-preview-top-gap";
+const ACTIVE_KEY = "__vtActiveDropIndicators";
+
+/**
+ * Per-document set of elements carrying an active drop indicator. The clear
+ * path iterates this (0–2 elements in practice) instead of scanning the
+ * whole document with querySelectorAll on every dragover event. Stale
+ * entries (rows destroyed by a re-render) are harmless: clearing classes on
+ * a detached element is a no-op and the set is drained on the next clear.
+ */
+function getActiveIndicators(doc: Document): Set<Element> {
+  let set = (doc as any)[ACTIVE_KEY] as Set<Element> | undefined;
+  if (!set) {
+    set = new Set();
+    (doc as any)[ACTIVE_KEY] = set;
+  }
+  return set;
+}
 
 export function setItemDropIndicator(
   row: HTMLElement,
@@ -23,12 +40,16 @@ export function setItemDropIndicator(
   row.classList.add(before ? "drop-before" : "drop-after");
   const offset = Math.floor(shiftHeight / 2);
   row.style.setProperty(INDICATOR_OFFSET_VAR, `-${offset}px`);
+  const doc = row.ownerDocument;
+  if (doc) getActiveIndicators(doc).add(row);
 }
 
 export function clearItemDropIndicator(row: HTMLElement): void {
   // Only remove the visibility class so the pseudo-element fades out at its
   // current offset instead of snapping to the item edge.
   row.classList.remove("drop-before", "drop-after");
+  const doc = row.ownerDocument;
+  if (doc) getActiveIndicators(doc).delete(row);
 }
 
 export function getDefaultItemHeight(container: HTMLElement): number {
@@ -56,6 +77,8 @@ export function setEmptyDropZoneIndicator(dropZone: HTMLElement): void {
   clearEmptyIndicator(dropZone);
   clearTopGapIndicator(dropZone);
   dropZone.classList.add(EMPTY_PREVIEW_CLASS);
+  const doc = dropZone.ownerDocument;
+  if (doc) getActiveIndicators(doc).add(dropZone);
 
   // Position the green bar at "half a tag height down from the top of the
   // uncategorized area" — the center of the virtual first tag slot.
@@ -74,6 +97,8 @@ export function setTopGapIndicator(
   clearEmptyIndicator(container);
   clearTopGapIndicator(container);
   container.classList.add(TOP_GAP_PREVIEW_CLASS);
+  const doc = container.ownerDocument;
+  if (doc) getActiveIndicators(doc).add(container);
 
   const win = container.ownerDocument?.defaultView || (globalThis as any);
   const computed = win.getComputedStyle(container);
@@ -83,18 +108,16 @@ export function setTopGapIndicator(
 }
 
 export function clearAllItemDropIndicators(doc: Document): void {
-  // Only touch elements that actually have an active indicator, instead of
-  // scanning every drop-zone and category container on every dragover.
-  doc
-    .querySelectorAll(
-      ".vertical-tabs-item.drop-before, .vertical-tabs-item.drop-after",
-    )
-    .forEach((el: Element) => clearItemDropIndicator(el as HTMLElement));
-  doc
-    .querySelectorAll(".vt-drop-preview-top-gap, .vt-drop-preview-empty")
-    .forEach((el: Element) =>
-      el.classList.remove(TOP_GAP_PREVIEW_CLASS, EMPTY_PREVIEW_CLASS),
+  const active = getActiveIndicators(doc);
+  for (const el of active) {
+    (el as HTMLElement).classList.remove(
+      "drop-before",
+      "drop-after",
+      TOP_GAP_PREVIEW_CLASS,
+      EMPTY_PREVIEW_CLASS,
     );
+  }
+  active.clear();
 }
 
 /**

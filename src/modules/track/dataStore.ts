@@ -157,7 +157,10 @@ export async function loadData(): Promise<VerticalTabsData> {
 export async function saveData(data: VerticalTabsData): Promise<void> {
   const path = getDataFilePath();
   try {
-    await IOUtils.writeUTF8(path, JSON.stringify(data, null, 2));
+    // Compact JSON: the file is rewritten on every persist/lastReadTimes
+    // save, and the pretty-print indent roughly doubles its size (and the IO
+    // time) for no consumer benefit — nothing reads it by hand.
+    await IOUtils.writeUTF8(path, JSON.stringify(data));
   } catch (error) {
     ztoolkit.log("Failed to save vertical tabs data:", error);
   }

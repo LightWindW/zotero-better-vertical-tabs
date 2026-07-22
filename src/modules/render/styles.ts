@@ -391,10 +391,21 @@ export function getStyles(): string {
       cursor: pointer;
       gap: 8px;
       position: relative;
-      transition: padding 0.2s ease-out, gap 0.2s ease-out, transform 0.2s ease-out;
+      /* background/box-shadow must transition too: tab selection moves the
+         .active class via a targeted update (no re-render), and without a
+         transition the white highlight snaps on/off — a visible white flash.
+         Freshly rendered rows start with their final class, so renders never
+         trigger this transition. */
+      transition: padding 0.2s ease-out, gap 0.2s ease-out, transform 0.2s ease-out, background 0.2s ease, box-shadow 0.2s ease;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-item:hover {
+      background: var(--material-hover, rgba(0, 0, 0, 0.04));
+    }
+
+    /* Category headers get the same hover block in light mode (the dark
+       @media block already groups them with items/home button). */
+    #${SIDEBAR_ID} .vertical-tabs-category-header:hover {
       background: var(--material-hover, rgba(0, 0, 0, 0.04));
     }
 
@@ -703,7 +714,9 @@ export function getStyles(): string {
       position: relative;
       border-radius: 4px;
       box-sizing: border-box;
-      transition: padding 0.2s ease-out, gap 0.2s ease-out;
+      /* Same cross-fade as tab rows: switching between a reader tab and the
+         library moves .active between the row and this button. */
+      transition: padding 0.2s ease-out, gap 0.2s ease-out, background 0.2s ease, box-shadow 0.2s ease;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-home-btn:hover {
@@ -1305,6 +1318,12 @@ export function getStyles(): string {
       flex-shrink: 0;
       overflow: visible;
       position: relative;
+      /* Must paint above Zotero's #zotero-tab-cover (position:fixed, z-index:2,
+         opaque) — the white loading mask Zotero shows while a reader-unloaded
+         tab loads on select. Without this the cover blanks the whole VT
+         (only z-index:2 category headers survive) for the reader's entire
+         load time. */
+      z-index: 3;
     }
 
     #${WRAPPER_ID}[hidden] {

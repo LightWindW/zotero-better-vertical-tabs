@@ -9,7 +9,7 @@ import {
 } from "../render/styles";
 import { applyTabHeightStyle } from "../render/tabHeight";
 import { dispatchVtEvent } from "../core/events";
-import { dispatchPDFsChanged } from "../track/itemTracker";
+import { dispatchPDFsChanged, dispatchTimeTick } from "../track/itemTracker";
 import { isDarkMode } from "../render/colorUtils";
 import { pinFillIcon, pinIcon } from "../ui/iconSvgs";
 
@@ -229,6 +229,8 @@ interface DocState {
   dialogOpen: boolean;
   inputPositionCleanup: (() => void) | null;
   widthObserverCleanup: (() => void) | null;
+  searchDebounceTimer: TimerHandle | null;
+  menuToken: object | null;
 }
 
 function getDocState(doc: Document): DocState {
@@ -245,6 +247,8 @@ function getDocState(doc: Document): DocState {
       dialogOpen: false,
       inputPositionCleanup: null,
       widthObserverCleanup: null,
+      searchDebounceTimer: null,
+      menuToken: null,
     };
     (doc as any)[key] = state;
   }
@@ -252,7 +256,32 @@ function getDocState(doc: Document): DocState {
 }
 
 export function setContextMenuOpen(doc: Document, open: boolean): void {
-  getDocState(doc).contextMenuOpen = open;
+  const state = getDocState(doc);
+  state.contextMenuOpen = open;
+  if (!open) state.menuToken = null;
+}
+
+/**
+ * Claim the menu-open collapse suppression with a fresh token; only a
+ * release with the SAME token clears it. Without this, right-clicking a
+ * second row while a menu is open let the FIRST menu's delayed close
+ * callback clear the suppression the second menu had just armed — VT then
+ * collapsed with a menu still open.
+ */
+export function claimContextMenuOpen(doc: Document): object {
+  const state = getDocState(doc);
+  const token = {};
+  state.contextMenuOpen = true;
+  state.menuToken = token;
+  return token;
+}
+
+export function releaseContextMenuOpen(doc: Document, token: object): void {
+  const state = getDocState(doc);
+  if (state.menuToken === token) {
+    state.contextMenuOpen = false;
+    state.menuToken = null;
+  }
 }
 
 function isContextMenuOpen(doc: Document): boolean {
@@ -308,11 +337,28 @@ function setupWidthObserver(doc: Document, wrapper: HTMLElement): void {
   if (!win) return;
 
   let lastWidth = wrapper.clientWidth;
+  let saveTimer: number | null = null;
+  const flushSave = () => {
+    if (saveTimer !== null) {
+      win.clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    saveWidth(lastWidth);
+  };
   const save = () => {
     const w = wrapper.clientWidth;
     if (w > 0 && w !== lastWidth) {
       lastWidth = w;
-      saveWidth(w);
+      // Debounce the pref write: during a window/splitter drag the observer
+      // fires continuously, and Zotero.Prefs.set is not free.
+      if (saveTimer !== null) win.clearTimeout(saveTimer);
+      saveTimer = win.setTimeout(flushSave, 300);
+    }
+  };
+  const cancelPendingSave = () => {
+    if (saveTimer !== null) {
+      win.clearTimeout(saveTimer);
+      saveTimer = null;
     }
   };
 
@@ -325,7 +371,10 @@ function setupWidthObserver(doc: Document, wrapper: HTMLElement): void {
   if (RO) {
     const ro = new RO(save);
     ro.observe(wrapper);
-    getDocState(doc).widthObserverCleanup = () => ro.disconnect();
+    getDocState(doc).widthObserverCleanup = () => {
+      cancelPendingSave();
+      ro.disconnect();
+    };
     return;
   }
 
@@ -337,7 +386,10 @@ function setupWidthObserver(doc: Document, wrapper: HTMLElement): void {
     }
     save();
   }, 500);
-  getDocState(doc).widthObserverCleanup = () => clearInterval(timer);
+  getDocState(doc).widthObserverCleanup = () => {
+    cancelPendingSave();
+    clearInterval(timer);
+  };
 }
 
 function isMouseOverVt(
@@ -535,17 +587,26 @@ export function createSidebar(doc: Document): HTMLElement {
   // Width is set by renderSidebarMode depending on pinned/floating mode.
   // Pinned: fills wrapper (100%). Floating: collapsed 35px or expanded savedWidth.
 
-  // Search input: dispatch filter event on input
+  // Search input: dispatch filter event on input (debounced — one render per
+  // typing pause instead of one per keystroke)
   const searchInput = sidebar.querySelector(
     ".vertical-tabs-search",
   ) as HTMLInputElement | null;
   if (searchInput) {
     searchInput.addEventListener("input", () => {
-      dispatchVtEvent(doc, "vertical-tabs:search", {
-        query: searchInput.value.trim().toLowerCase(),
-      });
+      const state = getDocState(doc);
+      if (state.searchDebounceTimer) {
+        clearTimeout(state.searchDebounceTimer);
+      }
+      state.searchDebounceTimer = setTimeout(() => {
+        state.searchDebounceTimer = null;
+        dispatchVtEvent(doc, "vertical-tabs:search", {
+          query: searchInput.value.trim().toLowerCase(),
+        });
+      }, 120);
 
       // After typing, wait for the next mouse position before deciding collapse.
+      // (This part must stay immediate — it is what keeps VT open while typing.)
       if (isPinned()) return;
       setWaitMouseMoveAfterInput(doc, true);
       clearLeaveTimer(doc);
@@ -593,6 +654,10 @@ export function createSidebar(doc: Document): HTMLElement {
   // Mouse enter to expand, mouse leave to collapse (only when floating / unpinned)
   sidebar.addEventListener("mouseenter", () => {
     clearLeaveTimer(doc);
+    // The mouse returned to VT after a context menu opened: the menu-open
+    // collapse suppression ends here. From now on the normal leave-collapse
+    // rule applies (the menu itself still closes on click as usual).
+    if (isContextMenuOpen(doc)) setContextMenuOpen(doc, false);
     if (isPinned() || isFloatingExpanded(doc)) return;
     if (getHoverTimer(doc)) return;
     const timer = setTimeout(() => {
@@ -727,9 +792,9 @@ function updatePinButtonVisual(doc: Document): void {
 function startPinnedRefreshTimer(): void {
   if (_pinnedRefreshTimer) return;
   _pinnedRefreshTimer = setInterval(() => {
-    // Re-render so pinned VT's relative "last read" labels stay current against
-    // the persisted openedAt values.
-    dispatchPDFsChanged();
+    // In-place time-label refresh so pinned VT's relative "last read" labels
+    // stay current — a full re-render is no longer needed for this.
+    dispatchTimeTick();
   }, PINNED_REFRESH_INTERVAL_MS);
 }
 
@@ -742,9 +807,10 @@ function stopPinnedRefreshTimer(): void {
 function startDisplayRefreshTimer(): void {
   if (_displayRefreshTimer) return;
   _displayRefreshTimer = setInterval(() => {
-    // Re-render VT so relative "last read" labels age (1 min → 2 min, etc.)
-    // without modifying the underlying openedAt timestamps.
-    dispatchPDFsChanged();
+    // In-place time-label refresh so relative "last read" labels age
+    // (1 min → 2 min, etc.) without a full re-render — which also means a
+    // drag session or hover card can no longer be destroyed by the timer.
+    dispatchTimeTick();
   }, DISPLAY_REFRESH_INTERVAL_MS);
 }
 
@@ -817,6 +883,13 @@ function performCollapse(doc: Document): void {
   const sidebar = getSidebar(doc);
   if (!sidebar) return;
   if (!isFloatingExpanded(doc)) return;
+
+  // Collapsing closes any open context menu so it does not float over the
+  // collapsed strip (its token is already stale, so its late close callback
+  // is a no-op).
+  doc.getElementById("vertical-tabs-item-menu")?.remove();
+  doc.getElementById("vertical-tabs-context-menu")?.remove();
+  if (isContextMenuOpen(doc)) setContextMenuOpen(doc, false);
 
   // Blur search so the focused state doesn't keep VT expanded next time.
   const searchInput = sidebar.querySelector(
@@ -990,6 +1063,11 @@ export function destroySidebar(doc: Document): void {
   stopPinnedRefreshTimer();
   stopDisplayRefreshTimer();
   setWaitMouseMoveAfterInput(doc, false);
+  const state = getDocState(doc);
+  if (state.searchDebounceTimer) {
+    clearTimeout(state.searchDebounceTimer);
+    state.searchDebounceTimer = null;
+  }
   const sidebar = getSidebar(doc);
   if (sidebar) {
     if ((sidebar as any).__vtFadeCleanup) {

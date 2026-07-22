@@ -45,6 +45,11 @@ function getBlock(doc: Document): HTMLElement | null {
     null) as HTMLElement | null;
 }
 
+/** Whether the home button block is currently shown in the sidebar. */
+export function hasLibraryHomeButton(doc: Document): boolean {
+  return !!getBlock(doc);
+}
+
 function cancelAnimation(block: HTMLElement): void {
   const win = block.ownerDocument?.defaultView;
   const timeout = animState.get(block);
