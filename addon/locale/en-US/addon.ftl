@@ -37,7 +37,7 @@ dialog-input-name-order-note = Note: Chinese names can ignore this option, Engli
 dialog-input-surname-first = Surname + Given (Surname First)
 dialog-input-given-first = Given + Surname (Given First)
 dialog-input-enter-authors = Enter All Authors
-dialog-input-enter-authors-hint = Chinese names do not need separators, use spaces between English surname and given name<br>Different lines for different authors
+dialog-input-enter-authors-hint = Chinese names do not need separators, use spaces between English surname and given name<br/>Different lines for different authors
 dialog-input-placeholder = Enter authors...
 
 # Dialog: All Authors in One Line
@@ -59,7 +59,7 @@ dialog-cancel = Cancel
 # Dialog: Help
 dialog-help-title = Better Vertical Tabs Help
 dialog-help-heading = Help
-dialog-help-content = This plugin is designed to batch and manually edit item metadata. Please note that in Zotero's two-field format, it is surname + given name; in single-field mode, it is given name + space + surname.<br><br>Features:<br><br>-1. Author name correction<br><br>&nbsp;&nbsp;&nbsp;&nbsp;-1.1 Merge and split author names<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- Use different methods for Chinese and English literature<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Two-field: surname first; Single-field: Chinese keeps surname-first, English keeps given-first<br><br>&nbsp;&nbsp;&nbsp;&nbsp;-1.2 Switch author name order (recommended in two-field mode; single-field uses first space to split)<br><br>&nbsp;&nbsp;&nbsp;&nbsp;-1.3 Edit when all authors are in one line<br><br>&nbsp;&nbsp;&nbsp;&nbsp;-1.4 Remove hyphens in given names<br><br>&nbsp;&nbsp;&nbsp;&nbsp;-1.5 Manually enter all authors with column mode selection<br><br>-2. Batch date format to ISO YYYY-MM-DD<br><br>-3. Batch edit language, customizable<br><br>-4. Batch clear Extra field for annotations
+dialog-help-content = This plugin is designed to batch and manually edit item metadata. Please note that in Zotero's two-field format, it is surname + given name; in single-field mode, it is given name + space + surname.<br/><br/>Features:<br/><br/>-1. Author name correction<br/><br/>&nbsp;&nbsp;&nbsp;&nbsp;-1.1 Merge and split author names<br/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- Use different methods for Chinese and English literature<br/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Two-field: surname first; Single-field: Chinese keeps surname-first, English keeps given-first<br/><br/>&nbsp;&nbsp;&nbsp;&nbsp;-1.2 Switch author name order (recommended in two-field mode; single-field uses first space to split)<br/><br/>&nbsp;&nbsp;&nbsp;&nbsp;-1.3 Edit when all authors are in one line<br/><br/>&nbsp;&nbsp;&nbsp;&nbsp;-1.4 Remove hyphens in given names<br/><br/>&nbsp;&nbsp;&nbsp;&nbsp;-1.5 Manually enter all authors with column mode selection<br/><br/>-2. Batch date format to ISO YYYY-MM-DD<br/><br/>-3. Batch edit language, customizable<br/><br/>-4. Batch clear Extra field for annotations
 dialog-close = Close
 
 # Date-ISO ProgressWindow
@@ -133,10 +133,12 @@ vertical-tabs-drop-missing-pdf = Some dragged items have no PDF attachments. Ple
 vertical-tabs-help = Help
 vertical-tabs-help-dialog-title = Better Vertical Tabs Help
 vertical-tabs-help-section-1-title = 1. Tab Creation & Drag-and-Drop
-vertical-tabs-help-section-1-content = Drag items/attachments from the main pane to the VT sidebar. The plugin will open the first PDF and create a tab.
+vertical-tabs-help-section-1-content = Double-click an item or drag multiple selected items to the sidebar to create tabs. The plugin will automatically open the first attachment of the item.<br/><br/>Drag-and-drop supports individual tab dragging, as well as Ctrl/Shift+click to multi-select and drag tabs to reorder or categorize them.
 vertical-tabs-help-section-2-title = 2. Category Creation
-vertical-tabs-help-section-2-content = Click "More > Add Category" to create a new category. Drag tabs into it, or right-click a tab and select "Remove from Category" to return it to Uncategorized.
+vertical-tabs-help-section-2-content = Three ways to create categories:<br/>- ① Right-click one or more tabs and select "Add Category".<br/>- ② Drag one or more tabs to the "+ New Category" drop zone at the top of the sidebar.<br/>- ③ Click "More > Add Category" in the top-right corner to create a category, then drag tabs into it.
 vertical-tabs-help-section-3-title = 3. Save and Import Categories
-vertical-tabs-help-section-3-content = Right-click a category and select "Save Category" to persist its structure. Use "More > Import Category" to restore saved categories.
+vertical-tabs-help-section-3-content = If you frequently use a set of tabs, you can save the tabs in a category for later use.<br/><br/>Right-click a category title and select "Save Category" to persist the current category; use "More > Import Category" to restore saved categories.<br/><br/>On the "Import Category" page, you can rename or delete previously saved categories.
 vertical-tabs-help-section-4-title = 4. PDF Reader Automatic Memory Optimization
-vertical-tabs-help-section-4-content = Enable auto-release in plugin settings. Reader tabs that have been inactive for a while will be closed automatically to free memory.
+vertical-tabs-help-section-4-content = Zotero opens PDFs in sandboxed readers. The more readers are open, the more memory is consumed, which can slow down Zotero.<br/><br/>Tabs with an active PDF reader are marked with a green indicator bar on the left edge (this indicator can be disabled in Plugin Settings).<br/><br/>From the tab right-click menu, you can manually close or open the reader to free memory (this does not close the tab). The plugin also supports automatically closing readers that have been inactive for a set period; the default is 120 minutes, adjustable in Plugin Settings.<br/><br/>The plugin can also auto-close long-unused tabs, but this feature must be manually enabled in Plugin Settings.
+vertical-tabs-help-section-5-title = 5. Other Settings
+vertical-tabs-help-section-5-content = - "More > Hide/Show Native Tabs" allows hiding Zotero's native horizontal tab bar.<br/>- In Plugin Settings, you can enable displaying the Extra field on tabs for annotations; once enabled, the "Edit Extra" option appears in the tab right-click menu.<br/>- Plugin Settings supports enabling a frosted glass effect, though it is not supported in the reader interface.<br/>- Plugin Settings supports customizing category colors.

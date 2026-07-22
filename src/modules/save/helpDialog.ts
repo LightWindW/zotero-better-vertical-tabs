@@ -150,6 +150,10 @@ export function showHelpDialog(doc: Document): void {
       titleKey: "vertical-tabs-help-section-4-title",
       contentKey: "vertical-tabs-help-section-4-content",
     },
+    {
+      titleKey: "vertical-tabs-help-section-5-title",
+      contentKey: "vertical-tabs-help-section-5-content",
+    },
   ] as const;
 
   for (let i = 0; i < sections.length; i++) {
@@ -181,7 +185,7 @@ export function showHelpDialog(doc: Document): void {
       "div",
     ) as HTMLElement;
     sectionContent.className = "vt-help-dialog-section-content";
-    sectionContent.textContent = getString(contentKey);
+    sectionContent.innerHTML = getString(contentKey);
     sectionContent.style.cssText = `
       font-size: 13px;
       line-height: 1.6;

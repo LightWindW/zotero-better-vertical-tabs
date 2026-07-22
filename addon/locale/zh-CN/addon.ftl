@@ -38,7 +38,7 @@ dialog-input-name-order-note = 注：中文姓名可忽略此选项，英文姓�
 dialog-input-surname-first = 姓+名（姓前名后）
 dialog-input-given-first = 名+姓（名前姓后）
 dialog-input-enter-authors = 手动输入所有作者
-dialog-input-enter-authors-hint = 中文姓名不用分隔，英文姓和名之间用 空格 分隔<br>不同行分隔不同作者
+dialog-input-enter-authors-hint = 中文姓名不用分隔，英文姓和名之间用 空格 分隔<br/>不同行分隔不同作者
 dialog-input-placeholder = 输入作者...
 
 # 弹窗：所有作者在一行修改
@@ -60,7 +60,7 @@ dialog-cancel = 取消
 # 弹窗：帮助说明
 dialog-help-title = Better Vertical Tabs 使用说明
 dialog-help-heading = 使用说明
-dialog-help-content = 插件功能旨在实现批量、手动修改条目数据。请注意Zotero作者双栏格式为姓+名，单栏模式为名+空格+姓。<br><br>功能包括：<br><br>-1. 作者栏错乱修改<br><br>&nbsp;&nbsp;&nbsp;&nbsp;-1.1 作者姓名拆分合并<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- 请针对中文英文文献选择使用不同的处理方式<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;双栏模式姓前名后，单栏模式在中文里保持了姓前名后的阅读习惯，英文里保持名前姓后阅读习惯<br><br>&nbsp;&nbsp;&nbsp;&nbsp;-1.2 交换作者姓名功能（建议在双栏模式下使用，单栏模式则默认使用第一个空格分隔姓和名，中文自动识别常见姓） <br><br>&nbsp;&nbsp;&nbsp;&nbsp;-1.3 当所有作者处于同一行时进行修改 <br><br>&nbsp;&nbsp;&nbsp;&nbsp;-1.4 删除名里的短横线（建议在双栏模式下使用，单栏模式则默认使用最后一个空格分隔姓和名） <br><br>&nbsp;&nbsp;&nbsp;&nbsp;-1.5 手动输入所有作者，并自定义是双栏还是单栏<br><br>-2. 批量修改时间为ISO的YYYY-MM-DD格式<br><br>-3. 批量修改文献语言，也可以自定义<br><br>-4. 批量清空Extra字段，为了方便给条目进行注释
+dialog-help-content = 插件功能旨在实现批量、手动修改条目数据。请注意Zotero作者双栏格式为姓+名，单栏模式为名+空格+姓。<br/><br/>功能包括：<br/><br/>-1. 作者栏错乱修改<br/><br/>&nbsp;&nbsp;&nbsp;&nbsp;-1.1 作者姓名拆分合并<br/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- 请针对中文英文文献选择使用不同的处理方式<br/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;双栏模式姓前名后，单栏模式在中文里保持了姓前名后的阅读习惯，英文里保持名前姓后阅读习惯<br/><br/>&nbsp;&nbsp;&nbsp;&nbsp;-1.2 交换作者姓名功能（建议在双栏模式下使用，单栏模式则默认使用第一个空格分隔姓和名，中文自动识别常见姓） <br/><br/>&nbsp;&nbsp;&nbsp;&nbsp;-1.3 当所有作者处于同一行时进行修改 <br/><br/>&nbsp;&nbsp;&nbsp;&nbsp;-1.4 删除名里的短横线（建议在双栏模式下使用，单栏模式则默认使用最后一个空格分隔姓和名） <br/><br/>&nbsp;&nbsp;&nbsp;&nbsp;-1.5 手动输入所有作者，并自定义是双栏还是单栏<br/><br/>-2. 批量修改时间为ISO的YYYY-MM-DD格式<br/><br/>-3. 批量修改文献语言，也可以自定义<br/><br/>-4. 批量清空Extra字段，为了方便给条目进行注释
 dialog-close = 关闭
 
 # Date-ISO 进度提示
@@ -120,7 +120,7 @@ vertical-tabs-hide-native-tab-bar = 关闭原生标签
 vertical-tabs-show-native-tab-bar = 打开原生标签
 vertical-tabs-plugin-settings = 插件设置
 vertical-tabs-import-dialog-title = 导入或编辑分类
-vertical-tabs-no-saved-categories = 暂无保存的分类。右键点击分类并选择“保存分类”来创建。
+vertical-tabs-no-saved-categories = 暂无保存的分类。右键点击分类并选择"保存分类"来创建。
 vertical-tabs-apply-category = 运用
 vertical-tabs-rename-saved-category = 重命名
 vertical-tabs-delete-saved-category = 删除
@@ -134,10 +134,12 @@ vertical-tabs-drop-missing-pdf = 本次拖拽有条目不存在pdf附件请检�
 vertical-tabs-help = 使用帮助
 vertical-tabs-help-dialog-title = Better Vertical Tabs 使用说明
 vertical-tabs-help-section-1-title = 1. 标签创建与拖拽
-vertical-tabs-help-section-1-content = 拖拽主窗格中的条目/附件到 VT 侧边栏，插件会自动打开第一个 PDF 并生成标签。
+vertical-tabs-help-section-1-content = 双击条目或者多选条目拖拽到侧边栏都可以创建标签。插件会自动打开条目第一个附件。<br/><br/>拖拽标签支持单个标签拖拽，也支持ctrl/shift+左键多选标签并拖拽对标签进行排序、分类。
 vertical-tabs-help-section-2-title = 2. 分类创建
-vertical-tabs-help-section-2-content = 点击右上角“更多 > 添加分类”新建分类，可将标签拖入分类；右键标签选择“从分类移除”可回到未分类。
+vertical-tabs-help-section-2-content = 三种方式创建分类：<br/>- ①单个/多个标签右键点击“添加分类”。<br/>- ②拖拽单个/多个标签到侧边栏最上方的“创建分类”虚线框。<br/>- ③点击右上角“更多>添加分类”创建分类，并将标签拖入分类。
 vertical-tabs-help-section-3-title = 3. 分类保存和导入
-vertical-tabs-help-section-3-content = 右键分类选择“保存分类”可将当前分类结构持久化；通过“更多 > 导入分类”可恢复已保存的分类。
+vertical-tabs-help-section-3-content = 如果需要经常使用一系列标签，可以将某分类里的标签保存下来。<br/><br/>右键点击分类标题选择“保存分类”即可保存当前分类；通过“更多>导入分类”可恢复已保存的分类。<br/><br/>在“导入分类”页面，可以对已经保存的分类名称进行重命名、删除操作。
 vertical-tabs-help-section-4-title = 4. PDF 阅读器自动内存优化
-vertical-tabs-help-section-4-content = 在插件设置中开启自动释放后，长时间未使用的 reader 标签会被自动关闭以释放内存。
+vertical-tabs-help-section-4-content = Zotero 的 PDF 阅读器是新开沙盒阅读器进行PDF阅读，阅读器打开越多，内存占用越大，会导致 Zotero 运行变慢。<br/><br/>首先对已经打开 PDF 阅读器的标签进行了绿色高亮条指示，出现在标签的最左边（该指示条可在插件设置中关闭）。<br/><br/>在标签右键菜单里可以手动关闭或打开阅读器以释放内存（该操作不会关闭标签），插件也支持自动关闭长时间未阅读的阅读器，默认关闭时间是120分钟，可以在“插件设置”中调整该时间。<br/><br/>标签也支持自动关闭长时间未阅读的标签，但该功能需要手动在“插件设置”中启用。
+vertical-tabs-help-section-5-title = 5. 其他设置
+vertical-tabs-help-section-5-content = - “更多>关闭/打开原生标签”支持隐藏Zotero原生横标签栏<br/>- “插件设置”中支持在标签页中显示Extra字段，以对标签进行注释，打开该功能后，单个标签右键新增“编辑Extra字段”功能<br/>- “插件设置”中支持打开磨砂玻璃效果，但该效果在阅读器界面不支持。<br/>- “插件设置”中支持对分类颜色进行修改。
