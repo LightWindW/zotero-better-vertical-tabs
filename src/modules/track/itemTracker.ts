@@ -456,11 +456,26 @@ export function startTracking(): void {
         } else if (event === "select") {
           for (const id of ids) {
             const tabId = String(id);
+            // The reading clock starts when a tab is LEFT: stamp the
+            // previously selected tab now so its "last read" aging begins at
+            // the moment the user switched away (while a tab is active its
+            // row time stays "刚刚" — see uiRenderer formatRowTime).
+            // Guarded to AFTER startup restore: session restore may emit
+            // selects (possibly batched ids) for tabs nobody is reading, and
+            // stamping them would reset every restored "last read" time to
+            // just-now — merge-max then lets now beat the migrated old time.
+            const prevTabId = _selectedTabId;
+            if (
+              prevTabId &&
+              prevTabId !== tabId &&
+              _startupRestoreDone
+            ) {
+              updateOpenedAtForTab(prevTabId);
+            }
             _selectedTabId = tabId;
             const pdf = _openedPDFs.find((p) => p.tabId === tabId);
             if (pdf?.readerReleased) {
               void restoreReaderForTab(tabId).then(() => {
-                updateOpenedAtForTab(tabId);
                 dispatchPDFsChanged();
               });
             } else {
@@ -485,7 +500,11 @@ export function startTracking(): void {
                   }
                 });
               }
-              updateOpenedAtForTab(tabId);
+              // NOTE: no "entry" timestamp is written on select. The display
+              // layer forces the ACTIVE row to "刚刚" regardless of the stored
+              // time (formatRowTime), and the stored time only advances when
+              // the tab is LEFT (above). Writing now on entry was what reset
+              // startup-restored tabs to "刚刚" on every Zotero restart.
               // Targeted highlight update instead of a full re-render: tab
               // selection only moves the .active class and refreshes that
               // row's relative-time label. (Previously dispatchPDFsChanged()

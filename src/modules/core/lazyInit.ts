@@ -11,12 +11,19 @@ import {
 } from "../track/categoryManager";
 import { destroyHoverCard, initHoverCard } from "../ui/hoverCard";
 import {
+  destroyCategoryHoverCard,
+  initCategoryHoverCard,
+} from "../ui/categoryHoverCard";
+import {
   destroySidebar,
   setSidebarVisibility,
   renderSidebarMode,
   expandFloatingSidebar,
   collapseFloatingSidebar,
   isPinned,
+  isPinToggleHandled,
+  isModeSwitchHandled,
+  applyCollapsedStripPresentation,
 } from "../sidebar/sidebar";
 import {
   getOpenedPDFs,
@@ -70,6 +77,8 @@ const PREF_NAMESPACE = config.prefsPrefix;
 let _prefsObserverID: symbol | null = null;
 let _showExtraObserverID: symbol | null = null;
 let _pinnedObserverID: symbol | null = null;
+let _autoExpandObserverID: symbol | null = null;
+let _compactStripObserverID: symbol | null = null;
 
 interface WindowState {
   initialized: boolean;
@@ -104,6 +113,7 @@ export async function initVerticalTabs(
   // restoring tabs (see retry loop below).
 
   initHoverCard(win.document);
+  initCategoryHoverCard(win.document);
   setupCategoryDarkMode(win.document);
 
   // Subscribe to render events BEFORE creating sidebar
@@ -186,6 +196,9 @@ export async function initVerticalTabs(
         for (const w of Zotero.getMainWindows()) {
           const ws = getWindowState(w);
           if (!ws.initialized) continue;
+          // The window where the user clicked pin/unpin handles itself with
+          // a width animation — snapping it here would kill the animation.
+          if (isPinToggleHandled(w.document)) continue;
           const globallyEnabled = Zotero.Prefs.get(
             `${PREF_NAMESPACE}.verticalTabs.enabled`,
             true,
@@ -198,6 +211,33 @@ export async function initVerticalTabs(
           }
         }
       },
+    );
+  }
+
+  // Register preference observers for the collapsed-strip presentation:
+  // autoExpand off + compactStrip on swaps the 35px icon strip for the 16px
+  // minimal bar (and back). Hover behavior reads the pref live, so only the
+  // presentation needs a push here.
+  const refreshCollapsedStrip = () => {
+    for (const w of Zotero.getMainWindows()) {
+      const ws = getWindowState(w);
+      if (!ws.initialized || !ws.visible) continue;
+      // The window where the user clicked the mode item animates itself —
+      // applying here would snap the target width mid-animation.
+      if (isModeSwitchHandled(w.document)) continue;
+      applyCollapsedStripPresentation(w.document);
+    }
+  };
+  if (!_autoExpandObserverID) {
+    _autoExpandObserverID = Zotero.Prefs.registerObserver(
+      `${PREF_NAMESPACE}.verticalTabs.autoExpand`,
+      refreshCollapsedStrip,
+    );
+  }
+  if (!_compactStripObserverID) {
+    _compactStripObserverID = Zotero.Prefs.registerObserver(
+      `${PREF_NAMESPACE}.verticalTabs.compactStrip`,
+      refreshCollapsedStrip,
     );
   }
 
@@ -295,6 +335,7 @@ export function destroyVerticalTabs(win: Window): void {
 
   unsubscribeFromRenderEvents(win.document);
   destroyHoverCard(win.document);
+  destroyCategoryHoverCard(win.document);
   teardownCategoryDarkMode(win.document);
   destroyCategoryManager(win.document);
   destroySidebar(win.document);
@@ -325,6 +366,14 @@ export function destroyVerticalTabs(win: Window): void {
     if (_pinnedObserverID) {
       Zotero.Prefs.unregisterObserver(_pinnedObserverID);
       _pinnedObserverID = null;
+    }
+    if (_autoExpandObserverID) {
+      Zotero.Prefs.unregisterObserver(_autoExpandObserverID);
+      _autoExpandObserverID = null;
+    }
+    if (_compactStripObserverID) {
+      Zotero.Prefs.unregisterObserver(_compactStripObserverID);
+      _compactStripObserverID = null;
     }
   }
 

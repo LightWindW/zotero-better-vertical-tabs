@@ -11,3 +11,5 @@ pref("verticalTabs.releaseReaderMinutes", 120);
 pref("verticalTabs.tabHeight", "loose");
 pref("verticalTabs.enableBlur", false);
 pref("verticalTabs.nativeTabBarHidden", false);
+pref("verticalTabs.autoExpand", true);
+pref("verticalTabs.compactStrip", false);

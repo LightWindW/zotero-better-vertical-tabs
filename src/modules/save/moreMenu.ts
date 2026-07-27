@@ -9,15 +9,19 @@ import {
   plusIcon,
   settingIcon,
   tabsIcon,
+  yesIcon,
 } from "../ui/iconSvgs";
 import {
   isNativeTabBarHidden,
   toggleNativeTabBar,
 } from "../sidebar/nativeTabBarToggle";
 import {
+  getExpandMode,
   scheduleCollapse,
   setContextMenuOpen,
+  setExpandMode,
   SIDEBAR_ID,
+  type ExpandMode,
 } from "../sidebar/sidebar";
 
 function iconHtml(svg: string): string {
@@ -74,6 +78,25 @@ export function showMoreMenu(doc: Document, anchorEl: HTMLElement): void {
         : getString("vertical-tabs-hide-native-tab-bar"),
       action: () => toggleNativeTabBar(doc),
     },
+    {
+      divider: true,
+      icon: "",
+      label: "",
+      action: () => {},
+    },
+    // Expand modes: no leading icon by default; the ACTIVE mode shows the
+    // yes.svg checkmark in the icon slot.
+    ...(
+      [
+        ["auto", "vertical-tabs-expand-mode-auto"],
+        ["manual", "vertical-tabs-expand-mode-manual"],
+        ["minimal", "vertical-tabs-expand-mode-minimal"],
+      ] as [ExpandMode, Parameters<typeof getString>[0]][]
+    ).map(([mode, labelKey]) => ({
+      icon: getExpandMode() === mode ? iconHtml(yesIcon(iconColor)) : "",
+      label: getString(labelKey),
+      action: () => setExpandMode(doc, mode),
+    })),
     {
       divider: true,
       icon: "",

@@ -78,6 +78,10 @@ vertical-tabs-just-now = just now
 vertical-tabs-minutes-ago = { $count } minutes ago
 vertical-tabs-hours-ago = { $count } hours ago
 vertical-tabs-days-ago = { $count } days ago
+vertical-tabs-category-tabs-count = { $count } tabs
+vertical-tabs-expand-mode-auto = Auto-expand mode
+vertical-tabs-expand-mode-manual = Manual expand mode
+vertical-tabs-expand-mode-minimal = Compact mode
 
 vertical-tabs-collapse = Collapse Sidebar
 vertical-tabs-expand = Expand Sidebar

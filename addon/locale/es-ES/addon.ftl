@@ -78,6 +78,10 @@ vertical-tabs-just-now = justo ahora
 vertical-tabs-minutes-ago = hace { $count } minutos
 vertical-tabs-hours-ago = hace { $count } horas
 vertical-tabs-days-ago = hace { $count } días
+vertical-tabs-category-tabs-count = { $count } pestañas
+vertical-tabs-expand-mode-auto = Modo de automática
+vertical-tabs-expand-mode-manual = Modo de manual
+vertical-tabs-expand-mode-minimal = Modo compacto
 
 vertical-tabs-collapse = Contraer barra lateral
 vertical-tabs-expand = Expandir barra lateral

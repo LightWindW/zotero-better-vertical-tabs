@@ -77,7 +77,9 @@ export function getStyles(): string {
       display: flex;
       align-items: center;
       justify-content: flex-start;
-      min-height: 38px;
+      /* Total height is exactly 40px (padding and border included). */
+      height: 40px;
+      box-sizing: border-box;
       padding: 6px 12px 6px 5px;
       border-bottom: 1px solid var(--material-border, #ccc);
       font-weight: 600;
@@ -152,6 +154,11 @@ export function getStyles(): string {
       display: flex;
       flex-direction: column;
       overflow-y: auto;
+      /* Thin scrollbar is always reserved (no reflow when it appears); its
+         thumb color is driven inline by scrollbarAutoHide.ts (rAF fade,
+         transparent while idle). */
+      scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
       padding: 2px 0;
       /* Anchors the category-reorder gap indicator (absolute, scrolls with
          the content) and offsetTop-based layout measurements. */
@@ -694,8 +701,7 @@ export function getStyles(): string {
     }
 
     /* Home button block: shown at the top of the sidebar while the native
-       tab bar is hidden. Geometry mirrors .vertical-tabs-item so the button
-       aligns with the tab rows below it. */
+       tab bar is hidden. */
     #${SIDEBAR_ID} .vertical-tabs-home-block {
       flex: 0 0 auto;
       overflow: hidden;
@@ -707,7 +713,9 @@ export function getStyles(): string {
       display: flex;
       flex-direction: row;
       align-items: center;
-      min-height: var(--vt-item-min-height, 36px);
+      /* Fixed 36px total — intentionally NOT following the tab-height
+         preference that drives .vertical-tabs-item. */
+      height: 40px;
       padding: 4px 12px 4px 9px;
       cursor: pointer;
       gap: 8px;
@@ -927,6 +935,36 @@ export function getStyles(): string {
 
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-drop-zone {
       min-height: 20px;
+    }
+
+    /* Minimal collapsed strip (auto-expand off + compact-strip pref): a 20px
+       bar showing only the plugin icon, vertically centered. Everything else
+       is hidden and the whole bar acts as a pin button. */
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating.vertical-tabs-sidebar-minimal {
+      width: 20px;
+      min-width: 20px;
+      cursor: pointer;
+    }
+
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-minimal .vertical-tabs-header,
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-minimal .vertical-tabs-home-block,
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-minimal .vertical-tabs-categories,
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-minimal .vertical-tabs-resize-handle {
+      display: none;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-minimal-icon {
+      display: none;
+    }
+
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-minimal .vertical-tabs-minimal-icon {
+      display: block;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 12px;
+      height: 12px;
     }
 
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-separator,

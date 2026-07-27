@@ -720,6 +720,19 @@ function formatRelativeTime(timestamp: number): string {
   return getString("vertical-tabs-days-ago", { args: { count: diffDays } });
 }
 
+/**
+ * Row time label: while a tab is the ACTIVE one (being read) its clock does
+ * not age — always "刚刚". Aging starts the moment the user switches away
+ * (itemTracker stamps the tab on leave, so the stored time is fresh when
+ * aging begins; the minute tick then ages the label in place).
+ */
+function formatRowTime(pdf: OpenedPDF): string {
+  if (pdf.tabId && pdf.tabId === getSelectedTabId()) {
+    return getString("vertical-tabs-just-now");
+  }
+  return formatRelativeTime(pdf.openedAt);
+}
+
 export function createEl(doc: Document, tag: string): HTMLElement {
   return doc.createElementNS(
     "http://www.w3.org/1999/xhtml",
@@ -872,7 +885,7 @@ function createItemElement(
   metaEl.className = "vertical-tabs-item-meta";
   const timeSpan = createEl(doc, "span");
   timeSpan.className = "vertical-tabs-item-time";
-  timeSpan.textContent = formatRelativeTime(pdf.openedAt);
+  timeSpan.textContent = formatRowTime(pdf);
   metaEl.appendChild(timeSpan);
 
   // Publication info
@@ -1401,6 +1414,24 @@ function createCategoryElement(
       categoryId: category.id,
       x: (event as MouseEvent).clientX,
       y: (event as MouseEvent).clientY,
+    });
+  });
+
+  // Category hover card (name + tab count) — the card module decides whether
+  // to show (only in the collapsed strip with auto-expand disabled).
+  header.addEventListener("mouseenter", (event: MouseEvent) => {
+    dispatchVtEvent(header, "vertical-tabs:category-hover", {
+      categoryId: category.id,
+      name: category.name,
+      count: items.length,
+      x: (event as MouseEvent).clientX,
+      y: (event as MouseEvent).clientY,
+    });
+  });
+
+  header.addEventListener("mouseleave", () => {
+    dispatchVtEvent(header, "vertical-tabs:category-hover-end", {
+      categoryId: category.id,
     });
   });
 
@@ -2253,7 +2284,7 @@ function refreshRelativeTimes(doc: Document): void {
     if (!timeEl) return;
     const pdf = getOpenedPDFByTabId(tabId);
     if (pdf) {
-      timeEl.textContent = formatRelativeTime(pdf.openedAt);
+      timeEl.textContent = formatRowTime(pdf);
     }
   });
 }
@@ -2281,7 +2312,7 @@ function updateActiveTabRow(doc: Document, tabId: string): void {
       const pdf = getOpenedPDFByTabId(tabId);
       const timeEl = row.querySelector(".vertical-tabs-item-time");
       if (pdf && timeEl) {
-        timeEl.textContent = formatRelativeTime(pdf.openedAt);
+        timeEl.textContent = formatRowTime(pdf);
       }
     }
   }

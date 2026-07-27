@@ -8,6 +8,7 @@ import {
   SPLITTER_ID,
 } from "../render/styles";
 import { applyTabHeightStyle } from "../render/tabHeight";
+import { attachScrollbarAutoHide } from "../render/scrollbarAutoHide";
 import { dispatchVtEvent } from "../core/events";
 import { dispatchPDFsChanged, dispatchTimeTick } from "../track/itemTracker";
 import { isDarkMode } from "../render/colorUtils";
@@ -23,6 +24,7 @@ const RESIZE_HANDLE_CLASS = "vertical-tabs-resize-handle";
 const PIN_BTN_CLASS = "vertical-tabs-pin-btn";
 const PIN_ICON_CLASS = "vertical-tabs-pin-icon";
 const HOVER_STRIP_WIDTH = 35;
+const MINIMAL_STRIP_WIDTH = 20;
 const COLLAPSE_FADE_START_WIDTH = 40;
 
 function getIconColor(doc: Document): string {
@@ -132,6 +134,174 @@ export function setPinned(pinned: boolean): void {
 }
 
 /**
+ * Whether hovering the collapsed floating strip auto-expands VT (pref
+ * `verticalTabs.autoExpand`, default true). Read live on every hover so the
+ * toggle takes effect without any re-render.
+ */
+export function isAutoExpandEnabled(): boolean {
+  return (
+    (Zotero.Prefs.get(`${PREF_NAMESPACE}.verticalTabs.autoExpand`, true) as
+      | boolean
+      | undefined) ?? true
+  );
+}
+
+/** Pref `verticalTabs.compactStrip` (default false): 20px minimal bar. */
+export function isCompactStripEnabled(): boolean {
+  return (
+    (Zotero.Prefs.get(`${PREF_NAMESPACE}.verticalTabs.compactStrip`, false) as
+      | boolean
+      | undefined) ?? false
+  );
+}
+
+/**
+ * The three expand modes exposed in the "more" menu, mapped onto the two
+ * stored prefs (autoExpand + compactStrip):
+ * - auto: hovering the collapsed strip expands VT (autoExpand on).
+ * - manual: hover does not expand; only the pin button opens the panel.
+ * - minimal: manual + the collapsed strip is a 20px bar (plugin icon only).
+ */
+export type ExpandMode = "auto" | "manual" | "minimal";
+
+export function getExpandMode(): ExpandMode {
+  if (isAutoExpandEnabled()) return "auto";
+  return isCompactStripEnabled() ? "minimal" : "manual";
+}
+
+/**
+ * Switch the expand mode: writes the two prefs (observers sync the OTHER
+ * windows) and immediately applies the change to THIS window with a smooth
+ * strip-width animation. The pinned pref is never touched — switching modes
+ * keeps the current pin/unpin state.
+ */
+export function setExpandMode(doc: Document, mode: ExpandMode): void {
+  if (getExpandMode() === mode) return;
+  // Mark BEFORE writing the prefs: the pref observers apply the change to
+  // every window — this window is handled here (animated), so they must
+  // skip it (same pattern as _pinToggleHandledDocs).
+  _modeSwitchHandledDocs.add(doc);
+  Zotero.Prefs.set(
+    `${PREF_NAMESPACE}.verticalTabs.autoExpand`,
+    mode === "auto",
+    false,
+  );
+  Zotero.Prefs.set(
+    `${PREF_NAMESPACE}.verticalTabs.compactStrip`,
+    mode === "minimal",
+    false,
+  );
+  animateStripPresentation(doc);
+}
+
+/** Docs currently handled (animated) by their own setExpandMode call. */
+const _modeSwitchHandledDocs = new WeakSet<Document>();
+
+/** The lazyInit pref observers skip these docs (they animate themselves). */
+export function isModeSwitchHandled(doc: Document): boolean {
+  return _modeSwitchHandledDocs.has(doc);
+}
+
+const STRIP_ANIMATION_MS = 180;
+
+/**
+ * Smoothly transition the collapsed strip between 35px and 20px after a
+ * mode switch (rAF-driven: the XUL wrapper vbox has no CSS width
+ * transition). Floating-collapsed drives the sidebar inline width too and
+ * applies the END-state minimal class up front (shrinking hides the icons
+ * immediately; growing reveals them progressively). Floating-expanded only
+ * animates the wrapper underneath the overlay sidebar. Pinned just applies
+ * the canonical state (the pin itself is untouched).
+ */
+function animateStripPresentation(doc: Document): void {
+  const finish = () => {
+    const sb = getSidebar(doc);
+    sb?.classList.remove("vertical-tabs-sidebar-resizing");
+    // In case a pin animation was cancelled mid-flight.
+    _pinToggleHandledDocs.delete(doc);
+    _modeSwitchHandledDocs.delete(doc);
+    if (isFloatingExpanded(doc)) {
+      // VT is hover-expanded (the user clicked the mode item inside it):
+      // keep it expanded — only the wrapper underneath changed width. The
+      // new strip presentation applies when it later collapses.
+      applyCollapsedStripPresentation(doc);
+    } else {
+      renderSidebarMode(doc);
+    }
+  };
+  if (isPinned()) {
+    finish();
+    return;
+  }
+  const sidebar = getSidebar(doc);
+  const target = findOrCreateWrapper(doc);
+  const win = doc.defaultView;
+  if (!sidebar || !target || !win) {
+    finish();
+    return;
+  }
+  const { wrapper } = target;
+  const targetWidth = getCollapsedStripWidth();
+  const fromWidth = wrapper.clientWidth || targetWidth;
+  if (fromWidth === targetWidth) {
+    finish();
+    return;
+  }
+
+  cancelPinAnimation(doc);
+  const expanded = isFloatingExpanded(doc);
+  if (!expanded) {
+    // End-state class up front: inline width drives the animation while the
+    // class controls what is visible inside the strip.
+    sidebar.classList.toggle(
+      "vertical-tabs-sidebar-minimal",
+      targetWidth === MINIMAL_STRIP_WIDTH,
+    );
+    sidebar.classList.add("vertical-tabs-sidebar-resizing");
+  }
+
+  const startTime = Date.now();
+  const step = () => {
+    const t = Math.min(1, (Date.now() - startTime) / STRIP_ANIMATION_MS);
+    const px = Math.round(fromWidth + (targetWidth - fromWidth) * t);
+    wrapper.style.width = `${px}px`;
+    if (!expanded) {
+      sidebar.style.width = `${px}px`;
+    }
+    if (t < 1) {
+      getDocState(doc).pinAnimRaf = win.requestAnimationFrame(step);
+      return;
+    }
+    getDocState(doc).pinAnimRaf = null;
+    finish();
+  };
+  getDocState(doc).pinAnimRaf = win.requestAnimationFrame(step);
+}
+
+/**
+ * Pure: collapsed floating strip width in px. The minimal 20px bar (plugin
+ * icon only) applies only when not pinned, auto-expand off, and the
+ * compact-strip pref on; otherwise the regular 35px icon strip.
+ */
+export function resolveCollapsedStripWidth(
+  pinned: boolean,
+  autoExpand: boolean,
+  compactStrip: boolean,
+): number {
+  return !pinned && !autoExpand && compactStrip
+    ? MINIMAL_STRIP_WIDTH
+    : HOVER_STRIP_WIDTH;
+}
+
+function getCollapsedStripWidth(): number {
+  return resolveCollapsedStripWidth(
+    isPinned(),
+    isAutoExpandEnabled(),
+    isCompactStripEnabled(),
+  );
+}
+
+/**
  * Create or retrieve the wrapper <vbox> and <splitter> inside
  * <hbox id="browser">, placed before <deck id="tabs-deck">.
  * This makes the VT appear above both the main page and the reader page.
@@ -231,6 +401,7 @@ interface DocState {
   widthObserverCleanup: (() => void) | null;
   searchDebounceTimer: TimerHandle | null;
   menuToken: object | null;
+  pinAnimRaf: number | null;
 }
 
 function getDocState(doc: Document): DocState {
@@ -249,6 +420,7 @@ function getDocState(doc: Document): DocState {
       widthObserverCleanup: null,
       searchDebounceTimer: null,
       menuToken: null,
+      pinAnimRaf: null,
     };
     (doc as any)[key] = state;
   }
@@ -406,6 +578,35 @@ function isMouseOverVt(
     clientY >= rect.top &&
     clientY <= rect.bottom
   );
+}
+
+const HOME_BLOCK_CLASS = "vertical-tabs-home-block";
+
+/**
+ * Strip zones that must NOT trigger auto-expand on hover: the "home"
+ * (library) button block and the header (pin button area). Once VT is
+ * expanded they still count as VT area (both live inside the sidebar).
+ */
+const NO_EXPAND_ZONE_SELECTOR = `.${HOME_BLOCK_CLASS}, .vertical-tabs-header`;
+
+function isPointOverNoExpandZone(
+  doc: Document,
+  clientX: number,
+  clientY: number,
+): boolean {
+  const el = doc.elementFromPoint(clientX, clientY);
+  return !!el && !!(el as Element).closest?.(NO_EXPAND_ZONE_SELECTOR);
+}
+
+function startHoverExpandTimer(doc: Document): void {
+  // A pin/strip width animation is driving the widths — don't interfere.
+  if (getDocState(doc).pinAnimRaf !== null) return;
+  if (getHoverTimer(doc)) return;
+  const timer = setTimeout(() => {
+    setHoverTimer(doc, null);
+    expandFloatingSidebar(doc);
+  }, HOVER_DELAY_MS);
+  setHoverTimer(doc, timer);
 }
 
 function setupInputPositionListener(doc: Document): void {
@@ -581,6 +782,16 @@ export function createSidebar(doc: Document): HTMLElement {
         tag: "div",
         classList: ["vertical-tabs-categories"],
       },
+      {
+        // Plugin icon shown only in the minimal 16px strip (CSS-hidden
+        // otherwise), vertically centered in the bar.
+        tag: "img",
+        classList: ["vertical-tabs-minimal-icon"],
+        attributes: {
+          src: `chrome://${config.addonRef}/content/icons/favicon.png`,
+          alt: "",
+        },
+      },
     ],
   }) as HTMLElement;
 
@@ -652,19 +863,42 @@ export function createSidebar(doc: Document): HTMLElement {
   (sidebar as any).__updatePinBtn = updatePinBtn;
 
   // Mouse enter to expand, mouse leave to collapse (only when floating / unpinned)
-  sidebar.addEventListener("mouseenter", () => {
+  sidebar.addEventListener("mouseenter", (e: MouseEvent) => {
     clearLeaveTimer(doc);
     // The mouse returned to VT after a context menu opened: the menu-open
     // collapse suppression ends here. From now on the normal leave-collapse
     // rule applies (the menu itself still closes on click as usual).
     if (isContextMenuOpen(doc)) setContextMenuOpen(doc, false);
     if (isPinned() || isFloatingExpanded(doc)) return;
-    if (getHoverTimer(doc)) return;
-    const timer = setTimeout(() => {
-      setHoverTimer(doc, null);
-      expandFloatingSidebar(doc);
-    }, HOVER_DELAY_MS);
-    setHoverTimer(doc, timer);
+    // Auto-expand disabled: hovering the strip never expands VT — only the
+    // pin button does (pinned panel).
+    if (!isAutoExpandEnabled()) return;
+    // Hovering the "home" (library) button or the header (pin button area)
+    // must not auto-expand VT.
+    if (isPointOverNoExpandZone(doc, e.clientX, e.clientY)) return;
+    startHoverExpandTimer(doc);
+  });
+
+  // Track movement within the collapsed strip so the expand timer only runs
+  // while the pointer is OFF the no-expand zones (home button / header):
+  // entering the strip on one of them then sliding onto the tab icons starts
+  // the countdown, and sliding back cancels it.
+  sidebar.addEventListener("mousemove", (e: MouseEvent) => {
+    if (isPinned() || isFloatingExpanded(doc)) return;
+    if (!isAutoExpandEnabled()) return;
+    if (isPointOverNoExpandZone(doc, e.clientX, e.clientY)) {
+      clearHoverTimer(doc);
+      return;
+    }
+    startHoverExpandTimer(doc);
+  });
+
+  // Minimal 16px strip: nothing else is visible, so the whole bar acts as
+  // one big pin button — clicking it opens the pinned panel (and unpinning
+  // returns to the minimal strip).
+  sidebar.addEventListener("click", () => {
+    if (!sidebar.classList.contains("vertical-tabs-sidebar-minimal")) return;
+    togglePinned(doc);
   });
 
   sidebar.addEventListener("mouseleave", (e: MouseEvent) => {
@@ -762,6 +996,9 @@ export function createSidebar(doc: Document): HTMLElement {
   // Apply the current tab height preference to the sidebar.
   applyTabHeightStyle(doc);
 
+  // Hide the categories scrollbar until the user actually scrolls.
+  attachScrollbarAutoHide(doc);
+
   return sidebar;
 }
 
@@ -822,9 +1059,236 @@ function stopDisplayRefreshTimer(): void {
 
 function togglePinned(doc: Document): void {
   const newPinned = !isPinned();
+  // Mark BEFORE writing the pref: the pinned-pref observer syncs the change
+  // to every window — the window where the user clicked is handled right
+  // here (animated), so the observer must skip it (other windows snap,
+  // unseen by the user).
+  _pinToggleHandledDocs.add(doc);
   setPinned(newPinned);
-  renderSidebarMode(doc);
   updatePinButtonVisual(doc);
+  animatePinToggle(doc, newPinned);
+}
+
+/** Docs currently handled (animated) by their own togglePinned call. */
+const _pinToggleHandledDocs = new WeakSet<Document>();
+
+/**
+ * Whether this doc's pinned-pref change is already being handled by its own
+ * togglePinned (animated). The lazyInit pinned-pref observer skips these so
+ * it does not snap the final state mid-animation.
+ */
+export function isPinToggleHandled(doc: Document): boolean {
+  return _pinToggleHandledDocs.has(doc);
+}
+
+function cancelPinAnimation(doc: Document): void {
+  const state = getDocState(doc);
+  if (state.pinAnimRaf !== null) {
+    doc.defaultView?.cancelAnimationFrame(state.pinAnimRaf);
+    state.pinAnimRaf = null;
+  }
+}
+
+const PIN_ANIMATION_MS = 220;
+/** Expand: right-side content (names, counts, search) fades in over the LAST
+ * 100ms so the panel grows first and the text appears as it settles. */
+const PIN_EXPAND_CONTENT_FADE_MS = 100;
+/** Collapse: content starts fading out immediately, done in 150ms. */
+const PIN_COLLAPSE_CONTENT_FADE_MS = 150;
+
+/**
+ * Animate the wrapper (vbox) and sidebar width between the collapsed strip
+ * width and the saved pinned width, so pin/unpin glides instead of snapping
+ * and the content to the right resizes smoothly with it. XUL vbox does not
+ * run CSS width transitions, so the width is driven per frame via rAF
+ * (same pattern as the native tab bar height animation).
+ *
+ * During the animation the sidebar stays in floating + expanded classes:
+ * full row layout with inline width (the pinned class has
+ * `width: 100% !important`, which would override the per-frame width).
+ * The canonical mode state is applied by renderSidebarMode at the end.
+ *
+ * The `vertical-tabs-sidebar-resizing` class kills the sidebar's own CSS
+ * width transition for the duration — otherwise every per-frame inline
+ * width is itself re-transitioned over 0.2s, the sidebar lags behind the
+ * wrapper and then catches up in a rush at the end (the "too fast at the
+ * end" artifact).
+ */
+function animatePinToggle(doc: Document, toPinned: boolean): void {
+  const finish = () => {
+    const sb = getSidebar(doc);
+    if (sb) {
+      sb.classList.remove("vertical-tabs-sidebar-resizing");
+      clearMinimalFadeStyles(sb);
+    }
+    _pinToggleHandledDocs.delete(doc);
+    renderSidebarMode(doc);
+    updatePinButtonVisual(doc);
+  };
+  const sidebar = getSidebar(doc);
+  const target = findOrCreateWrapper(doc);
+  const win = doc.defaultView;
+  if (!sidebar || !target || !win) {
+    finish();
+    return;
+  }
+  const { wrapper } = target;
+
+  cancelPinAnimation(doc);
+
+  // Already floating-expanded (hover-expanded VT being pinned): the sidebar
+  // is visually at the saved width while the wrapper is still at strip
+  // width. The sidebar starts from its CURRENT visual width (usually equal
+  // to the target — no motion, no re-fade), but the WRAPPER must still
+  // glide from strip width to the saved width: it is the wrapper that
+  // pushes the rest of Zotero's layout, and snapping it makes every other
+  // element jump.
+  const wasExpanded = sidebar.classList.contains(
+    "vertical-tabs-sidebar-expanded",
+  );
+  const endWidth = toPinned ? getSavedWidth() : getCollapsedStripWidth();
+  const wrapperFrom =
+    wrapper.clientWidth ||
+    (toPinned ? getCollapsedStripWidth() : getSavedWidth());
+  const sidebarFrom = wasExpanded
+    ? sidebar.offsetWidth || wrapperFrom
+    : wrapperFrom;
+  if (wrapperFrom === endWidth && sidebarFrom === endWidth) {
+    finish();
+    return;
+  }
+
+  // Minimal mode (20px strip ↔ panel): the whole content group and the
+  // plugin icon cross-fade instead of the text-only --vt-content-opacity
+  // fade — pin fades the icon out while the content fades in with the
+  // expansion; unpin fades everything out during the collapse and the icon
+  // back in at the end.
+  const minimalMode = !isAutoExpandEnabled() && isCompactStripEnabled();
+  const contentEls = minimalMode
+    ? (Array.from(
+        sidebar.querySelectorAll<HTMLElement>(
+          ":scope > .vertical-tabs-header, :scope > .vertical-tabs-home-block, :scope > .vertical-tabs-categories",
+        ),
+      ) as HTMLElement[])
+    : [];
+  const minimalIconEl = minimalMode
+    ? (sidebar.querySelector(
+        ":scope > .vertical-tabs-minimal-icon",
+      ) as HTMLElement | null)
+    : null;
+
+  applySidebarClasses(sidebar, "floating");
+  sidebar.classList.remove("vertical-tabs-sidebar-minimal");
+  sidebar.classList.add("vertical-tabs-sidebar-expanded");
+  sidebar.classList.add("vertical-tabs-sidebar-resizing");
+  sidebar.style.width = `${sidebarFrom}px`;
+  setFloatingExpanded(doc, true);
+  setResizeHandleVisible(doc, false);
+  wrapper.style.minWidth = "0px";
+  wrapper.style.maxWidth = "none";
+  wrapper.style.width = `${wrapperFrom}px`;
+  wrapper.removeAttribute("hidden");
+
+  if (minimalMode) {
+    // The minimal class is gone for the animation, so the icon's CSS hides
+    // it — show it inline and drive its fade per frame.
+    if (minimalIconEl) {
+      minimalIconEl.style.display = "block";
+      minimalIconEl.style.opacity = toPinned ? "1" : "0";
+    }
+    const startOpacity = toPinned ? "0" : "1";
+    for (const el of contentEls) el.style.opacity = startOpacity;
+  }
+
+  const startTime = Date.now();
+  // Expand: linear (ease-out made the late phase feel rushed once combined
+  // with the content fade-in). Collapse: ease-out cubic (felt good already).
+  const ease = toPinned
+    ? (t: number) => t
+    : (t: number) => 1 - Math.pow(1 - t, 3);
+
+  const step = () => {
+    const elapsed = Date.now() - startTime;
+    const t = Math.min(1, elapsed / PIN_ANIMATION_MS);
+    const eased = ease(t);
+    wrapper.style.width = `${Math.round(wrapperFrom + (endWidth - wrapperFrom) * eased)}px`;
+    sidebar.style.width = `${Math.round(sidebarFrom + (endWidth - sidebarFrom) * eased)}px`;
+    if (minimalMode) {
+      sidebar.style.setProperty("--vt-content-opacity", "1");
+      let contentOpacity: number;
+      let iconOpacity: number;
+      if (toPinned) {
+        // Content fades in across the whole expansion; the icon clears
+        // early (first 150ms).
+        contentOpacity = t;
+        iconOpacity = Math.max(0, 1 - elapsed / PIN_COLLAPSE_CONTENT_FADE_MS);
+      } else {
+        // Everything fades out together in the first 150ms; the icon fades
+        // back in over the last 100ms as the strip reaches minimal width.
+        contentOpacity = Math.max(
+          0,
+          1 - elapsed / PIN_COLLAPSE_CONTENT_FADE_MS,
+        );
+        iconOpacity = Math.min(
+          1,
+          Math.max(
+            0,
+            (elapsed - (PIN_ANIMATION_MS - PIN_EXPAND_CONTENT_FADE_MS)) /
+              PIN_EXPAND_CONTENT_FADE_MS,
+          ),
+        );
+      }
+      for (const el of contentEls) {
+        el.style.opacity = contentOpacity.toFixed(3);
+      }
+      if (minimalIconEl) {
+        minimalIconEl.style.opacity = iconOpacity.toFixed(3);
+      }
+    } else {
+      // Time-based content fade (not width-based): pinning from the collapsed
+      // strip holds the text hidden until the final 100ms; pinning an
+      // already-expanded VT keeps it fully visible (only the width glides);
+      // unpinning fades the text out over the first 150ms.
+      let opacity: number;
+      if (toPinned && wasExpanded) {
+        opacity = 1;
+      } else if (toPinned) {
+        const fadeStart = PIN_ANIMATION_MS - PIN_EXPAND_CONTENT_FADE_MS;
+        opacity =
+          elapsed <= fadeStart
+            ? 0
+            : Math.min(1, (elapsed - fadeStart) / PIN_EXPAND_CONTENT_FADE_MS);
+      } else {
+        opacity = Math.max(0, 1 - elapsed / PIN_COLLAPSE_CONTENT_FADE_MS);
+      }
+      sidebar.style.setProperty("--vt-content-opacity", opacity.toFixed(3));
+    }
+    if (t < 1) {
+      getDocState(doc).pinAnimRaf = win.requestAnimationFrame(step);
+      return;
+    }
+    getDocState(doc).pinAnimRaf = null;
+    finish();
+  };
+  getDocState(doc).pinAnimRaf = win.requestAnimationFrame(step);
+}
+
+/** Remove the inline fade styles driven by the minimal-mode pin animation
+ * so the CSS (minimal class or normal rules) takes over again. */
+function clearMinimalFadeStyles(sidebar: HTMLElement): void {
+  const els = sidebar.querySelectorAll<HTMLElement>(
+    ":scope > .vertical-tabs-header, :scope > .vertical-tabs-home-block, :scope > .vertical-tabs-categories",
+  );
+  for (const el of Array.from(els) as HTMLElement[]) {
+    el.style.opacity = "";
+  }
+  const icon = sidebar.querySelector(
+    ":scope > .vertical-tabs-minimal-icon",
+  ) as HTMLElement | null;
+  if (icon) {
+    icon.style.display = "";
+    icon.style.opacity = "";
+  }
 }
 
 function setExpandAnimating(doc: Document, animating: boolean): void {
@@ -847,6 +1311,7 @@ export function expandFloatingSidebar(doc: Document): void {
   const savedWidth = getSavedWidth();
   sidebar.style.setProperty("--vt-expanded-width", `${savedWidth}px`);
   sidebar.style.width = "";
+  sidebar.classList.remove("vertical-tabs-sidebar-minimal");
   sidebar.classList.add("vertical-tabs-sidebar-expanded");
   updateContentOpacity(sidebar);
   setResizeHandleVisible(doc, true);
@@ -905,6 +1370,9 @@ function performCollapse(doc: Document): void {
   setExpandAnimating(doc, false);
   stopDisplayRefreshTimer();
   dispatchVtEvent(doc, "vertical-tabs:visibility-changed", { visible: false });
+  // Collapsed now: the minimal 16px strip may apply (prefs changed while
+  // expanded never gets the class, so it is applied here on collapse).
+  applyCollapsedStripPresentation(doc);
 }
 
 export function collapseFloatingSidebar(doc: Document): void {
@@ -957,13 +1425,33 @@ function setWrapperAndSplitter(
     splitter.style.display = "";
     setupWidthObserver(doc, wrapper);
   } else {
-    wrapper.style.width = `${HOVER_STRIP_WIDTH}px`;
-    wrapper.style.minWidth = `${HOVER_STRIP_WIDTH}px`;
-    wrapper.style.maxWidth = `${HOVER_STRIP_WIDTH}px`;
+    const stripWidth = getCollapsedStripWidth();
+    wrapper.style.width = `${stripWidth}px`;
+    wrapper.style.minWidth = `${stripWidth}px`;
+    wrapper.style.maxWidth = `${stripWidth}px`;
     wrapper.removeAttribute("hidden");
     splitter.setAttribute("hidden", "true");
     splitter.style.display = "none";
     clearWidthObserver(doc);
+  }
+}
+
+/**
+ * Apply the collapsed-strip presentation for the current prefs: toggles the
+ * minimal (16px, plugin-icon-only) class on the sidebar and refreshes the
+ * wrapper width. Called by renderSidebarMode, after each floating collapse,
+ * and by the autoExpand/compactStrip pref observers so toggles apply live.
+ */
+export function applyCollapsedStripPresentation(doc: Document): void {
+  const sidebar = getSidebar(doc);
+  if (!sidebar) return;
+  const minimal =
+    !isPinned() &&
+    !isFloatingExpanded(doc) &&
+    getCollapsedStripWidth() === MINIMAL_STRIP_WIDTH;
+  sidebar.classList.toggle("vertical-tabs-sidebar-minimal", minimal);
+  if (!isPinned()) {
+    setWrapperAndSplitter(doc, "floating");
   }
 }
 
@@ -980,6 +1468,7 @@ export function renderSidebarMode(doc: Document): HTMLElement | null {
   clearHoverTimer(doc);
   clearLeaveTimer(doc);
   clearInputPositionListener(doc);
+  cancelPinAnimation(doc);
   setWaitMouseMoveAfterInput(doc, false);
 
   const pinned = isPinned();
@@ -991,6 +1480,7 @@ export function renderSidebarMode(doc: Document): HTMLElement | null {
   if (pinned) {
     applySidebarClasses(sidebar, "pinned");
     sidebar.classList.remove("vertical-tabs-sidebar-expanded");
+    sidebar.classList.remove("vertical-tabs-sidebar-minimal");
     sidebar.removeAttribute("hidden");
     sidebar.style.display = "";
     sidebar.style.width = "100%";
@@ -1009,7 +1499,7 @@ export function renderSidebarMode(doc: Document): HTMLElement | null {
     sidebar.style.setProperty("--vt-content-opacity", "0");
     setFloatingExpanded(doc, false);
     setResizeHandleVisible(doc, true);
-    setWrapperAndSplitter(doc, "floating");
+    applyCollapsedStripPresentation(doc);
     stopPinnedRefreshTimer();
     stopDisplayRefreshTimer();
   }
@@ -1060,6 +1550,7 @@ export function destroySidebar(doc: Document): void {
   clearLeaveTimer(doc);
   clearInputPositionListener(doc);
   clearWidthObserver(doc);
+  cancelPinAnimation(doc);
   stopPinnedRefreshTimer();
   stopDisplayRefreshTimer();
   setWaitMouseMoveAfterInput(doc, false);

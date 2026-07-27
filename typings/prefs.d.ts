@@ -20,6 +20,8 @@ declare namespace _ZoteroTypes {
       "verticalTabs.tabHeight": string;
       "verticalTabs.enableBlur": boolean;
       "verticalTabs.nativeTabBarHidden": boolean;
+      "verticalTabs.autoExpand": boolean;
+      "verticalTabs.compactStrip": boolean;
     };
   }
 }

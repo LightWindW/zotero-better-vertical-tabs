@@ -2,6 +2,7 @@ import { getString } from "../../utils/locale";
 import { isDarkMode } from "../render/colorUtils";
 import { getDialogStyleSheet } from "../render/popupStyleUtils";
 import { setDialogOpen } from "../sidebar/sidebar";
+import { config } from "../../../package.json";
 
 const OVERLAY_ID = "vt-help-dialog-overlay";
 const escListeners = new Map<Document, (e: KeyboardEvent) => void>();
@@ -80,6 +81,20 @@ export function showHelpDialog(doc: Document): void {
     border-bottom: ${colors.dialogBorder};
     color: ${colors.text};
   `;
+
+  const icon = doc.createElementNS(
+    "http://www.w3.org/1999/xhtml",
+    "img",
+  ) as HTMLImageElement;
+  icon.src = `chrome://${config.addonRef}/content/icons/favicon.png`;
+  icon.alt = "";
+  icon.style.cssText = `
+    width: 18px;
+    height: 18px;
+    margin-right: 8px;
+    flex-shrink: 0;
+  `;
+  header.appendChild(icon);
 
   const title = doc.createElementNS(
     "http://www.w3.org/1999/xhtml",

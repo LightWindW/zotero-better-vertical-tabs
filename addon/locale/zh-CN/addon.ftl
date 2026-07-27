@@ -79,6 +79,10 @@ vertical-tabs-just-now = 刚刚
 vertical-tabs-minutes-ago = { $count } 分钟前
 vertical-tabs-hours-ago = { $count } 小时前
 vertical-tabs-days-ago = { $count } 天前
+vertical-tabs-category-tabs-count = { $count } 个标签
+vertical-tabs-expand-mode-auto = 自动展开模式
+vertical-tabs-expand-mode-manual = 手动展开模式
+vertical-tabs-expand-mode-minimal = 精简模式
 
 vertical-tabs-collapse = 折叠侧边栏
 vertical-tabs-expand = 展开侧边栏
