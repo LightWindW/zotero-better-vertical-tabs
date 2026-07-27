@@ -215,9 +215,10 @@ export async function initVerticalTabs(
   }
 
   // Register preference observers for the collapsed-strip presentation:
-  // autoExpand off + compactStrip on swaps the 35px icon strip for the 16px
-  // minimal bar (and back). Hover behavior reads the pref live, so only the
-  // presentation needs a push here.
+  // autoExpand off + compactStrip on swaps the 35px icon strip for the 20px
+  // minimal bar (and back). The `true` global flag is required — the writers
+  // (setExpandMode) use absolute pref names; without it the observer watches
+  // a double-prefixed ghost branch that never fires.
   const refreshCollapsedStrip = () => {
     for (const w of Zotero.getMainWindows()) {
       const ws = getWindowState(w);
@@ -232,12 +233,14 @@ export async function initVerticalTabs(
     _autoExpandObserverID = Zotero.Prefs.registerObserver(
       `${PREF_NAMESPACE}.verticalTabs.autoExpand`,
       refreshCollapsedStrip,
+      true,
     );
   }
   if (!_compactStripObserverID) {
     _compactStripObserverID = Zotero.Prefs.registerObserver(
       `${PREF_NAMESPACE}.verticalTabs.compactStrip`,
       refreshCollapsedStrip,
+      true,
     );
   }
 

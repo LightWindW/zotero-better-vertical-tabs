@@ -2,7 +2,7 @@ import { getString } from "../../utils/locale";
 import { dispatchVtEvent } from "../core/events";
 import { isDarkMode } from "../render/colorUtils";
 import { getDialogStyleSheet } from "../render/popupStyleUtils";
-import { renameIcon, trashIcon, yesIcon } from "../ui/iconSvgs";
+import { renameIcon, svgElement, trashIcon, yesIcon } from "../ui/iconSvgs";
 import { setDialogOpen } from "../sidebar/sidebar";
 import {
   deleteSavedCategory,
@@ -159,7 +159,10 @@ function createSavedCategoryRow(
       "span",
     ) as HTMLElement;
     wrapper.style.color = colors.icon;
-    wrapper.innerHTML = html;
+    // DOMParser insertion (not innerHTML) — Zotero's sanitizer strips the
+    // svg xmlns with a console warning / flattens it without.
+    const svgEl = svgElement(doc, html);
+    if (svgEl) wrapper.appendChild(svgEl);
     btn.appendChild(wrapper);
     return btn;
   };

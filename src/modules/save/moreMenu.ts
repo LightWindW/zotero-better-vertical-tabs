@@ -8,6 +8,7 @@ import {
   importIcon,
   plusIcon,
   settingIcon,
+  svgElement,
   tabsIcon,
   yesIcon,
 } from "../ui/iconSvgs";
@@ -23,10 +24,6 @@ import {
   SIDEBAR_ID,
   type ExpandMode,
 } from "../sidebar/sidebar";
-
-function iconHtml(svg: string): string {
-  return `<span style="display:flex;align-items:center;justify-content:center;width:16px;height:16px;">${svg}</span>`;
-}
 
 export function showMoreMenu(doc: Document, anchorEl: HTMLElement): void {
   const existing = doc.getElementById("vertical-tabs-more-menu");
@@ -62,17 +59,17 @@ export function showMoreMenu(doc: Document, anchorEl: HTMLElement): void {
     divider?: boolean;
   }[] = [
     {
-      icon: iconHtml(plusIcon(iconColor)),
+      icon: plusIcon(iconColor),
       label: getString("vertical-tabs-add-category"),
       action: () => dispatchVtEvent(doc, "vertical-tabs:add-category"),
     },
     {
-      icon: iconHtml(importIcon(iconColor)),
+      icon: importIcon(iconColor),
       label: getString("vertical-tabs-import-category"),
       action: () => dispatchVtEvent(doc, "vertical-tabs:show-import-dialog"),
     },
     {
-      icon: iconHtml(tabsIcon(iconColor)),
+      icon: tabsIcon(iconColor),
       label: isNativeTabBarHidden()
         ? getString("vertical-tabs-show-native-tab-bar")
         : getString("vertical-tabs-hide-native-tab-bar"),
@@ -93,7 +90,7 @@ export function showMoreMenu(doc: Document, anchorEl: HTMLElement): void {
         ["minimal", "vertical-tabs-expand-mode-minimal"],
       ] as [ExpandMode, Parameters<typeof getString>[0]][]
     ).map(([mode, labelKey]) => ({
-      icon: getExpandMode() === mode ? iconHtml(yesIcon(iconColor)) : "",
+      icon: getExpandMode() === mode ? yesIcon(iconColor) : "",
       label: getString(labelKey),
       action: () => setExpandMode(doc, mode),
     })),
@@ -104,12 +101,12 @@ export function showMoreMenu(doc: Document, anchorEl: HTMLElement): void {
       action: () => {},
     },
     {
-      icon: iconHtml(settingIcon(iconColor)),
+      icon: settingIcon(iconColor),
       label: getString("vertical-tabs-plugin-settings"),
       action: () => dispatchVtEvent(doc, "vertical-tabs:open-preferences"),
     },
     {
-      icon: iconHtml(helpIcon(iconColor)),
+      icon: helpIcon(iconColor),
       label: getString("vertical-tabs-help"),
       action: () => dispatchVtEvent(doc, "vertical-tabs:show-help-dialog"),
     },
@@ -158,7 +155,11 @@ export function showMoreMenu(doc: Document, anchorEl: HTMLElement): void {
     ) as HTMLElement;
     iconWrapper.style.cssText =
       "display:flex;align-items:center;justify-content:center;width:16px;height:16px;";
-    iconWrapper.innerHTML = item.icon;
+    // DOMParser insertion (not innerHTML) — Zotero's sanitizer strips the
+    // svg xmlns with a console warning / flattens it without. Empty icon
+    // (inactive mode entries) yields null and leaves the slot blank.
+    const iconSvgEl = svgElement(doc, item.icon);
+    if (iconSvgEl) iconWrapper.appendChild(iconSvgEl);
     row.appendChild(iconWrapper);
 
     const labelEl = doc.createElementNS(

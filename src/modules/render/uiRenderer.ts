@@ -45,7 +45,7 @@ import {
   computeCategoryReorderInsertBefore,
   decideCategoryDropAction,
 } from "../drag/categoryDropAction";
-import { arrowIcon } from "../ui/iconSvgs";
+import { arrowIcon, svgElement } from "../ui/iconSvgs";
 import {
   applyDropPreview,
   clearDropPreview,
@@ -1385,7 +1385,10 @@ function createCategoryElement(
 
   const chevron = createEl(doc, "span");
   chevron.className = "vertical-tabs-chevron";
-  chevron.innerHTML = arrowIcon();
+  // DOMParser insertion (not innerHTML) — Zotero's sanitizer strips the svg
+  // xmlns with a console warning / flattens it without.
+  const chevronSvg = svgElement(doc, arrowIcon());
+  if (chevronSvg) chevron.appendChild(chevronSvg);
   header.appendChild(chevron);
 
   const name = createEl(doc, "span");

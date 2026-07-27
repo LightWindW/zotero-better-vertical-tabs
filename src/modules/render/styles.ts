@@ -955,16 +955,24 @@ export function getStyles(): string {
 
     #${SIDEBAR_ID} .vertical-tabs-minimal-icon {
       display: none;
+      /* Always a FLOATING element (independent of the minimal class): fixed
+         at the vertical center of the sidebar and horizontally centered on
+         the 20px minimal strip, at a constant 12px size. The minimal-mode
+         pin/unpin animations fade it out/in in place — without this it
+         falls back into the document flow the moment the minimal class is
+         removed (appearing at the bottom at the favicon's natural size). */
+      position: absolute;
+      top: 50%;
+      left: 10px;
+      transform: translate(-50%, -50%);
+      width: 12px;
+      height: 12px;
+      z-index: 11;
+      pointer-events: none;
     }
 
     #${SIDEBAR_ID}.vertical-tabs-sidebar-minimal .vertical-tabs-minimal-icon {
       display: block;
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 12px;
-      height: 12px;
     }
 
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-separator,
