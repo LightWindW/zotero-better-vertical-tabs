@@ -101,6 +101,7 @@ export type FluentMessageId =
   | 'vertical-tabs-delete-saved-category'
   | 'vertical-tabs-drop-missing-pdf'
   | 'vertical-tabs-duplicate-tab'
+  | 'vertical-tabs-edit-extra'
   | 'vertical-tabs-empty'
   | 'vertical-tabs-expand'
   | 'vertical-tabs-extra'

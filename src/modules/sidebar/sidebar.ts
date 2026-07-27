@@ -40,7 +40,7 @@ let _pinnedRefreshTimer: ReturnType<typeof setInterval> | null = null;
 let _displayRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
 const HOVER_DELAY_MS = 300;
-const LEAVE_DELAY_MS = 150;
+const LEAVE_DELAY_MS = 250;
 
 function vtLog(msg: string): void {
   Zotero.logError(new Error("[BVT] " + msg));

@@ -107,6 +107,7 @@ vertical-tabs-close-tab = 关闭
 vertical-tabs-close-selected-tabs = 关闭已选标签
 vertical-tabs-close-other-tabs = 关闭其他标签页
 vertical-tabs-extra = 备注
+vertical-tabs-edit-extra = 编辑额外字段
 vertical-tabs-university = 学校
 
 # 保存 / 导入分类

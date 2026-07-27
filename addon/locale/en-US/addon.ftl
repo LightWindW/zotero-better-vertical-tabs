@@ -106,6 +106,7 @@ vertical-tabs-close-tab = Close
 vertical-tabs-close-selected-tabs = Close Selected Tabs
 vertical-tabs-close-other-tabs = Close Other Tabs
 vertical-tabs-extra = Extra
+vertical-tabs-edit-extra = Edit Extra
 vertical-tabs-university = University
 
 # Save / Import Categories

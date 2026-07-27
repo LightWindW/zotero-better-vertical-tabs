@@ -106,6 +106,7 @@ vertical-tabs-close-tab = Cerrar
 vertical-tabs-close-selected-tabs = Cerrar pestañas seleccionadas
 vertical-tabs-close-other-tabs = Cerrar otras pestañas
 vertical-tabs-extra = Extra
+vertical-tabs-edit-extra = Editar Extra
 vertical-tabs-university = Universidad
 
 # Guardar / importar categorías

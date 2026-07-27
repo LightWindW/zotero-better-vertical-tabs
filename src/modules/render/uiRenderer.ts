@@ -136,6 +136,7 @@ import {
 } from "./colorUtils";
 import { getPopupStyleSheet } from "./popupStyleUtils";
 import { promptCategoryName } from "../ui/categoryNameDialog";
+import { promptEditExtra } from "../ui/editExtraDialog";
 
 const DRAG_SOURCE_CATEGORY_ID_KEY = "__vtDragSourceCategoryId";
 
@@ -1795,6 +1796,20 @@ export function showItemContextMenu(
 
   const { addItem, addDivider, open } = createMenuShell(doc, x, y);
 
+  addItem(getString("vertical-tabs-add-category"), async () => {
+    if (!pdf.tabId) return;
+    const name = await promptCategoryName(doc, {
+      title: getString("vertical-tabs-add-category"),
+      initial: getString("vertical-tabs-category-new"),
+      inputId: "vt-single-new-category-input",
+    });
+    if (!name) return;
+    dispatchVtEvent(doc, "vertical-tabs:create-category-with-items", {
+      name,
+      entries: [{ itemId: pdf.itemId, tabId: pdf.tabId }],
+    });
+  });
+
   addItem(getString("vertical-tabs-show-in-library"), () => {
     const win = Zotero.getMainWindows()[0] as
       | _ZoteroTypes.MainWindow
@@ -1829,6 +1844,28 @@ export function showItemContextMenu(
       }
     }
   });
+
+  // Edit Extra field — shown when showExtra pref is on and the parent
+  // item has Extra content. Re-fetches inside the callback for freshness.
+  const itemId = pdf.parentItemId ?? pdf.itemId;
+  const showExtraPref = Zotero.Prefs.get(
+    `${config.prefsPrefix}.verticalTabs.showExtra`,
+  ) as boolean;
+  if (showExtraPref) {
+    addItem(getString("vertical-tabs-edit-extra"), async () => {
+      const currentItem = Zotero.Items.get(itemId) as Zotero.Item | false;
+      const currentExtra = currentItem
+        ? ((currentItem.getField("extra") as string) || "").trim()
+        : "";
+      const newExtra = await promptEditExtra(doc, itemId, currentExtra);
+      if (newExtra === null) return;
+      const saveItem = Zotero.Items.get(itemId) as Zotero.Item | false;
+      if (!saveItem) return;
+      saveItem.setField("extra", newExtra);
+      await saveItem.save();
+      dispatchVtEvent(doc, "vertical-tabs:data-changed");
+    });
+  }
 
   // Reader tabs only: open/close the PDF reader WITHOUT closing the tab
   // (closing frees the reader's memory; the native tab stays). Sits above
