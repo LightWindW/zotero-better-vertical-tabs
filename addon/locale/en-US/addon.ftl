@@ -140,7 +140,10 @@ vertical-tabs-help-dialog-title = Better Vertical Tabs Help
 vertical-tabs-help-section-1-title = 1. Tab Creation & Drag-and-Drop
 vertical-tabs-help-section-1-content = Double-click an item or drag multiple selected items to the sidebar to create tabs. The plugin will automatically open the first attachment of the item.<br/><br/>Drag-and-drop supports individual tab dragging, as well as Ctrl/Shift+click to multi-select and drag tabs to reorder or categorize them.
 vertical-tabs-help-section-2-title = 2. Category Creation
-vertical-tabs-help-section-2-content = Three ways to create categories:<br/>- ① Right-click one or more tabs and select "Add Category".<br/>- ② Drag one or more tabs to the "+ New Category" drop zone at the top of the sidebar.<br/>- ③ Click "More > Add Category" in the top-right corner to create a category, then drag tabs into it.
+vertical-tabs-help-section-2-content = Three ways to create categories:<br/>
+ - ① Right-click one or more tabs and select "Add Category".<br/><img src="chrome://better-vertical-tabs/content/figs/add1-en.jpg" style="max-width:50%; border-radius:6px;margin:auto;display:block;"/><br/>
+ - ② Drag one or more tabs to the "+ New Category" drop zone at the top of the sidebar.<img src="chrome://better-vertical-tabs/content/figs/add2-en3.gif" style="max-width:45%; border-radius:6px;margin:auto;display:block;"/><br/>
+ - ③ Click "More > Add Category" in the top-right corner to create a category, then drag tabs into it.<img src="chrome://better-vertical-tabs/content/figs/add3-en.jpg" style="max-width:40%; border-radius:6px;margin:auto;display:block;"/><br/>
 vertical-tabs-help-section-3-title = 3. Save and Import Categories
 vertical-tabs-help-section-3-content = If you frequently use a set of tabs, you can save the tabs in a category for later use.<br/><br/>Right-click a category title and select "Save Category" to persist the current category; use "More > Import Category" to restore saved categories.<br/><br/>On the "Import Category" page, you can rename or delete previously saved categories.
 vertical-tabs-help-section-4-title = 4. PDF Reader Automatic Memory Optimization

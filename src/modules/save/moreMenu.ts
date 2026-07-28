@@ -119,9 +119,11 @@ export function showMoreMenu(doc: Document, anchorEl: HTMLElement): void {
         "div",
       ) as HTMLElement;
       divider.style.cssText = `
-        height: 1px;
+        border-top: 1px solid ${isDarkMode(doc) ? "#555" : "#DBDBDB"};
         margin: 4px 12px;
-        background: ${isDarkMode(doc) ? "#555" : "#DBDBDB"};
+        height: 0;
+        font-size: 0;
+        line-height: 0;
         pointer-events: none;
       `;
       menu.appendChild(divider);
