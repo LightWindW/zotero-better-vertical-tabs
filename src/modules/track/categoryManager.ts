@@ -476,6 +476,30 @@ async function handleSaveCategory(event: Event): Promise<void> {
   showSaveSuccessAnimation(doc, categoryId);
 }
 
+/**
+ * Wait until every dropped tab is registered in the tracker (so its row can
+ * be rendered). itemTracker debounces tab-add notifiers by 200ms; without
+ * this wait the persist render fires before the rows exist — the cascade
+ * release mark is consumed with nothing to animate and the tabs pop in
+ * unanimated a moment later. Bounded; on timeout the drop still completes
+ * (rows just appear without the cascade).
+ */
+function waitForTrackedTabIds(
+  tabIds: string[],
+  timeout = 2000,
+  interval = 50,
+): Promise<void> {
+  if (!tabIds.length) return Promise.resolve();
+  const start = Date.now();
+  const poll = (): Promise<void> => {
+    const tracked = new Set(getOpenedPDFs().map((p) => p.tabId));
+    if (tabIds.every((id) => tracked.has(id))) return Promise.resolve();
+    if (Date.now() - start >= timeout) return Promise.resolve();
+    return new Promise((resolve) => setTimeout(resolve, interval)).then(poll);
+  };
+  return poll();
+}
+
 function handleExternalDrop(event: Event): void {
   const customEvent = event as CustomEvent;
   const { data, pendingTabIds } = customEvent.detail as {
@@ -485,15 +509,28 @@ function handleExternalDrop(event: Event): void {
   const doc =
     (event.target as Node).ownerDocument ?? (event.target as Document);
 
-  _data = data;
+  // Hold renders until the dropped tabs are tracked: their add-notifiers are
+  // debounced by 200ms, so intermediate renders would trickle the tabs into
+  // the uncategorized area one by one AND consume the cascade release mark
+  // before the rows exist. Everything coalesces into a single render on
+  // release — the same pattern as the category import flow below.
+  holdRenders(doc);
+  void (async () => {
+    try {
+      _data = data;
 
-  syncTabOrderToNative(
-    _data.categories.map((c) => ({ order: c.order, tabIds: c.tabIds })),
-    _data.uncategorizedOrder,
-    { doc, pendingTabIds },
-  );
+      syncTabOrderToNative(
+        _data.categories.map((c) => ({ order: c.order, tabIds: c.tabIds })),
+        _data.uncategorizedOrder,
+        { doc, pendingTabIds },
+      );
 
-  void persist(doc);
+      await persist(doc);
+      await waitForTrackedTabIds(pendingTabIds ?? []);
+    } finally {
+      releaseRenders(doc);
+    }
+  })();
 }
 
 /**

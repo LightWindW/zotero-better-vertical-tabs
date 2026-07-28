@@ -56,6 +56,11 @@ import {
   setRowPreviewAnchor,
 } from "../drag/dropPreview";
 import { applyCategoryPreview } from "../drag/categoryPreview";
+import {
+  computeDropZoneInsertIndex,
+  getContainerVisibleItems,
+  setWrapperDragOver,
+} from "../drag/dropContainerUtils";
 import { getDraggedTabId, setDraggedTabId } from "../drag/itemDragState";
 import {
   clearDropOutlineFade,
@@ -228,49 +233,6 @@ function consumeSmoothCollapseAfterDrop(doc: Document): string | null {
   const id = (doc as any)[SMOOTH_COLLAPSE_KEY] as string | undefined;
   delete (doc as any)[SMOOTH_COLLAPSE_KEY];
   return id || null;
-}
-
-function setWrapperDragOver(wrapper: HTMLElement | null, doc: Document): void {
-  if (!wrapper) return;
-  // Fast path: the invariant "at most one .drag-over at a time" means there
-  // is nothing to scan for when this wrapper already carries the class.
-  if (wrapper.classList.contains("drag-over")) return;
-  doc
-    .querySelectorAll(
-      ".vertical-tabs-category.drag-over, .vertical-tabs-drop-zone.drag-over",
-    )
-    .forEach((el: Element) => {
-      if (el !== wrapper) el.classList.remove("drag-over");
-    });
-  wrapper.classList.add("drag-over");
-}
-
-function getContainerVisibleItems(container: HTMLElement): HTMLElement[] {
-  const allItems = Array.from(
-    container.querySelectorAll(":scope > .vertical-tabs-item"),
-  ) as HTMLElement[];
-  return allItems.filter(
-    (el) =>
-      !el.classList.contains("vt-drag-source-collapsed") &&
-      !el.classList.contains("vt-multi-source-collapse"),
-  );
-}
-
-function computeDropZoneInsertIndex(
-  dropZone: HTMLElement,
-  clientY: number,
-): number {
-  const visibleItems = getContainerVisibleItems(dropZone);
-  let insertIndex = 0;
-  for (let i = 0; i < visibleItems.length; i++) {
-    const rect = visibleItems[i].getBoundingClientRect();
-    const midY = rect.top + rect.height / 2;
-    if (clientY < midY) {
-      return i;
-    }
-    insertIndex = i + 1;
-  }
-  return insertIndex;
 }
 
 function computeCategoryReorderBoundary(wrapper: HTMLElement): number {
@@ -1601,7 +1563,7 @@ function createCategoryElement(
     const draggedTabId = getDraggedTabId(doc) || data;
     const preview = getDragPreviewParams(doc);
     applyCategoryPreview(doc, wrapper, preview.source, 1);
-    applyDropPreview(
+    const shiftHeight = applyDropPreview(
       doc,
       {
         type: "category",
@@ -1609,6 +1571,16 @@ function createCategoryElement(
         draggedTabId,
       },
       preview.exclude,
+    );
+
+    // Explicit first-gap green bar, vertically centered in the blank that
+    // opened under the header — deterministic instead of relying on an
+    // indicator left over from a previous row hover. Empty category (or all
+    // rows dragged away): center in the virtual first slot.
+    clearAllItemDropIndicators(doc);
+    setTopGapIndicator(
+      itemsContainer,
+      shiftHeight > 0 ? shiftHeight : getDefaultItemHeight(itemsContainer),
     );
   };
   const onDragLeave = (e: DragEvent) => {

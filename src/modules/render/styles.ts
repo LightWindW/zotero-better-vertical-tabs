@@ -80,7 +80,7 @@ export function getStyles(): string {
       /* Total height is exactly 40px (padding and border included). */
       height: 40px;
       box-sizing: border-box;
-      padding: 6px 12px 6px 5px;
+      padding: 5.5px 6px 6px 5.5px;
       border-bottom: 1px solid var(--material-border, #ccc);
       font-weight: 600;
       transition: padding 0.2s ease-out, gap 0.2s ease-out;
@@ -140,6 +140,7 @@ export function getStyles(): string {
       font-size: 18px;
       line-height: 1;
       padding: 0 4px;
+      margin: 0 3px 0 3.5px;
       color: #6C6C6C;
     }
 

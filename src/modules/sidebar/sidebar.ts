@@ -1138,6 +1138,10 @@ function animatePinToggle(doc: Document, toPinned: boolean): void {
   wrapper.removeAttribute("hidden");
 
   if (minimalMode) {
+    // A collapse-time icon fade-in may still be pending: cancel it before
+    // driving the icon per frame — its leftover inline `transition` would
+    // re-transition every frame write and lag the animation.
+    cancelMinimalIconFadeIn(sidebar);
     // The minimal class is gone for the animation, so the icon's CSS hides
     // it — show it inline and drive its fade per frame.
     if (minimalIconEl) {
@@ -1253,6 +1257,71 @@ function clearMinimalFadeStyles(sidebar: HTMLElement): void {
   }
 }
 
+// ── Minimal-icon fade-in on floating collapse ──
+//
+// performCollapse applies the minimal class in the same tick the width starts
+// transitioning back to the 20px strip, and the class's `display: block`
+// makes the plugin icon pop in. startMinimalIconFadeIn pins the icon inline
+// (transparent, one-shot delayed opacity transition) so it fades in over the
+// collapse's tail instead; the pending cleanup hands the icon back to CSS on
+// transition end/cancel (safety timeout if the icon is hidden mid-fade).
+
+const ICON_FADE_STATE_KEY = "__vtMinimalIconFade";
+
+interface MinimalIconFadeState {
+  cleanup: () => void;
+}
+
+function startMinimalIconFadeIn(doc: Document, icon: HTMLElement): void {
+  // Supersede any still-pending fade (rapid collapse→expand→collapse): the
+  // old fade's listeners are removed and its stale timeout turns into a
+  // no-op, so it can never wipe THIS fade's inline styles mid-flight.
+  const prev = (icon as any)[ICON_FADE_STATE_KEY] as
+    | MinimalIconFadeState
+    | undefined;
+  const state: MinimalIconFadeState = { cleanup: () => {} };
+  (icon as any)[ICON_FADE_STATE_KEY] = state;
+  prev?.cleanup();
+
+  icon.style.display = "block";
+  icon.style.opacity = "0";
+  // 0.1s fade after a 0.1s delay: the icon appears over the collapse's last
+  // 100ms (the width transition is 0.2s), like the unpin cross-fade.
+  icon.style.transition = "opacity 0.1s ease-out 0.1s";
+
+  state.cleanup = () => {
+    icon.removeEventListener("transitionend", state.cleanup);
+    icon.removeEventListener("transitioncancel", state.cleanup);
+    // Superseded by a newer fade — it owns the inline styles now.
+    if ((icon as any)[ICON_FADE_STATE_KEY] !== state) return;
+    delete (icon as any)[ICON_FADE_STATE_KEY];
+    icon.style.display = "";
+    icon.style.opacity = "";
+    icon.style.transition = "";
+  };
+  icon.addEventListener("transitionend", state.cleanup);
+  icon.addEventListener("transitioncancel", state.cleanup);
+  // Safety net: transitionend doesn't fire when the icon is hidden mid-fade
+  // (re-expansion removes the minimal class) — hand styles back to CSS.
+  doc.defaultView?.setTimeout(state.cleanup, 300);
+}
+
+/**
+ * Cancel a pending collapse fade-in: clear the icon's inline styles so CSS
+ * decides its visibility (expanded/pinned states hide it). Also required
+ * before animatePinToggle drives the icon's opacity per frame — a leftover
+ * inline `transition` would re-transition every frame write.
+ */
+function cancelMinimalIconFadeIn(sidebar: HTMLElement): void {
+  const icon = sidebar.querySelector(
+    ":scope > .vertical-tabs-minimal-icon",
+  ) as HTMLElement | null;
+  const state = (icon as any)?.[ICON_FADE_STATE_KEY] as
+    | MinimalIconFadeState
+    | undefined;
+  state?.cleanup();
+}
+
 function setExpandAnimating(doc: Document, animating: boolean): void {
   (doc as any).__vtExpandAnimating = animating;
 }
@@ -1275,6 +1344,10 @@ export function expandFloatingSidebar(doc: Document): void {
   sidebar.style.width = "";
   sidebar.classList.remove("vertical-tabs-sidebar-minimal");
   sidebar.classList.add("vertical-tabs-sidebar-expanded");
+  // A collapse-time icon fade-in may still be pending (rapid collapse→
+  // expand): cancel it so its inline display/opacity doesn't keep the icon
+  // visible over the expanding panel.
+  cancelMinimalIconFadeIn(sidebar);
   updateContentOpacity(sidebar);
   setResizeHandleVisible(doc, true);
   setFloatingExpanded(doc, true);
@@ -1332,9 +1405,26 @@ function performCollapse(doc: Document): void {
   setExpandAnimating(doc, false);
   stopDisplayRefreshTimer();
   dispatchVtEvent(doc, "vertical-tabs:visibility-changed", { visible: false });
+  // Minimal-mode collapse: the minimal class (applied below) would switch the
+  // plugin icon to display:block instantly. Pin it inline at opacity 0 first,
+  // then fade it in over the collapse's tail — mirroring the unpin
+  // cross-fade's last 100ms — instead of popping in.
+  const toMinimal = getCollapsedStripWidth() === MINIMAL_STRIP_WIDTH;
+  const minimalIcon = toMinimal
+    ? (sidebar.querySelector(
+        ":scope > .vertical-tabs-minimal-icon",
+      ) as HTMLElement | null)
+    : null;
+  if (minimalIcon) {
+    startMinimalIconFadeIn(doc, minimalIcon);
+  }
   // Collapsed now: the minimal 16px strip may apply (prefs changed while
   // expanded never gets the class, so it is applied here on collapse).
   applyCollapsedStripPresentation(doc);
+  if (minimalIcon) {
+    void minimalIcon.offsetHeight;
+    minimalIcon.style.opacity = "1";
+  }
 }
 
 export function collapseFloatingSidebar(doc: Document): void {

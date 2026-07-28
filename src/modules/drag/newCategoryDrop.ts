@@ -38,7 +38,7 @@ import { clearAllDropVisuals, isInternalVtDrag } from "./dropTarget";
 import { clearCategoryPreview } from "./categoryPreview";
 import { clearItemShiftPreview } from "./dropPreview";
 import { clearAllItemDropIndicators } from "./dropZoneIndicator";
-import { prepareExternalDropData } from "./mainPaneDrop";
+import { prepareExternalDropData } from "./externalDropPrepare";
 
 const ZONE_CLASS = "vertical-tabs-new-category-zone";
 const INNER_CLASS = "vertical-tabs-new-category-inner";

@@ -1,17 +1,13 @@
 import { dispatchVtEvent } from "../core/events";
+import { isInternalVtDrag } from "./dropTarget";
 import {
-  computeDropTarget,
-  applyDropVisuals,
-  clearAllDropVisuals,
-  dropTargetsEqual,
-  type DropTarget,
-  isInternalVtDrag,
-} from "./dropTarget";
-import {
-  clearDropOutlineFade,
-  dropOutlineFadeTargetFromDropTarget,
-  markDropOutlineFade,
-} from "./dropOutlineFade";
+  applyExternalDropPreview,
+  clearExternalDropIndicators,
+  clearExternalDropPreview,
+  computeExternalInsertTarget,
+} from "./externalDropPreview";
+import { prepareExternalDropData } from "./externalDropPrepare";
+import { clearDropOutlineFade, markDropOutlineFade } from "./dropOutlineFade";
 import { markMultiTabRelease } from "../render/multiTabRelease";
 import {
   cancelPendingCollapse,
@@ -20,31 +16,31 @@ import {
   scheduleCollapse,
   SIDEBAR_ID,
 } from "../sidebar/sidebar";
-import { getData } from "../track/categoryManager";
 import {
   insertItemsIntoCategoryAt,
   insertUncategorizedItemsAt,
-  cleanStaleTabIds,
-  reconcileUncategorizedOrder,
-  type ItemTabEntry,
   type VerticalTabsData,
 } from "../track/dataStore";
-import { openItemAsNewTab } from "../track/tabOpener";
 import { getString } from "../../utils/locale";
 import { showToast } from "../ui/toast";
-import {
-  getZoteroTabs,
-  getLiveUncategorizedEntries,
-} from "../track/itemTracker";
+
+const UNCATEGORIZED = "__uncategorized__";
 
 interface MainPaneDropState {
   isExternalDrag: boolean;
-  lastTarget: DropTarget | null;
   dragEnterCount: number;
+  /**
+   * Set synchronously when a drop is being handled (before its awaits).
+   * dragend fires right after drop — without this flag the doc-level dragend
+   * listener could not tell "drop in progress" apart from "drag cancelled
+   * without a drop" (Esc), and would tear down the preview mid-handling.
+   */
+  dropHandled: boolean;
   onDragEnter: (e: DragEvent) => void;
   onDragOver: (e: DragEvent) => void;
   onDragLeave: (e: DragEvent) => void;
   onDrop: (e: DragEvent) => void;
+  onDocDragEnd: () => void;
 }
 
 const STATE_KEY = "__vtMainPaneDropState";
@@ -63,143 +59,6 @@ function clearState(doc: Document): void {
 
 function getSidebar(doc: Document): HTMLElement | null {
   return doc.getElementById(SIDEBAR_ID) as HTMLElement | null;
-}
-
-function getSelectedItems(doc: Document): Zotero.Item[] {
-  const win = doc.defaultView as _ZoteroTypes.MainWindow | undefined;
-  const pane = win?.ZoteroPane_Local;
-  if (!pane) return [];
-  try {
-    return (pane.getSelectedItems() as Zotero.Item[] | undefined) ?? [];
-  } catch {
-    return [];
-  }
-}
-
-function getInsertBeforeTabId(
-  target: DropTarget,
-  data: VerticalTabsData,
-): string | undefined {
-  if (target.type === "item-before") {
-    return target.targetTabId;
-  }
-
-  if (target.type === "item-after") {
-    const categoryId = target.categoryId;
-    if (categoryId === "__uncategorized__") {
-      const order = data.uncategorizedOrder;
-      const idx = order.indexOf(target.targetTabId);
-      return idx >= 0 ? order[idx + 1] : undefined;
-    }
-    const category = data.categories.find((c) => c.id === categoryId);
-    if (!category) return undefined;
-    const idx = category.tabIds.indexOf(target.targetTabId);
-    return idx >= 0 ? category.tabIds[idx + 1] : undefined;
-  }
-
-  if (
-    target.type === "drop-zone" &&
-    target.targetTabId !== undefined &&
-    target.before
-  ) {
-    return target.targetTabId;
-  }
-
-  return undefined;
-}
-
-/** The category an external drop lands in, or undefined for uncategorized. */
-function resolveDropCategoryId(target: DropTarget): string | undefined {
-  if (target.type === "category") return target.categoryId;
-  if (
-    (target.type === "item-before" || target.type === "item-after") &&
-    target.categoryId !== "__uncategorized__"
-  ) {
-    return target.categoryId;
-  }
-  return undefined;
-}
-
-function isPDFAttachment(item: Zotero.Item): boolean {
-  const contentType =
-    ((item.getField("contentType") as string | undefined) ||
-      (item as any).attachmentContentType) ??
-    "";
-  return contentType === "application/pdf";
-}
-
-function getItemAttachments(item: Zotero.Item): number[] {
-  try {
-    return ((item as any).getAttachments() as number[] | undefined) ?? [];
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Resolve the first PDF attachment for a given item.
- * - If the item itself is a PDF attachment, return it.
- * - Otherwise, scan all attachments in order and return the first PDF.
- */
-function resolveFirstPDFAttachment(item: Zotero.Item): Zotero.Item | undefined {
-  const itemType = (item.itemType as string) || "";
-  if (itemType === "attachment" || itemType === "attachment-pdf") {
-    return isPDFAttachment(item) ? item : undefined;
-  }
-
-  for (const attachmentId of getItemAttachments(item)) {
-    const attachment = Zotero.Items.get(attachmentId) as Zotero.Item | false;
-    if (attachment && isPDFAttachment(attachment)) {
-      return attachment;
-    }
-  }
-  return undefined;
-}
-
-function getItemDisplayLabel(item: Zotero.Item): string {
-  return (item.getField("title") as string | undefined) || `item ${item.id}`;
-}
-
-/**
- * Open each resolved PDF attachment as a new tab.
- * Existing tabs are intentionally NOT reused — each drop creates independent tabs.
- */
-async function openPDFAttachmentsAsTabs(
-  attachments: Zotero.Item[],
-  doc: Document,
-): Promise<ItemTabEntry[]> {
-  const entries: ItemTabEntry[] = [];
-  for (const attachment of attachments) {
-    const tabId = await openItemAsNewTab(attachment, {
-      openInBackground: true,
-      lazy: true,
-      doc,
-    });
-    if (tabId) {
-      entries.push({ itemId: attachment.id, tabId });
-    }
-  }
-  return entries;
-}
-
-async function waitForTabIds(
-  doc: Document,
-  tabIds: string[],
-  timeout = 3000,
-  interval = 100,
-): Promise<void> {
-  if (tabIds.length === 0) return;
-  const start = Date.now();
-  while (Date.now() - start < timeout) {
-    const ztabs = getZoteroTabs(doc);
-    const currentIds = new Set(
-      ((ztabs as any)?._tabs as any[] | undefined)?.map((t) =>
-        String(t.id ?? ""),
-      ) ?? [],
-    );
-    if (tabIds.every((id) => currentIds.has(id))) return;
-    await new Promise((resolve) => setTimeout(resolve, interval));
-  }
 }
 
 function handleDragEnter(state: MainPaneDropState, doc: Document): void {
@@ -225,13 +84,7 @@ function handleDragOver(
 ): void {
   if (!state.isExternalDrag) return;
   e.preventDefault();
-
-  const target = computeDropTarget(doc, e.clientX, e.clientY);
-  if (!state.lastTarget || !dropTargetsEqual(target, state.lastTarget)) {
-    clearAllDropVisuals(doc);
-    applyDropVisuals(doc, target);
-    state.lastTarget = target;
-  }
+  applyExternalDropPreview(doc, e);
 }
 
 function handleDragLeave(
@@ -247,81 +100,7 @@ function handleDragLeave(
     return;
   }
 
-  state.isExternalDrag = false;
-  state.dragEnterCount = 0;
-  state.lastTarget = null;
-  clearAllDropVisuals(doc);
-  scheduleCollapse(doc);
-}
-
-export interface PreparedExternalDrop {
-  entries: ItemTabEntry[];
-  openedTabIds: string[];
-  currentData: VerticalTabsData;
-  missingLabels: string[];
-}
-
-/**
- * Shared "open dragged library items and prepare clean data" phase of an
- * external drop: resolve the selected items' PDF attachments, open them as
- * lazy reader tabs, wait for them to register in Zotero_Tabs, and return the
- * cleaned VT data to insert into. Returns null when nothing can be opened
- * (showing the missing-PDF toast when there were items but no PDFs).
- * Used by handleDrop and by the new-category drop zone's external path.
- */
-export async function prepareExternalDropData(
-  doc: Document,
-): Promise<PreparedExternalDrop | null> {
-  const items = getSelectedItems(doc);
-  if (items.length === 0) {
-    return null;
-  }
-
-  const attachments: Zotero.Item[] = [];
-  const missingLabels: string[] = [];
-  for (const item of items) {
-    const pdf = resolveFirstPDFAttachment(item);
-    if (pdf) {
-      attachments.push(pdf);
-    } else {
-      missingLabels.push(getItemDisplayLabel(item));
-    }
-  }
-
-  if (attachments.length === 0) {
-    if (missingLabels.length > 0) {
-      showToast(doc, getString("vertical-tabs-drop-missing-pdf"));
-    }
-    return null;
-  }
-
-  const entries = await openPDFAttachmentsAsTabs(attachments, doc);
-  const openedTabIds = entries.map((e) => e.tabId);
-  if (entries.length === 0) {
-    if (missingLabels.length > 0) {
-      showToast(doc, getString("vertical-tabs-drop-missing-pdf"));
-    }
-    return null;
-  }
-
-  // Wait until the newly opened tabs have actually entered Zotero_Tabs._tabs
-  // before persisting data and syncing native tab order.
-  await waitForTabIds(doc, openedTabIds);
-
-  const ztabs = getZoteroTabs(doc);
-  const internalTabs = (ztabs as any)?._tabs as any[] | undefined;
-  const liveTabIds = new Set(
-    (internalTabs ?? []).map((t) => String(t.id ?? "")).filter((id) => id),
-  );
-
-  let currentData = getData();
-  currentData = cleanStaleTabIds(currentData, liveTabIds);
-  currentData = reconcileUncategorizedOrder(
-    currentData,
-    getLiveUncategorizedEntries(currentData, doc),
-  );
-
-  return { entries, openedTabIds, currentData, missingLabels };
+  resetDragState(state, doc, true, true);
 }
 
 async function handleDrop(
@@ -332,76 +111,66 @@ async function handleDrop(
   if (!state.isExternalDrag) return;
   e.preventDefault();
   e.stopPropagation();
+  // Mark synchronously (before any await) so the doc-level dragend listener —
+  // which fires right after this drop event — leaves the handling alone.
+  state.dropHandled = true;
 
-  const target =
-    state.lastTarget ?? computeDropTarget(doc, e.clientX, e.clientY);
-  if (target.type === "none") {
-    resetDragState(state, doc);
+  // Resolve the landing spot with the same gap math the preview used, so the
+  // drop lands exactly where the green bar showed.
+  const insert = computeExternalInsertTarget(doc, e.target, e.clientY);
+  if (!insert) {
+    resetDragState(state, doc, true, false);
     return;
   }
 
   // The drop re-renders the categories DOM and destroys the outlined element;
   // record the target now (before any await) so the render post-processing
   // replays the dashed-outline fade-out on the fresh DOM. Cleared below if
-  // the drop aborts early. Item before/after targets show no dashed outline
-  // and map to null (ignored).
-  markDropOutlineFade(doc, dropOutlineFadeTargetFromDropTarget(target));
+  // the drop aborts early.
+  markDropOutlineFade(
+    doc,
+    insert.categoryId === UNCATEGORIZED
+      ? { type: "drop-zone" }
+      : { type: "category", categoryId: insert.categoryId },
+  );
+
+  // Drop moment: clear the green bar and dashed outline now, but keep the gap
+  // shifts and container height preview — the persist-triggered re-render
+  // replaces the DOM and the old shifted geometry matches the new natural
+  // geometry, so the list does not flash (the internal "don't clear the gap
+  // on drop" rule).
+  clearExternalDropIndicators(doc);
 
   const prepared = await prepareExternalDropData(doc);
   if (!prepared) {
     clearDropOutlineFade(doc);
-    resetDragState(state, doc);
+    resetDragState(state, doc, true, false);
     return;
   }
   const { entries, openedTabIds, currentData, missingLabels } = prepared;
 
-  let newData: VerticalTabsData;
-
-  if (target.type === "category") {
-    const insertBeforeTabId = getInsertBeforeTabId(target, currentData);
-    newData = insertItemsIntoCategoryAt(
-      currentData,
-      target.categoryId,
-      entries,
-      insertBeforeTabId,
-    );
-  } else if (target.type === "item-before" || target.type === "item-after") {
-    const insertBeforeTabId = getInsertBeforeTabId(target, currentData);
-    if (target.categoryId === "__uncategorized__") {
-      newData = insertUncategorizedItemsAt(
-        currentData,
-        entries,
-        insertBeforeTabId,
-      );
-    } else {
-      newData = insertItemsIntoCategoryAt(
-        currentData,
-        target.categoryId,
-        entries,
-        insertBeforeTabId,
-      );
-    }
-  } else if (target.type === "drop-zone") {
-    const insertBeforeTabId = getInsertBeforeTabId(target, currentData);
-    newData = insertUncategorizedItemsAt(
-      currentData,
-      entries,
-      insertBeforeTabId,
-    );
-  } else {
-    resetDragState(state, doc);
-    return;
-  }
+  let newData: VerticalTabsData =
+    insert.categoryId === UNCATEGORIZED
+      ? insertUncategorizedItemsAt(
+          currentData,
+          entries,
+          insert.insertBeforeTabId,
+        )
+      : insertItemsIntoCategoryAt(
+          currentData,
+          insert.categoryId,
+          entries,
+          insert.insertBeforeTabId,
+        );
 
   // Dropping into a collapsed category expands it (persisted): the dropped
   // tabs' cascade release must play visibly instead of disappearing into a
   // folded category.
-  const dropCategoryId = resolveDropCategoryId(target);
-  if (dropCategoryId) {
+  if (insert.categoryId !== UNCATEGORIZED) {
     newData = {
       ...newData,
       categories: newData.categories.map((c) =>
-        c.id === dropCategoryId ? { ...c, collapsed: false } : c,
+        c.id === insert.categoryId ? { ...c, collapsed: false } : c,
       ),
     };
   }
@@ -419,15 +188,40 @@ async function handleDrop(
     showToast(doc, getString("vertical-tabs-drop-missing-pdf"));
   }
 
-  resetDragState(state, doc);
+  // Success: the re-render swaps the DOM and clears the leftover preview
+  // geometry; only reset the drag flags here.
+  resetDragState(state, doc, false, false);
 }
 
-function resetDragState(state: MainPaneDropState, doc: Document): void {
+/**
+ * Reset the external drag state. fullClear also tears down every preview
+ * visual (drag aborted / drag left the sidebar / drop failed); a successful
+ * drop passes false so the gap geometry survives until the re-render swaps
+ * the DOM.
+ *
+ * collapse=true schedules the floating collapse (used when the drag LEAVES
+ * the sidebar without dropping). After a drop the sidebar stays expanded as
+ * long as the mouse is over it — the sidebar's own mouseleave handler
+ * schedules the collapse later, in every expand mode. This never touches the
+ * autoExpand/compactStrip prefs: a drag-driven floating expansion always
+ * settles back into the user's chosen collapsed strip (manual 35px / compact
+ * 20px) via performCollapse's applyCollapsedStripPresentation.
+ */
+function resetDragState(
+  state: MainPaneDropState,
+  doc: Document,
+  fullClear: boolean,
+  collapse: boolean,
+): void {
   state.isExternalDrag = false;
   state.dragEnterCount = 0;
-  state.lastTarget = null;
-  clearAllDropVisuals(doc);
-  scheduleCollapse(doc);
+  state.dropHandled = false;
+  if (fullClear) {
+    clearExternalDropPreview(doc);
+  }
+  if (collapse) {
+    scheduleCollapse(doc);
+  }
 }
 
 export function initMainPaneDrop(doc: Document): void {
@@ -437,12 +231,13 @@ export function initMainPaneDrop(doc: Document): void {
 
   const state: MainPaneDropState = {
     isExternalDrag: false,
-    lastTarget: null,
     dragEnterCount: 0,
+    dropHandled: false,
     onDragEnter: () => {},
     onDragOver: () => {},
     onDragLeave: () => {},
     onDrop: () => {},
+    onDocDragEnd: () => {},
   };
 
   state.onDragEnter = (e: DragEvent) => {
@@ -473,10 +268,24 @@ export function initMainPaneDrop(doc: Document): void {
     void handleDrop(state, doc, e);
   };
 
+  state.onDocDragEnd = () => {
+    // Drag cancelled without a drop (Esc while hovering the sidebar): neither
+    // dragleave nor drop fires, so the drag flag would stay stuck and block
+    // the next drag's enter handling. Reset only — the sidebar stays expanded
+    // until the mouse actually leaves the VT (sidebar mouseleave), matching
+    // the after-drop rule. A handled drop sets dropHandled first, and its own
+    // reset clears the flag, so this never interferes with a real drop.
+    if (!state.isExternalDrag || state.dropHandled) return;
+    resetDragState(state, doc, true, false);
+  };
+
   sidebar.addEventListener("dragenter", state.onDragEnter);
   sidebar.addEventListener("dragover", state.onDragOver);
   sidebar.addEventListener("dragleave", state.onDragLeave);
   sidebar.addEventListener("drop", state.onDrop);
+  // dragend fires on the drag SOURCE (the Zotero item tree, same document),
+  // after the drop event when a drop happened.
+  doc.addEventListener("dragend", state.onDocDragEnd);
 
   setState(doc, state);
 }
@@ -492,7 +301,8 @@ export function destroyMainPaneDrop(doc: Document): void {
     sidebar.removeEventListener("dragleave", state.onDragLeave);
     sidebar.removeEventListener("drop", state.onDrop);
   }
+  doc.removeEventListener("dragend", state.onDocDragEnd);
 
-  clearAllDropVisuals(doc);
+  clearExternalDropPreview(doc);
   clearState(doc);
 }

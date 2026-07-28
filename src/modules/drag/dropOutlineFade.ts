@@ -14,8 +14,6 @@
  * styles are left behind; dark mode colors come from the existing CSS rules.
  */
 
-import type { DropTarget } from "./dropTarget";
-
 export type DropOutlineFadeTarget =
   | { type: "category"; categoryId: string }
   | { type: "drop-zone" };
@@ -73,22 +71,6 @@ export function consumeDropOutlineFade(
 export function clearDropOutlineFade(doc: Document): void {
   delete (doc as any)[TARGET_KEY];
   clearStaleTimeout(doc);
-}
-
-/**
- * Map a mainPaneDrop DropTarget to a fade target. Returns null for targets
- * that never show a dashed outline (item before/after indicators, none).
- */
-export function dropOutlineFadeTargetFromDropTarget(
-  target: DropTarget,
-): DropOutlineFadeTarget | null {
-  if (target.type === "category") {
-    return { type: "category", categoryId: target.categoryId };
-  }
-  if (target.type === "drop-zone") {
-    return { type: "drop-zone" };
-  }
-  return null;
 }
 
 /**
