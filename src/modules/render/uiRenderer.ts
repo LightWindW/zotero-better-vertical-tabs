@@ -84,6 +84,7 @@ import {
   placePopupWithinWindow,
 } from "../ui/popupAnimation";
 import { animateTabsExit } from "./tabExit";
+import { suppressCard } from "../ui/hoverCard";
 import {
   consumeMultiTabRelease,
   markMultiTabRelease,
@@ -894,14 +895,6 @@ function createItemElement(
     // Closing a tab via its × clears the selection (the button swallows the
     // click, so the document-level clear listener never sees it).
     if (getSelectedTabCount(doc) > 0) clearTabSelection(doc);
-    // Hide hover card immediately so it doesn't linger after the tab is gone
-    const hc = doc.getElementById(
-      "vertical-tabs-hover-card",
-    ) as HTMLElement | null;
-    if (hc) {
-      hc.style.opacity = "0";
-      hc.style.display = "none";
-    }
     // Play the fade+collapse exit first; the actual close commits when the
     // row is already zero-sized and transparent.
     if (pdf.tabId) {
@@ -942,13 +935,6 @@ function createItemElement(
     e.stopPropagation();
     // Closing a tab clears the selection (same as the × button).
     if (getSelectedTabCount(doc) > 0) clearTabSelection(doc);
-    const hc = doc.getElementById(
-      "vertical-tabs-hover-card",
-    ) as HTMLElement | null;
-    if (hc) {
-      hc.style.opacity = "0";
-      hc.style.display = "none";
-    }
     const tabId = pdf.tabId;
     animateTabsExit(doc, [tabId], () => {
       const tabs = getZoteroTabs();
@@ -1788,6 +1774,10 @@ export function showItemContextMenu(
   x: number,
   y: number,
 ): void {
+  // Right-click immediately suppresses (fades out) the hover card; it won't
+  // reappear until the user moves the mouse away and back over a row.
+  suppressCard(doc);
+
   // Right-clicking an already-selected row with a live multi selection opens
   // the multi-select menu instead — every action there applies to the whole
   // selection.

@@ -34,6 +34,7 @@ const HIDE_DELAY_MS = 150;
 const CARD_MAX_WIDTH = 280;
 
 let _showTimeout: ReturnType<typeof setTimeout> | null = null;
+let _categorySuppressed = false;
 
 function createEl(doc: Document, tag: string): HTMLElement {
   return doc.createElementNS(
@@ -122,6 +123,10 @@ function handleCategoryHover(event: Event): void {
   const doc = target.ownerDocument;
   if (!doc) return;
   if (!shouldShow(doc)) return;
+  if (_categorySuppressed) {
+    _categorySuppressed = false;
+    return;
+  }
   showCategoryCard(doc, target, name, count);
 }
 
@@ -129,6 +134,7 @@ function handleCategoryHoverEnd(event: Event): void {
   const target = event.target as HTMLElement;
   const doc = target.ownerDocument;
   if (!doc) return;
+  _categorySuppressed = false;
   clearShowTimeout();
   hideCard(doc, "category", HIDE_DELAY_MS);
 }
@@ -140,7 +146,8 @@ function handleDismiss(event: Event): void {
   const doc = node?.ownerDocument ?? (event.target as Document | null);
   if (!doc || typeof doc.getElementById !== "function") return;
   clearShowTimeout();
-  hideCardNow(doc, null);
+  _categorySuppressed = true;
+  hideCard(doc, "category", 0);
 }
 
 /**
@@ -188,6 +195,7 @@ export function destroyCategoryHoverCard(doc: Document): void {
   doc.removeEventListener("vertical-tabs:rendered", handleRendered);
 
   clearShowTimeout();
+  _categorySuppressed = false;
   // Element teardown happens in hoverCard's destroyCardEl (shared element);
   // here we only release ownership if we hold it.
   hideCardNow(doc, "category");

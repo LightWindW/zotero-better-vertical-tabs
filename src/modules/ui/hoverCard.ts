@@ -138,6 +138,8 @@ let _showTimeout: ReturnType<typeof setTimeout> | null = null;
 let _currentItemId: number | null = null;
 let _pendingItemId: number | null = null;
 let _pendingTabId: string | null = null;
+let _suppressed = false;
+let _detached = false;
 
 function showHoverCard(
   doc: Document,
@@ -180,6 +182,21 @@ function handleItemHover(event: Event): void {
   const target = event.target as HTMLElement;
   const doc = target.ownerDocument;
   if (!doc) return;
+
+  // Right-click suppression: user must leave and re-enter to show card again.
+  if (_suppressed) {
+    _suppressed = false;
+    return;
+  }
+
+  // Tab-close detachment: the card was frozen when its target row was
+  // removed.  Ignore the first mouseenter that fires after a DOM rebuild —
+  // morphing would produce a visible position glide.  The user must leave
+  // and come back for a normal card transition.
+  if (_detached) {
+    _detached = false;
+    return;
+  }
 
   const sidebar = doc.getElementById(SIDEBAR_ID);
   // Pinned mode has no "expanded" class but is always fully expanded —
@@ -224,6 +241,9 @@ function handleItemHoverEnd(event: Event): void {
   const target = event.target as HTMLElement;
   const doc = target.ownerDocument;
   if (!doc) return;
+
+  _suppressed = false;
+  _detached = false;
 
   if (_showTimeout) {
     clearTimeout(_showTimeout);
@@ -272,6 +292,17 @@ function handleRenderInvalidated(event: Event): void {
   if (getCardOwner() !== "item") return;
   const currentTarget = getCardTarget();
   if (!currentTarget || currentTarget.isConnected) return;
+
+  // Target row is gone (tab was closed).  If the card is still visible,
+  // freeze it in place: set the detached flag so the next mouseenter is
+  // swallowed.  The user must move the mouse away and back for the card
+  // to transition normally — by then layout is stable and the morph
+  // lands at the correct position on the first try.
+  if (isCardShown(doc)) {
+    _detached = true;
+    return;
+  }
+
   const replacement = _currentItemId
     ? (doc.querySelector(
         `.vertical-tabs-item[data-item-id="${_currentItemId}"]`,
@@ -285,7 +316,23 @@ function handleRenderInvalidated(event: Event): void {
     clearTimeout(_showTimeout);
     _showTimeout = null;
   }
-  hideCardNow(doc, "item");
+  hideCard(doc, "item", 0);
+}
+
+/**
+ * Immediately hide the item hover card and suppress it from re-appearing
+ * until the user moves the mouse away and back (for right-click menus).
+ */
+export function suppressCard(doc: Document): void {
+  _suppressed = true;
+  if (_showTimeout) {
+    clearTimeout(_showTimeout);
+    _showTimeout = null;
+  }
+  _pendingItemId = null;
+  _pendingTabId = null;
+  _currentItemId = null;
+  hideCard(doc, "item", 0);
 }
 
 export function initHoverCard(doc: Document): void {
@@ -368,5 +415,7 @@ export function destroyHoverCard(doc: Document): void {
   _currentItemId = null;
   _pendingItemId = null;
   _pendingTabId = null;
+  _suppressed = false;
+  _detached = false;
   destroyCardEl(doc);
 }

@@ -371,6 +371,7 @@ export function getStyles(): string {
 
     #${SIDEBAR_ID} .vertical-tabs-category.collapsed .vertical-tabs-items {
       height: 0;
+      padding: 0;
       opacity: 0;
       transition: opacity 0.15s ease-out;
     }
