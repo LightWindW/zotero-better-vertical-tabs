@@ -6,7 +6,7 @@ A vertical tabs extension for [Zotero](https://www.zotero.org/).
 
 [English](./README.md) | [简体中文](./doc/README-zhCN.md) | [Español](./doc/README-esES.md)
 
-![logo](.\doc\figs\logo.jpg)
+<img src=".\doc\figs\logo.jpg" />
 
 A vertical tabs plugin for both the Zotero main window and the PDF reader.
 
@@ -20,7 +20,7 @@ This plugin helps you manage open tabs through a vertical sidebar, making it fas
 
 After installing the plugin, a vertical tabs sidebar (VT) appears on the left side of the main window. It automatically expands when you hover over it and collapses when you move the cursor away.
 
-![VT](.\doc\figs\VT.gif)
+<img src=".\doc\figs\VT.gif" />
 
 The main window VT currently supports:
 
@@ -34,7 +34,7 @@ The main window VT currently supports:
 
 5. **Save & Import Categories**: Save frequently used categories locally and import them with one click when needed.
 
-   ![Category](.\doc\figs\Category.jpg)
+   <img src=".\doc\figs\Category.jpg" />
 
 ## 2️⃣ Category Creation
 

@@ -6,7 +6,7 @@
 
 [English](../README.md) | [简体中文](./README-zhCN.md) | [Español](./README-esES.md)
 
-![logo](.\figs\logo.jpg)
+<img src=".\figs\logo.jpg" />
 
 一个适配 Zotero 主页面、PDF 阅读页面的垂直标签栏插件。
 
@@ -20,7 +20,7 @@
 
 加载插件后，主页面最左侧会出现垂直标签栏（VT）。鼠标悬停在该区域时 VT 会自动展开，移出后自动折叠。
 
-![VT](.\figs\VT.gif)
+<img src=".\figs\VT.gif" />
 
 目前主页面 VT 已实现：
 
@@ -34,7 +34,7 @@
 
 5. **分类保存与导入**：可将常用分类保存到本地，需要时一键导入。
 
-   ![Category](.\figs\Category.jpg)
+   <img src=".\figs\Category.jpg" />
 
 ## 2️⃣ 分类创建
 

@@ -6,7 +6,7 @@ Una extensión de pestañas verticales para [Zotero](https://www.zotero.org/).
 
 [English](../README.md) | [简体中文](./README-zhCN.md) | [Español](./README-esES.md)
 
-![logo](.\figs\logo.jpg)
+<img src=".\figs\logo.jpg" />
 
 Un complemento de pestañas verticales tanto para la ventana principal de Zotero como para el lector de PDF.
 
@@ -20,7 +20,7 @@ Este complemento le ayuda a gestionar las pestañas abiertas mediante una barra 
 
 Tras instalar el complemento, una barra lateral de pestañas verticales (VT) aparece en el lado izquierdo de la ventana principal. Se expande automáticamente al pasar el ratón por encima y se contrae al alejarlo.
 
-![VT](.\figs\VT.gif)
+<img src=".\figs\VT.gif" />
 
 La VT de la ventana principal admite actualmente:
 
@@ -34,7 +34,7 @@ La VT de la ventana principal admite actualmente:
 
 5. **Guardar e importar categorías**: Guarde las categorías que use con frecuencia localmente e impórtelas con un solo clic cuando las necesite.
 
-   ![Category](.\figs\Category.jpg)
+   <img src=".\figs\Category.jpg" />
 
 ## 2️⃣ Creación de categorías
 
