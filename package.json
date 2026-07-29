@@ -1,7 +1,7 @@
 {
   "name": "Zotero-Better-Vertical-Tabs",
   "type": "module",
-  "version": "1.2.0-beta",
+  "version": "1.2.0",
   "description": "Light vertical tabs, clear and fluent",
   "config": {
     "addonName": "Better Vertical Tabs",
