@@ -139,11 +139,14 @@ vertical-tabs-drop-missing-pdf = 本次拖拽有条目不存在pdf附件请检�
 vertical-tabs-help = 使用帮助
 vertical-tabs-help-dialog-title = Better Vertical Tabs 使用说明
 vertical-tabs-help-section-1-title = 1. 标签创建与拖拽
-vertical-tabs-help-section-1-content = 双击条目或者多选条目拖拽到侧边栏都可以创建标签。插件会自动打开条目第一个附件。<br/><br/>拖拽标签支持单个标签拖拽，也支持ctrl/shift+左键多选标签并拖拽对标签进行排序、分类。
+vertical-tabs-help-section-1-content = 双击条目或者多选条目拖拽到侧边栏都可以创建标签。插件会自动打开条目第一个附件。<br/><br/>拖拽标签支持单个标签拖拽，也支持ctrl/shift+左键多选标签并拖拽对标签进行排序、分类。<img src="chrome://better-vertical-tabs/content/figs/drag-en.gif" style="max-width:100%; border-radius:6px;margin:auto;display:block;"/>
 vertical-tabs-help-section-2-title = 2. 分类创建
-vertical-tabs-help-section-2-content = 三种方式创建分类：<br/>- ①单个/多个标签右键点击“添加分类”。<br/>- ②拖拽单个/多个标签到侧边栏最上方的“创建分类”虚线框。<br/>- ③点击右上角“更多>添加分类”创建分类，并将标签拖入分类。
+vertical-tabs-help-section-2-content = 三种方式创建分类：<br/>
+ - ① 单个/多个标签右键点击“添加分类”。<br/><img src="chrome://better-vertical-tabs/content/figs/add1-en.jpg" style="max-width:50%; border-radius:6px;margin:auto;display:block;"/><br/>
+ - ② 拖拽单个/多个标签到侧边栏最上方的“创建分类”虚线框。<img src="chrome://better-vertical-tabs/content/figs/add2-en.gif" style="max-width:45%; border-radius:6px;margin:auto;display:block;"/><br/>
+ - ③ 点击右上角“更多>添加分类”创建分类，并将标签拖入分类。<img src="chrome://better-vertical-tabs/content/figs/add3-en.jpg" style="max-width:40%; border-radius:6px;margin:auto;display:block;"/><br/>
 vertical-tabs-help-section-3-title = 3. 分类保存和导入
-vertical-tabs-help-section-3-content = 如果需要经常使用一系列标签，可以将某分类里的标签保存下来。<br/><br/>右键点击分类标题选择“保存分类”即可保存当前分类；通过“更多>导入分类”可恢复已保存的分类。<br/><br/>在“导入分类”页面，可以对已经保存的分类名称进行重命名、删除操作。
+vertical-tabs-help-section-3-content = 如果需要经常使用一系列标签，可以将某分类里的标签保存下来。<br/><br/>右键点击分类标题选择“保存分类”即可保存当前分类；通过“更多>导入分类”可恢复已保存的分类。<br/><br/>在“导入分类”页面，可以对已经保存的分类名称进行重命名、删除操作。<img src="chrome://better-vertical-tabs/content/figs/import-en.jpg" style="max-width:80%; border-radius:6px;margin:auto;display:block;"/><br/>
 vertical-tabs-help-section-4-title = 4. PDF 阅读器自动内存优化
 vertical-tabs-help-section-4-content = Zotero 的 PDF 阅读器是新开沙盒阅读器进行PDF阅读，阅读器打开越多，内存占用越大，会导致 Zotero 运行变慢。<br/><br/>首先对已经打开 PDF 阅读器的标签进行了绿色高亮条指示，出现在标签的最左边（该指示条可在插件设置中关闭）。<br/><br/>在标签右键菜单里可以手动关闭或打开阅读器以释放内存（该操作不会关闭标签），插件也支持自动关闭长时间未阅读的阅读器，默认关闭时间是120分钟，可以在“插件设置”中调整该时间。<br/><br/>标签也支持自动关闭长时间未阅读的标签，但该功能需要手动在“插件设置”中启用。
 vertical-tabs-help-section-5-title = 5. 其他设置

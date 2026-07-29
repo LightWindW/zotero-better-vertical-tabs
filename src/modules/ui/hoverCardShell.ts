@@ -195,11 +195,12 @@ function positionCard(
   if (left + size.width > winWidth) {
     left = Math.max(8, rect.left - size.width - 8);
   }
-  const centerY =
-    useMouseY && opts.mouseY != null
-      ? opts.mouseY
-      : rect.top + rect.height / 2;
-  let top = centerY - size.height / 2;
+  let top: number;
+  if (useMouseY && opts.mouseY != null) {
+    top = opts.mouseY - size.height / 2;
+  } else {
+    top = rect.top;
+  }
   top = Math.max(8, Math.min(top, winHeight - size.height - 8));
 
   card.style.left = `${left}px`;
