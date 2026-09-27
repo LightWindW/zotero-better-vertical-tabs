@@ -87,6 +87,8 @@ export function playMultiTabRelease(
       row.style.height = "0px";
       row.style.paddingTop = "0px";
       row.style.paddingBottom = "0px";
+      row.style.marginTop = "0px";
+      row.style.marginBottom = "0px";
     }
   });
   void rows[0].offsetHeight;
@@ -103,6 +105,8 @@ export function playMultiTabRelease(
         row.style.height = `${geometry.content}px`;
         row.style.paddingTop = `${geometry.padTop}px`;
         row.style.paddingBottom = `${geometry.padBottom}px`;
+        row.style.marginTop = `${geometry.marginTop}px`;
+        row.style.marginBottom = `${geometry.marginBottom}px`;
         row.style.opacity = "1";
       },
       FIRST_FADE_MS + (i - 1) * STAGGER_MS,
@@ -119,6 +123,8 @@ export function playMultiTabRelease(
       row.style.minHeight = "";
       row.style.paddingTop = "";
       row.style.paddingBottom = "";
+      row.style.marginTop = "";
+      row.style.marginBottom = "";
       row.style.opacity = "";
     }
   }, totalMs);

@@ -146,6 +146,8 @@ export type FluentMessageId =
   | 'vertical-tabs-save-category'
   | 'vertical-tabs-save-success'
   | 'vertical-tabs-search-placeholder'
+  | 'vertical-tabs-show-file'
+  | 'vertical-tabs-show-file-failed'
   | 'vertical-tabs-show-in-library'
   | 'vertical-tabs-show-native-tab-bar'
   | 'vertical-tabs-tags'

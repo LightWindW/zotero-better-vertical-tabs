@@ -14,6 +14,8 @@ export interface RowGeometry {
   content: number;
   padTop: number;
   padBottom: number;
+  marginTop: number;
+  marginBottom: number;
 }
 
 /**
@@ -26,8 +28,19 @@ export function measureRowGeometry(
 ): RowGeometry {
   const total = el.getBoundingClientRect().height;
   const cs = doc.defaultView?.getComputedStyle(el);
+  if (!cs) {
+    return {
+      content: total,
+      padTop: 0,
+      padBottom: 0,
+      marginTop: 0,
+      marginBottom: 0,
+    };
+  }
+  const marginTop = parseFloat(cs.marginTop) || 0;
+  const marginBottom = parseFloat(cs.marginBottom) || 0;
   if (!cs || cs.boxSizing === "border-box") {
-    return { content: total, padTop: 0, padBottom: 0 };
+    return { content: total, padTop: 0, padBottom: 0, marginTop, marginBottom };
   }
   const padTop = parseFloat(cs.paddingTop) || 0;
   const padBottom = parseFloat(cs.paddingBottom) || 0;
@@ -35,5 +48,7 @@ export function measureRowGeometry(
     content: Math.max(0, total - padTop - padBottom),
     padTop,
     padBottom,
+    marginTop,
+    marginBottom,
   };
 }

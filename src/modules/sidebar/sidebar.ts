@@ -10,7 +10,7 @@ import {
 import { applyTabHeightStyle } from "../render/tabHeight";
 import { attachScrollbarAutoHide } from "../render/scrollbarAutoHide";
 import { dispatchVtEvent } from "../core/events";
-import { dispatchPDFsChanged, dispatchTimeTick } from "../track/itemTracker";
+import { dispatchTimeTick } from "../track/itemTracker";
 import { isDarkMode } from "../render/colorUtils";
 import { pinFillIcon, pinIcon, svgElement } from "../ui/iconSvgs";
 
@@ -1335,9 +1335,12 @@ export function expandFloatingSidebar(doc: Document): void {
   const sidebar = getSidebar(doc);
   if (!sidebar) return;
 
-  // Re-render the instant VT expands so the relative "last read" labels reflect
-  // the current time against the persisted openedAt values (not reset them).
-  dispatchPDFsChanged();
+  // Refresh the relative "last read" labels IN PLACE on expand (targeted
+  // time-text update, no DOM rebuild). A full dispatchPDFsChanged() re-render
+  // here would rebuild the rows with their final margin/padding/active
+  // highlight already applied, so the CSS transitions that glide the icon and
+  // highlight rect on collapse could never play on expand — rows snapped.
+  dispatchTimeTick();
 
   const savedWidth = getSavedWidth();
   sidebar.style.setProperty("--vt-expanded-width", `${savedWidth}px`);

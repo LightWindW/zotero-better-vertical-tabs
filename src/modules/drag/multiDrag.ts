@@ -73,6 +73,8 @@ export function collapseMultiDragSource(doc: Document): void {
     row.style.height = "0px";
     row.style.paddingTop = "0px";
     row.style.paddingBottom = "0px";
+    row.style.marginTop = "0px";
+    row.style.marginBottom = "0px";
     row.style.opacity = "0";
   }
 }
@@ -112,6 +114,8 @@ export function endMultiDrag(doc: Document, dropped: boolean): void {
     row.style.minHeight = "";
     row.style.paddingTop = "";
     row.style.paddingBottom = "";
+    row.style.marginTop = "";
+    row.style.marginBottom = "";
     const geometry = measureRowGeometry(doc, row);
     const currentOpacity =
       doc.defaultView?.getComputedStyle(row)?.opacity ?? "0";
@@ -121,11 +125,15 @@ export function endMultiDrag(doc: Document, dropped: boolean): void {
     row.style.height = "0px";
     row.style.paddingTop = "0px";
     row.style.paddingBottom = "0px";
+    row.style.marginTop = "0px";
+    row.style.marginBottom = "0px";
     row.style.opacity = currentOpacity;
     void row.offsetHeight;
     row.style.height = `${geometry.content}px`;
     row.style.paddingTop = `${geometry.padTop}px`;
     row.style.paddingBottom = `${geometry.padBottom}px`;
+    row.style.marginTop = `${geometry.marginTop}px`;
+    row.style.marginBottom = `${geometry.marginBottom}px`;
     row.style.opacity = "1";
     win?.setTimeout(() => {
       if (!row.isConnected) return;
@@ -134,6 +142,8 @@ export function endMultiDrag(doc: Document, dropped: boolean): void {
       row.style.minHeight = "";
       row.style.paddingTop = "";
       row.style.paddingBottom = "";
+      row.style.marginTop = "";
+      row.style.marginBottom = "";
       row.style.opacity = "";
     }, COLLAPSE_MS);
   }

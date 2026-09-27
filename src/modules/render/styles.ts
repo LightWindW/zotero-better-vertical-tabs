@@ -396,16 +396,19 @@ export function getStyles(): string {
       flex-direction: row;
       align-items: center;
       min-height: var(--vt-item-min-height, 36px);
+      margin: 4px;
       padding: 4px 12px 4px 9px;
       cursor: pointer;
       gap: 8px;
       position: relative;
+      border-radius: 5px;
+      box-sizing: border-box;
       /* background/box-shadow must transition too: tab selection moves the
          .active class via a targeted update (no re-render), and without a
          transition the white highlight snaps on/off — a visible white flash.
          Freshly rendered rows start with their final class, so renders never
          trigger this transition. */
-      transition: padding 0.2s ease-out, gap 0.2s ease-out, transform 0.2s ease-out, background 0.2s ease, box-shadow 0.2s ease;
+      transition: padding 0.2s ease-out, gap 0.2s ease-out, margin 0.2s ease-out, transform 0.2s ease-out, background 0.2s ease, box-shadow 0.2s ease;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-item:hover {
@@ -430,7 +433,9 @@ export function getStyles(): string {
         height 0.3s ease-out,
         opacity 0.2s ease-out,
         padding-top 0.3s ease-out,
-        padding-bottom 0.3s ease-out;
+        padding-bottom 0.3s ease-out,
+        margin-top 0.3s ease-out,
+        margin-bottom 0.3s ease-out;
     }
 
     /* Multi-select overlay: a real child element (the row's ::before/::after
@@ -441,7 +446,7 @@ export function getStyles(): string {
       position: absolute;
       inset: 0;
       background: rgba(0, 0, 0, 0.08);
-      border-radius: 4px;
+      border-radius: 5px;
       opacity: 0;
       transition: opacity 0.2s ease;
       pointer-events: none;
@@ -463,7 +468,9 @@ export function getStyles(): string {
         height 0.25s ease,
         opacity 0.25s ease,
         padding-top 0.25s ease,
-        padding-bottom 0.25s ease;
+        padding-bottom 0.25s ease,
+        margin-top 0.25s ease,
+        margin-bottom 0.25s ease;
     }
 
     /* Multi-drop cascade release: same mechanics while rows unfold. */
@@ -473,13 +480,15 @@ export function getStyles(): string {
         height 0.25s ease,
         opacity 0.25s ease,
         padding-top 0.25s ease,
-        padding-bottom 0.25s ease;
+        padding-bottom 0.25s ease,
+        margin-top 0.25s ease,
+        margin-bottom 0.25s ease;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-item.active {
       background: #fff;
       box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
-      border-radius: 4px;
+      border-radius: 5px;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-item.active:hover {
@@ -606,11 +615,31 @@ export function getStyles(): string {
       opacity: 0;
       cursor: pointer;
       background: linear-gradient(to right, transparent, var(--vt-close-bg, #F2F2F2) 60%);
+      border-radius: 0 5px 5px 0;
+      overflow: hidden;
       transition: opacity 0.15s ease;
       z-index: 5;
     }
 
+    #${SIDEBAR_ID} .vertical-tabs-item.active .vertical-tabs-item-close {
+      background: linear-gradient(to left, #fff 40%, transparent);
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-item-close::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to left, var(--material-hover, rgba(0, 0, 0, 0.04)), transparent);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+
     #${SIDEBAR_ID} .vertical-tabs-item:hover .vertical-tabs-item-close {
+      opacity: 1;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-item:hover .vertical-tabs-item-close::before {
       opacity: 1;
     }
 
@@ -715,18 +744,22 @@ export function getStyles(): string {
       display: flex;
       flex-direction: row;
       align-items: center;
-      /* Fixed 36px total — intentionally NOT following the tab-height
-         preference that drives .vertical-tabs-item. */
-      height: 40px;
+      /* Fixed 36px content height + 4px margin all around — matches the tab
+         row geometry exactly (36 + 8 = 44px total) so the hover/active
+         highlight is the same inset rounded rectangle as tab rows.
+         Intentionally NOT following the tab-height preference. */
+      height: 36px;
+      margin: 4px;
       padding: 4px 12px 4px 9px;
       cursor: pointer;
       gap: 8px;
       position: relative;
-      border-radius: 4px;
+      border-radius: 5px;
       box-sizing: border-box;
       /* Same cross-fade as tab rows: switching between a reader tab and the
-         library moves .active between the row and this button. */
-      transition: padding 0.2s ease-out, gap 0.2s ease-out, background 0.2s ease, box-shadow 0.2s ease;
+         library moves .active between the row and this button. margin
+         transitions too, for smooth strip <-> expanded switches. */
+      transition: padding 0.2s ease-out, gap 0.2s ease-out, margin 0.2s ease-out, background 0.2s ease, box-shadow 0.2s ease;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-home-btn:hover {
@@ -909,6 +942,12 @@ export function getStyles(): string {
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-home-btn {
       padding: 4px 0;
       gap: 0;
+    }
+
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-item,
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-home-btn {
+      margin-left: 0;
+      margin-right: 0;
     }
 
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-item-content {
@@ -1334,6 +1373,14 @@ export function getStyles(): string {
       #${SIDEBAR_ID} .vertical-tabs-item-close {
         color: #999;
         background: linear-gradient(to right, transparent, var(--vt-close-bg, #303030) 60%);
+      }
+
+      #${SIDEBAR_ID} .vertical-tabs-item.active .vertical-tabs-item-close {
+        background: linear-gradient(to left, #626262 40%, transparent);
+      }
+
+      #${SIDEBAR_ID} .vertical-tabs-item-close::before {
+        background: linear-gradient(to left, var(--material-hover, rgba(255, 255, 255, 0.05)), transparent);
       }
 
       #${SIDEBAR_ID} .vertical-tabs-item-close:hover {

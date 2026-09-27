@@ -85,6 +85,7 @@ import {
 } from "../ui/popupAnimation";
 import { animateTabsExit } from "./tabExit";
 import { suppressCard } from "../ui/hoverCard";
+import { showToast } from "../ui/toast";
 import {
   consumeMultiTabRelease,
   markMultiTabRelease,
@@ -1814,6 +1815,36 @@ export function showItemContextMenu(
     win?.ZoteroPane.selectItem(itemId);
   });
 
+  // Show File — reveal the attachment's file in the OS file manager. Only
+  // offered when the row's item is an attachment with a non-empty
+  // attachmentPath (checked synchronously at menu build time). The actual
+  // on-disk existence check happens on click: getFilePathAsync() resolves the
+  // absolute path or returns false when the file is gone (e.g. deleted
+  // externally); failures surface as a toast popup, never as menu text.
+  {
+    const fileItem = Zotero.Items.get(pdf.itemId) as Zotero.Item | false;
+    if (fileItem && fileItem.isAttachment() && fileItem.attachmentPath) {
+      addItem(getString("vertical-tabs-show-file"), async () => {
+        try {
+          const currentItem = Zotero.Items.get(pdf.itemId) as
+            | Zotero.Item
+            | false;
+          const filePath = currentItem
+            ? await currentItem.getFilePathAsync()
+            : false;
+          if (!filePath) {
+            showToast(doc, getString("vertical-tabs-show-file-failed"));
+            return;
+          }
+          await Zotero.File.reveal(filePath);
+        } catch (e) {
+          ztoolkit.log("[vt-show-file] reveal failed:", e);
+          showToast(doc, getString("vertical-tabs-show-file-failed"));
+        }
+      });
+    }
+  }
+
   addItem(getString("vertical-tabs-duplicate-tab"), () => {
     if (!pdf.tabId) return;
     // Reader tabs must be opened through Zotero.Reader so the PDF actually
@@ -2421,8 +2452,16 @@ export function subscribeToRenderEvents(
   // Collapse/expand should not rebuild the categories DOM: we want the
   // existing content to be clipped by the width animation instead of
   // vanishing instantly. Only render when becoming visible (initial load).
+  // The container persists across collapse/expand, so "has children" means
+  // "has been rendered": a hover expand must NOT rebuild the rows mid width
+  // animation — fresh DOM is born in its final state and the margin/padding/
+  // highlight transitions can never play (expand used to snap while collapse
+  // glided). Empty-list renders still append the empty drop-zone, so the
+  // check is reliable even with zero PDFs.
   const visibilityHandler = ((e: CustomEvent) => {
     if (e.detail?.visible === false) return;
+    const container = getCategoriesContainer(doc);
+    if (container && container.children.length > 0) return;
     scheduleRender();
   }) as EventListener;
   const searchHandler = ((e: CustomEvent) => {

@@ -77,6 +77,8 @@ export function animateTabsExit(
     row.style.height = "0px";
     row.style.paddingTop = "0px";
     row.style.paddingBottom = "0px";
+    row.style.marginTop = "0px";
+    row.style.marginBottom = "0px";
     row.style.opacity = "0";
   }
 
