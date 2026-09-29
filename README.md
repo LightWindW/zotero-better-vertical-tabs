@@ -56,11 +56,11 @@ The plugin provides three ways to create categories, making it easy to organize 
 
 The "More" menu offers three sidebar expand modes to suit different workflows:
 
-| Mode | Behavior |
-|------|----------|
-| **Auto** | Automatically expands on hover, collapses on mouse leave — ideal for quickly browsing tabs |
-| **Manual** | Hover does not expand; click the Pin button to expand. Stays expanded until the Pin button is clicked again |
-| **Minimal** | Same as Manual, but the collapsed strip shrinks to a 20px icon-only bar, for minimal visual distraction |
+| Mode        | Behavior                                                                                                    |
+| ----------- | ----------------------------------------------------------------------------------------------------------- |
+| **Auto**    | Automatically expands on hover, collapses on mouse leave — ideal for quickly browsing tabs                  |
+| **Manual**  | Hover does not expand; click the Pin button to expand. Stays expanded until the Pin button is clicked again |
+| **Minimal** | Same as Manual, but the collapsed strip shrinks to a 20px icon-only bar, for minimal visual distraction     |
 
 Mode changes take effect immediately across all windows.
 

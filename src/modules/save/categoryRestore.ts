@@ -43,7 +43,7 @@ export async function restoreCategory(
 
     let item: Zotero.Item | undefined;
     try {
-      item = await Zotero.Items.getAsync(itemId);
+      item = (await Zotero.Items.getAsync(itemId)) || undefined;
     } catch {
       item = undefined;
     }

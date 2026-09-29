@@ -105,7 +105,9 @@ export function computeExternalInsertTarget(
   }
 
   // 2. Gap inside a category's items container.
-  const itemsContainer = el.closest(".vertical-tabs-items") as HTMLElement | null;
+  const itemsContainer = el.closest(
+    ".vertical-tabs-items",
+  ) as HTMLElement | null;
   if (itemsContainer) {
     const wrapper = itemsContainer.closest(
       ".vertical-tabs-category",
@@ -149,7 +151,11 @@ export function computeExternalInsertTarget(
 }
 
 /** Row branch: hover over an item row — shift rows below, center the bar. */
-function applyRowPreview(doc: Document, row: HTMLElement, clientY: number): void {
+function applyRowPreview(
+  doc: Document,
+  row: HTMLElement,
+  clientY: number,
+): void {
   const container = (row.closest(".vertical-tabs-items") ||
     row.closest(".vertical-tabs-drop-zone")) as HTMLElement | null;
   if (!container) return;
@@ -291,7 +297,9 @@ export function applyExternalDropPreview(doc: Document, e: DragEvent): void {
     return;
   }
 
-  const itemsContainer = el.closest(".vertical-tabs-items") as HTMLElement | null;
+  const itemsContainer = el.closest(
+    ".vertical-tabs-items",
+  ) as HTMLElement | null;
   if (itemsContainer) {
     const wrapper = itemsContainer.closest(
       ".vertical-tabs-category",

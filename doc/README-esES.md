@@ -56,11 +56,11 @@ El complemento ofrece tres formas de crear categorías, facilitando la organizac
 
 El menú "Más" ofrece tres modos de expansión de la barra lateral para adaptarse a diferentes flujos de trabajo:
 
-| Modo | Comportamiento |
-|------|----------------|
-| **Automático** | Se expande al pasar el ratón, se contrae al alejarlo — ideal para navegar rápidamente por las pestañas |
-| **Manual** | No se expande al pasar el ratón; haga clic en el botón Pin para expandir. Permanece expandido hasta que se vuelva a hacer clic en Pin |
-| **Mínimo** | Igual que Manual, pero la barra contraída se reduce a solo 20px con el icono, para una mínima distracción visual |
+| Modo           | Comportamiento                                                                                                                        |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| **Automático** | Se expande al pasar el ratón, se contrae al alejarlo — ideal para navegar rápidamente por las pestañas                                |
+| **Manual**     | No se expande al pasar el ratón; haga clic en el botón Pin para expandir. Permanece expandido hasta que se vuelva a hacer clic en Pin |
+| **Mínimo**     | Igual que Manual, pero la barra contraída se reduce a solo 20px con el icono, para una mínima distracción visual                      |
 
 Los cambios de modo surten efecto inmediatamente en todas las ventanas.
 

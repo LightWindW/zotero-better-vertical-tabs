@@ -204,7 +204,10 @@ function handleItemHover(event: Event): void {
   const pinnedMode = !!sidebar?.classList.contains(
     "vertical-tabs-sidebar-pinned",
   );
-  if (!pinnedMode && !sidebar?.classList.contains("vertical-tabs-sidebar-expanded")) {
+  if (
+    !pinnedMode &&
+    !sidebar?.classList.contains("vertical-tabs-sidebar-expanded")
+  ) {
     // Collapsed floating strip with auto-expand disabled: no expansion is
     // coming, so show the card right away, positioned just right of the
     // 35px strip (the row's rect).

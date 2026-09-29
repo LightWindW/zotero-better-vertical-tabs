@@ -12,11 +12,13 @@ tsconfig.tsbuildinfo
 # Scaffold
 .env
 .scaffold
+
 build
 logs
 
-#Claude
+#AI
 .claude/
 CLAUDE.md
 memory-bank/
 other/
+.reasonix/

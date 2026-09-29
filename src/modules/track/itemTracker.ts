@@ -465,11 +465,7 @@ export function startTracking(): void {
             // stamping them would reset every restored "last read" time to
             // just-now — merge-max then lets now beat the migrated old time.
             const prevTabId = _selectedTabId;
-            if (
-              prevTabId &&
-              prevTabId !== tabId &&
-              _startupRestoreDone
-            ) {
+            if (prevTabId && prevTabId !== tabId && _startupRestoreDone) {
               updateOpenedAtForTab(prevTabId);
             }
             _selectedTabId = tabId;

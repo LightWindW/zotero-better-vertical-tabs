@@ -292,10 +292,7 @@ export function hideCard(
 }
 
 /** Immediate hide (dismiss on click/right-click/drag, dead target, destroy). */
-export function hideCardNow(
-  doc: Document,
-  owner: HoverCardOwner | null,
-): void {
+export function hideCardNow(doc: Document, owner: HoverCardOwner | null): void {
   if (owner && _owner && _owner !== owner) return;
   cancelHide();
   const card = doc.getElementById(HOVER_CARD_ID) as HTMLElement | null;

@@ -11,7 +11,9 @@
  * as drag sources (single or multi) are excluded — they are being dragged and
  * must not receive shift previews or count as insertion neighbors.
  */
-export function getContainerVisibleItems(container: HTMLElement): HTMLElement[] {
+export function getContainerVisibleItems(
+  container: HTMLElement,
+): HTMLElement[] {
   const allItems = Array.from(
     container.querySelectorAll(":scope > .vertical-tabs-item"),
   ) as HTMLElement[];
