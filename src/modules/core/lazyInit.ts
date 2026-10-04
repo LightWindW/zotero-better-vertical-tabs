@@ -24,6 +24,7 @@ import {
   isPinToggleHandled,
   isModeSwitchHandled,
   applyCollapsedStripPresentation,
+  applyExpandCollapseAnimationPreference,
 } from "../sidebar/sidebar";
 import {
   getOpenedPDFs,
@@ -78,6 +79,8 @@ let _prefsObserverID: symbol | null = null;
 let _showExtraObserverID: symbol | null = null;
 let _pinnedObserverID: symbol | null = null;
 let _autoExpandObserverID: symbol | null = null;
+let _autoExpandEmbeddedObserverID: symbol | null = null;
+let _expandCollapseAnimationObserverID: symbol | null = null;
 let _compactStripObserverID: symbol | null = null;
 
 interface WindowState {
@@ -214,11 +217,12 @@ export async function initVerticalTabs(
     );
   }
 
-  // Register preference observers for the collapsed-strip presentation:
+  // Register preference observers for the floating presentation:
   // autoExpand off + compactStrip on swaps the 35px icon strip for the 20px
-  // minimal bar (and back). The `true` global flag is required — the writers
-  // (setExpandMode) use absolute pref names; without it the observer watches
-  // a double-prefixed ghost branch that never fires.
+  // minimal bar (and back), while autoExpandEmbedded controls whether a
+  // hover-expanded sidebar reserves layout space. The `true` global flag is
+  // required — the writers use absolute pref names; without it the observer
+  // watches a double-prefixed ghost branch that never fires.
   const refreshCollapsedStrip = () => {
     for (const w of Zotero.getMainWindows()) {
       const ws = getWindowState(w);
@@ -233,6 +237,26 @@ export async function initVerticalTabs(
     _autoExpandObserverID = Zotero.Prefs.registerObserver(
       `${PREF_NAMESPACE}.verticalTabs.autoExpand`,
       refreshCollapsedStrip,
+      true,
+    );
+  }
+  if (!_autoExpandEmbeddedObserverID) {
+    _autoExpandEmbeddedObserverID = Zotero.Prefs.registerObserver(
+      `${PREF_NAMESPACE}.verticalTabs.autoExpandEmbedded`,
+      refreshCollapsedStrip,
+      true,
+    );
+  }
+  if (!_expandCollapseAnimationObserverID) {
+    _expandCollapseAnimationObserverID = Zotero.Prefs.registerObserver(
+      `${PREF_NAMESPACE}.verticalTabs.applyExpandCollapseAnimation`,
+      () => {
+        for (const w of Zotero.getMainWindows()) {
+          const ws = getWindowState(w);
+          if (!ws.initialized || !ws.visible) continue;
+          applyExpandCollapseAnimationPreference(w.document);
+        }
+      },
       true,
     );
   }
@@ -373,6 +397,14 @@ export function destroyVerticalTabs(win: Window): void {
     if (_autoExpandObserverID) {
       Zotero.Prefs.unregisterObserver(_autoExpandObserverID);
       _autoExpandObserverID = null;
+    }
+    if (_autoExpandEmbeddedObserverID) {
+      Zotero.Prefs.unregisterObserver(_autoExpandEmbeddedObserverID);
+      _autoExpandEmbeddedObserverID = null;
+    }
+    if (_expandCollapseAnimationObserverID) {
+      Zotero.Prefs.unregisterObserver(_expandCollapseAnimationObserverID);
+      _expandCollapseAnimationObserverID = null;
     }
     if (_compactStripObserverID) {
       Zotero.Prefs.unregisterObserver(_compactStripObserverID);

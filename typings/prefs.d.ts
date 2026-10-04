@@ -15,12 +15,15 @@ declare namespace _ZoteroTypes {
       "verticalTabs.showReaderLoadedIndicator": boolean;
       "verticalTabs.autoCloseEnabled": boolean;
       "verticalTabs.autoCloseDays": number;
+      "verticalTabs.protectCategorizedTabs": boolean;
       "verticalTabs.releaseReaderEnabled": boolean;
       "verticalTabs.releaseReaderMinutes": number;
       "verticalTabs.tabHeight": string;
       "verticalTabs.enableBlur": boolean;
       "verticalTabs.nativeTabBarHidden": boolean;
       "verticalTabs.autoExpand": boolean;
+      "verticalTabs.autoExpandEmbedded": boolean;
+      "verticalTabs.applyExpandCollapseAnimation": boolean;
       "verticalTabs.compactStrip": boolean;
     };
   }

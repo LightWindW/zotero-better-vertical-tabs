@@ -3,6 +3,7 @@
  */
 import { config } from "../../../package.json";
 import { getOpenedPDFs, getSelectedTabId, getZoteroTabs } from "./itemTracker";
+import { getData } from "./categoryManager";
 
 const PREF_NAMESPACE = config.prefsPrefix;
 const CHECK_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
@@ -10,6 +11,7 @@ const CHECK_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 let _intervalId: ReturnType<typeof setInterval> | null = null;
 let _enabledObserverID: symbol | null = null;
 let _daysObserverID: symbol | null = null;
+let _protectCategorizedObserverID: symbol | null = null;
 
 function vtLog(msg: string): void {
   Zotero.logError(new Error("[BVT-autoClose] " + msg));
@@ -42,6 +44,10 @@ function getDays(): number {
   return Math.max(1, Math.min(365, days));
 }
 
+function protectCategorizedTabs(): boolean {
+  return getPrefBool("verticalTabs.protectCategorizedTabs", true);
+}
+
 function closeTab(tabId: string): void {
   const tabs = getZoteroTabs();
   if (!tabs) return;
@@ -59,11 +65,16 @@ function runAutoClose(): void {
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
   const selectedTabId = getSelectedTabId();
 
+  const categorizedTabIds = protectCategorizedTabs()
+    ? new Set(getData().categories.flatMap((category) => category.tabIds))
+    : null;
+
   const pdfs = getOpenedPDFs();
   const toClose: string[] = [];
   for (const pdf of pdfs) {
     if (!pdf.tabId) continue;
     if (pdf.tabId === selectedTabId) continue;
+    if (categorizedTabIds?.has(pdf.tabId)) continue;
     if (pdf.openedAt < cutoff) {
       toClose.push(pdf.tabId);
     }
@@ -128,6 +139,15 @@ export function initAutoClose(): void {
       },
     );
   }
+
+  if (!_protectCategorizedObserverID) {
+    _protectCategorizedObserverID = Zotero.Prefs.registerObserver(
+      `${PREF_NAMESPACE}.verticalTabs.protectCategorizedTabs`,
+      () => {
+        if (isEnabled()) runAutoClose();
+      },
+    );
+  }
 }
 
 export function destroyAutoClose(): void {
@@ -139,5 +159,9 @@ export function destroyAutoClose(): void {
   if (_daysObserverID) {
     Zotero.Prefs.unregisterObserver(_daysObserverID);
     _daysObserverID = null;
+  }
+  if (_protectCategorizedObserverID) {
+    Zotero.Prefs.unregisterObserver(_protectCategorizedObserverID);
+    _protectCategorizedObserverID = null;
   }
 }

@@ -123,6 +123,38 @@ function bindPrefEvents() {
     });
   }
 
+  // autoExpandEmbedded checkbox: keep the sidebar layout in sync immediately
+  // when the preference is changed from the preferences window.
+  const autoExpandEmbeddedCheckbox =
+    addon.data.prefs!.window.document?.querySelector(
+      `#zotero-prefpane-${config.addonRef}-auto-expand-embedded`,
+    );
+  if (autoExpandEmbeddedCheckbox) {
+    autoExpandEmbeddedCheckbox.addEventListener("command", (e: Event) => {
+      Zotero.Prefs.set(
+        `${config.prefsPrefix}.verticalTabs.autoExpandEmbedded`,
+        (e.target as XUL.Checkbox).checked,
+        false,
+      );
+    });
+  }
+
+  // Expand/collapse animation checkbox. The sidebar preference observer
+  // applies the change to every initialized main window immediately.
+  const expandCollapseAnimationCheckbox =
+    addon.data.prefs!.window.document?.querySelector(
+      `#zotero-prefpane-${config.addonRef}-apply-expand-collapse-animation`,
+    );
+  if (expandCollapseAnimationCheckbox) {
+    expandCollapseAnimationCheckbox.addEventListener("command", (e: Event) => {
+      Zotero.Prefs.set(
+        `${config.prefsPrefix}.verticalTabs.applyExpandCollapseAnimation`,
+        (e.target as XUL.Checkbox).checked,
+        false,
+      );
+    });
+  }
+
   // autoCloseEnabled checkbox
   const autoCloseCheckbox = addon.data.prefs!.window.document?.querySelector(
     `#zotero-prefpane-${config.addonRef}-auto-close-enabled`,
@@ -150,6 +182,20 @@ function bindPrefEvents() {
       Zotero.Prefs.set(
         `${config.prefsPrefix}.verticalTabs.autoCloseDays`,
         days,
+        false,
+      );
+    });
+  }
+
+  const protectCategorizedTabsCheckbox =
+    addon.data.prefs!.window.document?.querySelector(
+      `#zotero-prefpane-${config.addonRef}-protect-categorized-tabs`,
+    );
+  if (protectCategorizedTabsCheckbox) {
+    protectCategorizedTabsCheckbox.addEventListener("command", (e: Event) => {
+      Zotero.Prefs.set(
+        `${config.prefsPrefix}.verticalTabs.protectCategorizedTabs`,
+        (e.target as XUL.Checkbox).checked,
         false,
       );
     });

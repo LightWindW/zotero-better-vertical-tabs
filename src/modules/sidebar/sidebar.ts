@@ -146,6 +146,37 @@ export function isAutoExpandEnabled(): boolean {
   );
 }
 
+/**
+ * Whether automatic hover expansion should reserve layout space for the
+ * expanded sidebar instead of painting over the main content.
+ *
+ * This is intentionally separate from `autoExpand`: the latter controls the
+ * hover behavior, while this preference only controls the expanded layout.
+ */
+export function isAutoExpandEmbeddedEnabled(): boolean {
+  return (
+    (Zotero.Prefs.get(
+      `${PREF_NAMESPACE}.verticalTabs.autoExpandEmbedded`,
+      true,
+    ) as boolean | undefined) ?? false
+  );
+}
+
+/** Whether sidebar expand/collapse transitions are enabled (default true). */
+export function areExpandCollapseAnimationsEnabled(): boolean {
+  return (
+    (Zotero.Prefs.get(
+      `${PREF_NAMESPACE}.verticalTabs.applyExpandCollapseAnimation`,
+      true,
+    ) as boolean | undefined) ?? true
+  );
+}
+
+/** Whether the current automatic expansion uses the embedded layout. */
+function isEmbeddedAutoExpansionEnabled(): boolean {
+  return isAutoExpandEnabled() && isAutoExpandEmbeddedEnabled();
+}
+
 /** Pref `verticalTabs.compactStrip` (default false): 20px minimal bar.
  *  NOTE: Zotero.Prefs.get's 2nd arg is `global` (absolute pref path), NOT a
  *  default value — pass `true` so the absolute name (and the prefs.js
@@ -228,6 +259,24 @@ export function resolveCollapsedStripWidth(
   return !pinned && !autoExpand && compactStrip
     ? MINIMAL_STRIP_WIDTH
     : HOVER_STRIP_WIDTH;
+}
+
+/**
+ * Pure layout helper for the floating wrapper. Automatic embedded expansion
+ * is active only while the sidebar is actually hover-expanded, and only when
+ * automatic expansion is enabled. Manual/pinned mode keeps its own layout.
+ */
+export function resolveFloatingWrapperWidth(
+  pinned: boolean,
+  expanded: boolean,
+  autoExpand: boolean,
+  embedded: boolean,
+  savedWidth: number,
+  collapsedWidth: number,
+): number {
+  return !pinned && expanded && autoExpand && embedded
+    ? savedWidth
+    : collapsedWidth;
 }
 
 function getCollapsedStripWidth(): number {
@@ -339,6 +388,8 @@ interface DocState {
   searchDebounceTimer: TimerHandle | null;
   menuToken: object | null;
   pinAnimRaf: number | null;
+  wrapperAnimRaf: number | null;
+  expandAnimationToken: object | null;
 }
 
 function getDocState(doc: Document): DocState {
@@ -358,6 +409,8 @@ function getDocState(doc: Document): DocState {
       searchDebounceTimer: null,
       menuToken: null,
       pinAnimRaf: null,
+      wrapperAnimRaf: null,
+      expandAnimationToken: null,
     };
     (doc as any)[key] = state;
   }
@@ -874,6 +927,19 @@ export function createSidebar(doc: Document): HTMLElement {
     const newWidth = startWidth + delta;
     const clamped = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, newWidth));
     sidebar.style.setProperty("--vt-expanded-width", `${clamped}px`);
+    if (
+      !isPinned() &&
+      isFloatingExpanded(doc) &&
+      isAutoExpandEnabled() &&
+      isAutoExpandEmbeddedEnabled()
+    ) {
+      const target = findOrCreateWrapper(doc);
+      if (target) {
+        target.wrapper.style.width = `${clamped}px`;
+        target.wrapper.style.minWidth = `${clamped}px`;
+        target.wrapper.style.maxWidth = `${clamped}px`;
+      }
+    }
   }
 
   function onMouseUp(e: MouseEvent): void {
@@ -1029,6 +1095,14 @@ function cancelPinAnimation(doc: Document): void {
   }
 }
 
+function cancelFloatingWrapperAnimation(doc: Document): void {
+  const state = getDocState(doc);
+  if (state.wrapperAnimRaf !== null) {
+    doc.defaultView?.cancelAnimationFrame(state.wrapperAnimRaf);
+    state.wrapperAnimRaf = null;
+  }
+}
+
 const PIN_ANIMATION_MS = 220;
 /** Expand: right-side content (names, counts, search) fades in over the LAST
  * 100ms so the panel grows first and the text appears as it settles. */
@@ -1079,6 +1153,11 @@ function animatePinToggle(doc: Document, toPinned: boolean): void {
   const { wrapper } = target;
 
   cancelPinAnimation(doc);
+  cancelFloatingWrapperAnimation(doc);
+  if (isEmbeddedAutoExpansionEnabled() && !areExpandCollapseAnimationsEnabled()) {
+    finish();
+    return;
+  }
 
   // Already floating-expanded (hover-expanded VT being pinned): the sidebar
   // is visually at the saved width while the wrapper is still at strip
@@ -1347,6 +1426,10 @@ export function expandFloatingSidebar(doc: Document): void {
   sidebar.style.width = "";
   sidebar.classList.remove("vertical-tabs-sidebar-minimal");
   sidebar.classList.add("vertical-tabs-sidebar-expanded");
+  sidebar.classList.toggle(
+    "vertical-tabs-sidebar-embedded-expanded",
+    isAutoExpandEnabled() && isAutoExpandEmbeddedEnabled(),
+  );
   // A collapse-time icon fade-in may still be pending (rapid collapse→
   // expand): cancel it so its inline display/opacity doesn't keep the icon
   // visible over the expanding panel.
@@ -1354,30 +1437,50 @@ export function expandFloatingSidebar(doc: Document): void {
   updateContentOpacity(sidebar);
   setResizeHandleVisible(doc, true);
   setFloatingExpanded(doc, true);
+  animateFloatingWrapper(doc, true);
 
   // Keep the relative "last read" labels aging while VT stays visible.
   startDisplayRefreshTimer();
 
   // Block hover card until the width expand animation finishes.
-  setExpandAnimating(doc, true);
+  // The preference only controls embedded automatic expansion. The normal
+  // floating hover animation remains enabled regardless of this setting.
+  const animationsEnabled =
+    !isEmbeddedAutoExpansionEnabled() || areExpandCollapseAnimationsEnabled();
+  const expandAnimationToken = animationsEnabled ? {} : null;
+  getDocState(doc).expandAnimationToken = expandAnimationToken;
+  setExpandAnimating(doc, animationsEnabled);
+  if (!animationsEnabled) {
+    dispatchVtEvent(doc, "vertical-tabs:expand-animation-complete", {});
+  }
   const onEnd = (e?: TransitionEvent) => {
     if (e && e.propertyName !== "width") return;
     sidebar.removeEventListener("transitionend", onEnd);
     sidebar.removeEventListener("transitioncancel", onEnd);
+    if (getDocState(doc).expandAnimationToken !== expandAnimationToken) {
+      return;
+    }
+    getDocState(doc).expandAnimationToken = null;
     if (!isExpandAnimating(doc)) return;
     setExpandAnimating(doc, false);
     dispatchVtEvent(doc, "vertical-tabs:expand-animation-complete", {});
   };
-  sidebar.addEventListener("transitionend", onEnd);
-  sidebar.addEventListener("transitioncancel", onEnd);
-  // Safety net in case transition events don't fire.
-  setTimeout(() => {
-    if (!isExpandAnimating(doc)) return;
-    sidebar.removeEventListener("transitionend", onEnd);
-    sidebar.removeEventListener("transitioncancel", onEnd);
-    setExpandAnimating(doc, false);
-    dispatchVtEvent(doc, "vertical-tabs:expand-animation-complete", {});
-  }, 350);
+  if (animationsEnabled) {
+    sidebar.addEventListener("transitionend", onEnd);
+    sidebar.addEventListener("transitioncancel", onEnd);
+    // Safety net in case transition events don't fire.
+    setTimeout(() => {
+      if (getDocState(doc).expandAnimationToken !== expandAnimationToken) {
+        return;
+      }
+      getDocState(doc).expandAnimationToken = null;
+      if (!isExpandAnimating(doc)) return;
+      sidebar.removeEventListener("transitionend", onEnd);
+      sidebar.removeEventListener("transitioncancel", onEnd);
+      setExpandAnimating(doc, false);
+      dispatchVtEvent(doc, "vertical-tabs:expand-animation-complete", {});
+    }, 350);
+  }
 
   dispatchVtEvent(doc, "vertical-tabs:visibility-changed", { visible: true });
 }
@@ -1400,11 +1503,15 @@ function performCollapse(doc: Document): void {
   ) as HTMLInputElement | null;
   searchInput?.blur();
 
+  const embeddedAutoExpansion = isEmbeddedAutoExpansionEnabled();
+  const embeddedAnimationsEnabled = areExpandCollapseAnimationsEnabled();
   sidebar.style.width = "";
   sidebar.classList.remove("vertical-tabs-sidebar-expanded");
+  sidebar.classList.remove("vertical-tabs-sidebar-embedded-expanded");
   updateContentOpacity(sidebar);
   setResizeHandleVisible(doc, false);
   setFloatingExpanded(doc, false);
+  getDocState(doc).expandAnimationToken = null;
   setExpandAnimating(doc, false);
   stopDisplayRefreshTimer();
   dispatchVtEvent(doc, "vertical-tabs:visibility-changed", { visible: false });
@@ -1418,13 +1525,19 @@ function performCollapse(doc: Document): void {
         ":scope > .vertical-tabs-minimal-icon",
       ) as HTMLElement | null)
     : null;
-  if (minimalIcon) {
+  if (
+    minimalIcon &&
+    (!embeddedAutoExpansion || embeddedAnimationsEnabled)
+  ) {
     startMinimalIconFadeIn(doc, minimalIcon);
   }
   // Collapsed now: the minimal 16px strip may apply (prefs changed while
   // expanded never gets the class, so it is applied here on collapse).
-  applyCollapsedStripPresentation(doc);
-  if (minimalIcon) {
+  applyCollapsedStripPresentation(doc, true);
+  if (
+    minimalIcon &&
+    (!embeddedAutoExpansion || embeddedAnimationsEnabled)
+  ) {
     void minimalIcon.offsetHeight;
     minimalIcon.style.opacity = "1";
   }
@@ -1492,12 +1605,105 @@ function setWrapperAndSplitter(
 }
 
 /**
+ * Keep the floating wrapper in the same layout mode as its sidebar. In the
+ * default floating mode the wrapper stays at the narrow strip width, letting
+ * the expanded sidebar paint over the main content. When embedded auto-expand
+ * is enabled, the wrapper grows with the hover-expanded sidebar instead.
+ */
+function applyFloatingWrapperPresentation(doc: Document): void {
+  if (isPinned()) return;
+  cancelFloatingWrapperAnimation(doc);
+  const target = findOrCreateWrapper(doc);
+  if (!target) return;
+
+  const { wrapper, splitter } = target;
+  const width = resolveFloatingWrapperWidth(
+    false,
+    isFloatingExpanded(doc),
+    isAutoExpandEnabled(),
+    isAutoExpandEmbeddedEnabled(),
+    getSavedWidth(),
+    getCollapsedStripWidth(),
+  );
+  wrapper.style.width = `${width}px`;
+  wrapper.style.minWidth = `${width}px`;
+  wrapper.style.maxWidth = `${width}px`;
+  wrapper.removeAttribute("hidden");
+  splitter.setAttribute("hidden", "true");
+  splitter.style.display = "none";
+  clearWidthObserver(doc);
+}
+
+/** Animate the floating wrapper to match an automatic embedded expansion. */
+function animateFloatingWrapper(doc: Document, expanded: boolean): void {
+  if (isPinned()) return;
+  const target = findOrCreateWrapper(doc);
+  const win = doc.defaultView;
+  if (!target || !win) return;
+
+  const { wrapper } = target;
+  cancelFloatingWrapperAnimation(doc);
+
+  if (
+    isEmbeddedAutoExpansionEnabled() &&
+    !areExpandCollapseAnimationsEnabled()
+  ) {
+    applyFloatingWrapperPresentation(doc);
+    return;
+  }
+
+  const targetWidth = resolveFloatingWrapperWidth(
+    false,
+    expanded,
+    isAutoExpandEnabled(),
+    isAutoExpandEmbeddedEnabled(),
+    getSavedWidth(),
+    getCollapsedStripWidth(),
+  );
+  const startWidth = wrapper.clientWidth || getCollapsedStripWidth();
+  if (startWidth === targetWidth) {
+    applyFloatingWrapperPresentation(doc);
+    return;
+  }
+
+  // XUL vboxes do not animate CSS width transitions reliably, so drive the
+  // layout width per frame, in sync with the sidebar's 0.2s transition.
+  wrapper.style.minWidth = "0px";
+  wrapper.style.maxWidth = "none";
+  wrapper.removeAttribute("hidden");
+  const startTime = Date.now();
+  const duration = 220;
+  const ease = expanded
+    ? (t: number) => t
+    : (t: number) => 1 - Math.pow(1 - t, 3);
+
+  const step = () => {
+    const t = Math.min(1, (Date.now() - startTime) / duration);
+    const eased = ease(t);
+    const width = Math.round(startWidth + (targetWidth - startWidth) * eased);
+    wrapper.style.width = `${width}px`;
+    if (t < 1) {
+      getDocState(doc).wrapperAnimRaf = win.requestAnimationFrame(step);
+      return;
+    }
+    getDocState(doc).wrapperAnimRaf = null;
+    applyFloatingWrapperPresentation(doc);
+  };
+
+  wrapper.style.width = `${startWidth}px`;
+  getDocState(doc).wrapperAnimRaf = win.requestAnimationFrame(step);
+}
+
+/**
  * Apply the collapsed-strip presentation for the current prefs: toggles the
  * minimal (16px, plugin-icon-only) class on the sidebar and refreshes the
  * wrapper width. Called by renderSidebarMode, after each floating collapse,
  * and by the autoExpand/compactStrip pref observers so toggles apply live.
  */
-export function applyCollapsedStripPresentation(doc: Document): void {
+export function applyCollapsedStripPresentation(
+  doc: Document,
+  animateEmbedded = false,
+): void {
   const sidebar = getSidebar(doc);
   if (!sidebar) return;
   const minimal =
@@ -1505,8 +1711,65 @@ export function applyCollapsedStripPresentation(doc: Document): void {
     !isFloatingExpanded(doc) &&
     getCollapsedStripWidth() === MINIMAL_STRIP_WIDTH;
   sidebar.classList.toggle("vertical-tabs-sidebar-minimal", minimal);
+  sidebar.classList.toggle(
+    "vertical-tabs-sidebar-embedded-expanded",
+    isFloatingExpanded(doc) &&
+      isAutoExpandEnabled() &&
+      isAutoExpandEmbeddedEnabled(),
+  );
   if (!isPinned()) {
-    setWrapperAndSplitter(doc, "floating");
+    if (
+      animateEmbedded &&
+      isAutoExpandEnabled() &&
+      isAutoExpandEmbeddedEnabled()
+    ) {
+      animateFloatingWrapper(doc, false);
+    } else {
+      applyFloatingWrapperPresentation(doc);
+    }
+  }
+}
+
+/** Apply the animation preference and settle any in-flight transition. */
+export function applyExpandCollapseAnimationPreference(
+  doc: Document,
+): void {
+  const sidebar = getSidebar(doc);
+  if (!sidebar) return;
+
+  const enabled = areExpandCollapseAnimationsEnabled();
+  sidebar.classList.toggle(
+    "vertical-tabs-sidebar-no-animations",
+    !enabled,
+  );
+  if (enabled) return;
+
+  cancelFloatingWrapperAnimation(doc);
+  cancelMinimalIconFadeIn(sidebar);
+  const embeddedAutoExpansion = isEmbeddedAutoExpansionEnabled();
+  if (embeddedAutoExpansion && isExpandAnimating(doc)) {
+    getDocState(doc).expandAnimationToken = null;
+    setExpandAnimating(doc, false);
+    dispatchVtEvent(doc, "vertical-tabs:expand-animation-complete", {});
+  }
+
+  const pinAnimationWasRunning = getDocState(doc).pinAnimRaf !== null;
+  cancelPinAnimation(doc);
+  if (pinAnimationWasRunning) {
+    sidebar.classList.remove("vertical-tabs-sidebar-resizing");
+    sidebar.style.width = "";
+    sidebar.style.boxShadow = "";
+    sidebar.style.borderRightColor = "";
+    clearMinimalFadeStyles(sidebar);
+    _pinToggleHandledDocs.delete(doc);
+    _modeSwitchHandledDocs.delete(doc);
+    renderSidebarMode(doc);
+    updatePinButtonVisual(doc);
+    return;
+  }
+
+  if (!isPinned() && embeddedAutoExpansion) {
+    applyFloatingWrapperPresentation(doc);
   }
 }
 
@@ -1524,10 +1787,17 @@ export function renderSidebarMode(doc: Document): HTMLElement | null {
   clearLeaveTimer(doc);
   clearInputPositionListener(doc);
   cancelPinAnimation(doc);
+  cancelFloatingWrapperAnimation(doc);
+  getDocState(doc).expandAnimationToken = null;
+  setExpandAnimating(doc, false);
   setWaitMouseMoveAfterInput(doc, false);
 
   const pinned = isPinned();
   const sidebar = getSidebar(doc) ?? createSidebar(doc);
+  sidebar.classList.toggle(
+    "vertical-tabs-sidebar-no-animations",
+    !areExpandCollapseAnimationsEnabled(),
+  );
 
   // Ensure tab height CSS variable is up-to-date.
   applyTabHeightStyle(doc);
@@ -1535,6 +1805,7 @@ export function renderSidebarMode(doc: Document): HTMLElement | null {
   if (pinned) {
     applySidebarClasses(sidebar, "pinned");
     sidebar.classList.remove("vertical-tabs-sidebar-expanded");
+    sidebar.classList.remove("vertical-tabs-sidebar-embedded-expanded");
     sidebar.classList.remove("vertical-tabs-sidebar-minimal");
     sidebar.removeAttribute("hidden");
     sidebar.style.display = "";
@@ -1553,6 +1824,7 @@ export function renderSidebarMode(doc: Document): HTMLElement | null {
     sidebar.style.width = "";
     sidebar.style.setProperty("--vt-content-opacity", "0");
     setFloatingExpanded(doc, false);
+    sidebar.classList.remove("vertical-tabs-sidebar-embedded-expanded");
     setResizeHandleVisible(doc, true);
     applyCollapsedStripPresentation(doc);
     stopPinnedRefreshTimer();
@@ -1606,6 +1878,9 @@ export function destroySidebar(doc: Document): void {
   clearInputPositionListener(doc);
   clearWidthObserver(doc);
   cancelPinAnimation(doc);
+  cancelFloatingWrapperAnimation(doc);
+  getDocState(doc).expandAnimationToken = null;
+  setExpandAnimating(doc, false);
   stopPinnedRefreshTimer();
   stopDisplayRefreshTimer();
   setWaitMouseMoveAfterInput(doc, false);

@@ -73,6 +73,12 @@ export function getStyles(): string {
       transition-timing-function: ease-in;
     }
 
+    /* Embedded automatic expansion reserves layout space, so it does not
+       need the floating panel shadow that separates an overlay from content. */
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-floating.vertical-tabs-sidebar-expanded.vertical-tabs-sidebar-embedded-expanded {
+      box-shadow: none;
+    }
+
     #${SIDEBAR_ID} .vertical-tabs-header {
       display: flex;
       align-items: center;
@@ -1436,6 +1442,14 @@ export function getStyles(): string {
 
     #${SPLITTER_ID}[hidden] {
       display: none !important;
+    }
+
+    /* User preference: settle every sidebar visual change immediately. Keep
+       this rule after the component transition declarations so it wins the
+       cascade for nested controls as well as the sidebar itself. */
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-no-animations,
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-no-animations * {
+      transition: none !important;
     }
 
     @media (prefers-color-scheme: dark) {
