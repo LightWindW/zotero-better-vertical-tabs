@@ -6,6 +6,7 @@ import {
   type TabHeight,
 } from "../modules/render/tabHeight";
 import { clearSavedCategories } from "../modules/save/savedCategoryStore";
+import { clearCardFigures } from "../modules/ui/cardFigure";
 
 export async function registerPrefsScripts(_window: Window) {
   // This function is called when the prefs window is opened
@@ -289,6 +290,22 @@ function bindPrefEvents() {
         }
       } catch {
         // ignore
+      }
+    });
+  }
+
+  const clearCardFiguresBtn = addon.data.prefs!.window.document?.getElementById(
+    `${config.addonRef}-clear-card-figures`,
+  ) as HTMLButtonElement | null;
+  if (clearCardFiguresBtn) {
+    clearCardFiguresBtn.addEventListener("click", async () => {
+      try {
+        await clearCardFigures();
+        for (const win of Zotero.getMainWindows()) {
+          dispatchVtEvent(win.document, "vertical-tabs:card-figures-cleared");
+        }
+      } catch (error) {
+        ztoolkit.log("Failed to clear card figures:", error);
       }
     });
   }

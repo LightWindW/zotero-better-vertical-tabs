@@ -113,6 +113,7 @@ vertical-tabs-close-selected-tabs = Cerrar pestañas seleccionadas
 vertical-tabs-close-other-tabs = Cerrar otras pestañas
 vertical-tabs-extra = Extra
 vertical-tabs-edit-extra = Editar Extra
+vertical-tabs-card-figure-input = Capturar imagen para la tarjeta flotante
 vertical-tabs-university = Universidad
 
 # Guardar / importar categorías

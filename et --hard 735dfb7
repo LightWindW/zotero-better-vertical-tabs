@@ -1,0 +1,87 @@
+[33m205cacd[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{0}: reset: moving to HEAD~1
+[33m735dfb7[m HEAD@{1}: commit: feat: Embedded expansion and Protect categorized tags
+[33m205cacd[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{2}: pull origin main: Fast-forward
+[33m1052e06[m[33m ([m[1;31morigin/fix-deps-update[m[33m, [m[1;32mfix-deps-update[m[33m)[m HEAD@{3}: checkout: moving from fix-deps-update to main
+[33m1052e06[m[33m ([m[1;31morigin/fix-deps-update[m[33m, [m[1;32mfix-deps-update[m[33m)[m HEAD@{4}: checkout: moving from main to fix-deps-update
+[33m1052e06[m[33m ([m[1;31morigin/fix-deps-update[m[33m, [m[1;32mfix-deps-update[m[33m)[m HEAD@{5}: commit: fix: update import path for zotero-plugin-toolkit 5.2.0
+[33m6124306[m HEAD@{6}: checkout: moving from main to main
+[33m6124306[m HEAD@{7}: commit: chore: remove
+[33m6ba145c[m[33m ([m[1;33mtag: [m[1;33mv1.2.5[m[33m)[m HEAD@{8}: commit: feat: UI update, Zotero 10
+[33m4f1c481[m HEAD@{9}: commit: docs(readme): figs update
+[33m7c5a186[m[33m ([m[1;33mtag: [m[1;33mv1.2.0[m[33m)[m HEAD@{10}: commit: fix: update version
+[33m07e079d[m HEAD@{11}: commit: feat: Update hover card positioning logic and enhance documentation with new images
+[33m84b9274[m HEAD@{12}: commit: refactor: card tab interactions and animations
+[33mdd2ba85[m HEAD@{13}: commit: feat: Improve external drop handling animation
+[33m0f1c056[m HEAD@{14}: commit: feat: Help instruction figs
+[33m46ff3bf[m HEAD@{15}: commit: feat: Mode changes completed
+[33m89e0c25[m HEAD@{16}: reset: moving to 89e0c255dd2e7988a55727cf59661bbe89c6519b
+[33m89e0c25[m HEAD@{17}: commit: feat: VT Multi-Mode Switching
+[33m9e84b09[m HEAD@{18}: commit: feat: add "Edit Extra" functionality in context menu and "help" updates
+[33m9af61d2[m HEAD@{19}: commit: docs(help): 更新使用帮助内容
+[33mf92c76d[m HEAD@{20}: commit: v1.1.6-feat: Code optimization
+[33mc62a452[m HEAD@{21}: commit: v1.1.5-feat: optimization
+[33m429b14c[m HEAD@{22}: commit: v1.1.4：优化动画细节
+[33m3bc14af[m HEAD@{23}: commit: v1.1.3：分类拖拽动画优化
+[33m0d58fa1[m HEAD@{24}: commit: v1.1.2：快速新建分类，动画连贯性
+[33mdf91daf[m HEAD@{25}: commit: v1.1.1:隐藏原生标签栏
+[33m1cbc287[m HEAD@{26}: commit: v1.1,0:拖拽功能完善
+[33md6fe38f[m HEAD@{27}: commit: v1.0.9: 拖拽动画平滑过渡
+[33m4da491e[m HEAD@{28}: commit: v1.0.8: 分类拖拽动画改进v1
+[33m42605f2[m[33m ([m[1;33mtag: [m[1;33mv1.0.7[m[33m)[m HEAD@{29}: commit: v1.0.7: 分类拖拽动画部分实现
+[33m5190b73[m HEAD@{30}: commit: v1.0.6: 无分类拖拽动画改进
+[33m137bf13[m[33m ([m[1;33mtag: [m[1;33mv1.0.5[m[33m)[m HEAD@{31}: commit: v1.0.5: 新增使用帮助弹窗
+[33m5ae84a8[m[33m ([m[1;33mtag: [m[1;33mv1.0.4[m[33m)[m HEAD@{32}: commit: v1.0.4: 同步首选项多语言文案，默认开启自动释放（120分钟）并微调提示条样式
+[33mc051f6e[m HEAD@{33}: commit: v1.0.4: 已打开附件高亮与自动关闭阅读页面
+[33m29e62d4[m HEAD@{34}: reset: moving to HEAD
+[33m29e62d4[m HEAD@{35}: commit: v1.0.3bug fixed-标签关联问题修复
+[33m52d35e1[m[33m ([m[1;33mtag: [m[1;33mv1.0.2[m[33m)[m HEAD@{36}: commit: v1.0.2: 拖拽打开顺序调整
+[33mf7b59ee[m[33m ([m[1;33mtag: [m[1;33mv1.0.1[m[33m)[m HEAD@{37}: commit: v1.0.1: 外部拖拽生成标签与西班牙语适配
+[33m5706d33[m HEAD@{38}: commit: docs: 更新 README 配图与说明
+[33m1af2e3f[m[33m ([m[1;33mtag: [m[1;33mv1.0.0[m[33m, [m[1;32mv1.0.0[m[33m)[m HEAD@{39}: rebase (finish): returning to refs/heads/main
+[33m1af2e3f[m[33m ([m[1;33mtag: [m[1;33mv1.0.0[m[33m, [m[1;32mv1.0.0[m[33m)[m HEAD@{40}: rebase (pick): v1.0.0: 发布正式版
+[33mdc4467f[m[33m ([m[1;33mtag: [m[1;33mv0.6.0[m[33m)[m HEAD@{41}: rebase (pick): v0.6.0: 导入弹窗修复、文档补充与版本发布
+[33m2814b0d[m[33m ([m[1;33mtag: [m[1;33mv0.5.5[m[33m)[m HEAD@{42}: rebase (pick): v0.5.5: reader页分类标题高亮
+[33mbc23a13[m[33m ([m[1;33mtag: [m[1;33mv0.5.0[m[33m)[m HEAD@{43}: rebase (pick): v0.5.0: 颜色修正
+[33m041ba5f[m[33m ([m[1;33mtag: [m[1;33mv0.4.9[m[33m)[m HEAD@{44}: rebase (pick): v0.4.9: 小bug修复，更统一
+[33mdf31c94[m HEAD@{45}: rebase (pick): v0.4.8: 标签高度自定义
+[33m654947a[m[33m ([m[1;33mtag: [m[1;33mv0.4.6[m[33m)[m HEAD@{46}: rebase (pick): v0.4.6: 磨砂兼容，图标修复
+[33m2252784[m HEAD@{47}: rebase (pick): v0.4.5: 小bug修复，更好用
+[33mbe4a071[m HEAD@{48}: rebase (pick): v0.4.4: 分类保存和导入
+[33mcc4d829[m[33m ([m[1;33mtag: [m[1;33mv0.4.3[m[33m)[m HEAD@{49}: rebase (pick): v0.4.3: 更小的间距
+[33m5770872[m HEAD@{50}: rebase (pick): v0.4.2: 基础和谐的动画，但间距过大
+[33m09da3dc[m[33m ([m[1;33mtag: [m[1;33mv0.4.1[m[33m)[m HEAD@{51}: rebase (pick): v0.4.1: 统一图标
+[33mf2e8a99[m[33m ([m[1;33mtag: [m[1;33mv0.4.0[m[33m)[m HEAD@{52}: rebase (pick): v0.4.0: 统一VT侧边栏
+[33m20f377e[m[33m ([m[1;33mtag: [m[1;33mv0.3.0[m[33m)[m HEAD@{53}: rebase (pick): v0.3.0: 实现基础功能
+[33mf17abd5[m[33m ([m[1;33mtag: [m[1;33mv0.2.1[m[33m)[m HEAD@{54}: rebase (pick): fix: 显式指定 tsconfig extends 路径，解决 VSCode 类型解析报错
+[33m44c37d6[m[33m ([m[1;33mtag: [m[1;33mv0.2.0[m[33m)[m HEAD@{55}: rebase (pick): v0.2.0: 可用的垂直标签栏版本
+[33m2856224[m[33m ([m[1;33mtag: [m[1;33mv0.1.2[m[33m)[m HEAD@{56}: rebase (pick): style: 将 Normalize 相关文案与图标统一为 Better Vertical Tabs / BVT / V
+[33m5843622[m[33m ([m[1;33mtag: [m[1;33mv0.1.1[m[33m)[m HEAD@{57}: rebase (pick): fix: 使用方括号访问含连字符的插件实例，修复 bootstrap 与首选项面板
+[33m05da68a[m[33m ([m[1;33mtag: [m[1;33mv0.1.0[m[33m)[m HEAD@{58}: rebase (reword): v0.1.0: 垂直标签栏基础功能
+[33ma2a79a3[m HEAD@{59}: rebase: fast-forward
+[33mae39ee3[m HEAD@{60}: rebase (start): checkout a2a79a3^
+[33m2f847f9[m[33m ([m[1;33mtag: [m[1;33mrelease[m[33m, [m[1;31morigin/v1.0.0[m[33m)[m HEAD@{61}: checkout: moving from v1.0.0 to main
+[33m2f847f9[m[33m ([m[1;33mtag: [m[1;33mrelease[m[33m, [m[1;31morigin/v1.0.0[m[33m)[m HEAD@{62}: checkout: moving from main to v1.0.0
+[33m2f847f9[m[33m ([m[1;33mtag: [m[1;33mrelease[m[33m, [m[1;31morigin/v1.0.0[m[33m)[m HEAD@{63}: commit: v1.0.0: 发布正式版
+[33m0763bd7[m HEAD@{64}: commit: v0.6.0: 导入弹窗修复、文档补充与版本发布
+[33m6caca8d[m HEAD@{65}: commit: v0.5.5: reader页分类标题高亮
+[33mc435b3d[m HEAD@{66}: commit: v0.5.0: 颜色修正
+[33mbfa8707[m HEAD@{67}: reset: moving to v0.4.9
+[33mbfa8707[m HEAD@{68}: commit: v0.4.9: 小bug修复，更统一
+[33mfd5d438[m HEAD@{69}: commit: v0.4.8: 标签高度自定义
+[33m97ad6e4[m HEAD@{70}: reset: moving to 97ad6e4
+[33m2e8371b[m HEAD@{71}: commit: v0.4.7: 高度自定义以及折叠高亮
+[33m97ad6e4[m HEAD@{72}: commit: v0.4.6: 磨砂兼容，图标修复
+[33m6f182bf[m HEAD@{73}: commit: v0.4.5: 小bug修复，更好用
+[33m9862f5b[m HEAD@{74}: commit: v0.4.4: 分类保存和导入
+[33m7179c31[m HEAD@{75}: commit (amend): v0.4.3: 更小的间距
+[33m92edc15[m HEAD@{76}: commit: v0.4.3: 更小的间距
+[33mc0a6522[m HEAD@{77}: commit: v0.4.2: 基础和谐的动画，但间距过大
+[33mb769721[m HEAD@{78}: commit: v0.4.1: 统一图标
+[33m4394b4a[m HEAD@{79}: commit: v0.4.0: 统一VT侧边栏
+[33m7624a6a[m HEAD@{80}: reset: moving to 7624a6ad9f43a434aed33d18e0cecc4699fbee02
+[33md913064[m HEAD@{81}: reset: moving to v0.3.0
+[33m6253bf9[m HEAD@{82}: commit: v0.3.0: 实现基础功能
+[33mf526889[m HEAD@{83}: reset: moving to f526889
+[33md913064[m HEAD@{84}: commit: v0.3.0: 实现基础功能
+[33m7624a6a[m HEAD@{85}: commit: v0.3.0: 实现基础功能
+[33mf

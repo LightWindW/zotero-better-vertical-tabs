@@ -3,6 +3,7 @@ import { getString } from "../../utils/locale";
 import {
   claimContextMenuOpen,
   collapseFloatingSidebar,
+  collapseFloatingSidebarNow,
   getCategoriesContainer,
   releaseContextMenuOpen,
   scheduleCollapse,
@@ -84,7 +85,12 @@ import {
   placePopupWithinWindow,
 } from "../ui/popupAnimation";
 import { animateTabsExit } from "./tabExit";
-import { suppressCard } from "../ui/hoverCard";
+import {
+  releaseCardSuppression,
+  setCardFigureCaptureItem,
+  suppressCard,
+} from "../ui/hoverCard";
+import { captureCardFigure, getCardFigureItemId } from "../ui/cardFigure";
 import { showToast } from "../ui/toast";
 import {
   consumeMultiTabRelease,
@@ -1921,6 +1927,21 @@ export function showItemContextMenu(
       });
     }
     addDivider();
+  }
+
+  const captureItemId = getCardFigureItemId(pdf.itemId, pdf.parentItemId);
+  if (Number.isInteger(captureItemId) && captureItemId > 0) {
+    addItem(getString("vertical-tabs-card-figure-input"), () => {
+      // Keep the capture target independent from hover-card ownership.
+      // Hiding the card clears its target while selecting a rectangle.
+      setCardFigureCaptureItem(captureItemId, pdf.itemId);
+      suppressCard(doc, true, true);
+      collapseFloatingSidebarNow(doc);
+      void captureCardFigure(doc, captureItemId).finally(() => {
+        setCardFigureCaptureItem(null);
+        releaseCardSuppression();
+      });
+    });
   }
 
   addItem(getString("vertical-tabs-close-tab"), () => {

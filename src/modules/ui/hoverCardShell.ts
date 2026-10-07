@@ -35,12 +35,13 @@ export const HOVER_CARD_ID = "vertical-tabs-hover-card";
 export type HoverCardOwner = "item" | "category";
 
 /** Card horizontal padding (12px × 2) — inner width = clientWidth minus it. */
-const CARD_PADDING_X = 24;
+export const CARD_PADDING_X = 24;
 
 let _owner: HoverCardOwner | null = null;
 let _currentTarget: HTMLElement | null = null;
 let _hideTimer: ReturnType<typeof setTimeout> | null = null;
 let _displayNoneTimer: ReturnType<typeof setTimeout> | null = null;
+let _showSequence = 0;
 
 /** Grace period between opacity 0 and display:none so the fade-out plays. */
 const FADE_OUT_SETTLE_MS = 160;
@@ -71,7 +72,12 @@ function getCardInner(card: HTMLElement): HTMLElement {
 
 export function getCardEl(doc: Document): HTMLElement {
   const existing = doc.getElementById(HOVER_CARD_ID) as HTMLElement | null;
-  if (existing) return existing;
+  if (existing) {
+    if (!existing.dataset.vtCardTransition) {
+      existing.dataset.vtCardTransition = existing.style.transition;
+    }
+    return existing;
+  }
 
   const card = createEl(doc, "div");
   card.id = HOVER_CARD_ID;
@@ -90,6 +96,7 @@ export function getCardEl(doc: Document): HTMLElement {
   `;
   const inner = createEl(doc, "div");
   card.appendChild(inner);
+  card.dataset.vtCardTransition = card.style.transition;
   doc.documentElement?.appendChild(card);
   return card;
 }
@@ -146,6 +153,14 @@ function cancelHide(): void {
 interface CardTargetSize {
   width: number;
   height: number;
+}
+
+function prepareRenderWidth(card: HTMLElement, opts: CardShowOptions): void {
+  card.style.maxWidth = opts.maxWidth ? `${opts.maxWidth}px` : "";
+  if (opts.width === "auto") return;
+  card.style.width = `${opts.width}px`;
+  const inner = getCardInner(card);
+  if (inner) inner.style.width = `${card.clientWidth - CARD_PADDING_X}px`;
 }
 
 /**
@@ -219,8 +234,9 @@ export async function showCard(
   owner: HoverCardOwner,
   target: HTMLElement,
   opts: CardShowOptions,
-  render: (cardContent: HTMLElement) => void,
+  render: (cardContent: HTMLElement) => void | Promise<void>,
 ): Promise<void> {
+  const showSequence = ++_showSequence;
   const card = getCardEl(doc);
   // Cancel any pending fade-out/display-none — a show during the fade-out
   // window must win, otherwise the card stays invisible at opacity 0.
@@ -230,14 +246,31 @@ export async function showCard(
   _currentTarget = target;
   applyCardTheme(doc);
 
-  const originalTransition = card.style.transition;
+  const originalTransition =
+    card.style.transition === "none"
+      ? card.dataset.vtCardTransition || ""
+      : card.style.transition;
   card.style.transition = "none";
 
   if (isSwitch) {
     // Current rendered size = transition start (may be mid-animation).
     const fromWidth = card.offsetWidth;
     const fromHeight = card.offsetHeight;
-    render(getCardInner(card));
+    // Lay out the new content at its final width before the async renderer
+    // reads image dimensions. Restore the old outer width only for the
+    // transition's starting frame.
+    prepareRenderWidth(card, opts);
+    card.style.width = `${fromWidth}px`;
+    try {
+      await render(getCardInner(card));
+    } catch (error) {
+      card.style.transition = originalTransition;
+      throw error;
+    }
+    if (showSequence !== _showSequence) {
+      card.style.transition = originalTransition;
+      return;
+    }
     const size = measureTargetSize(card, opts);
     // Restore the from-size, commit it, then transition to the targets.
     card.style.width = `${fromWidth}px`;
@@ -254,7 +287,17 @@ export async function showCard(
 
   card.style.display = "block";
   card.style.opacity = "0";
-  render(getCardInner(card));
+  prepareRenderWidth(card, opts);
+  try {
+    await render(getCardInner(card));
+  } catch (error) {
+    card.style.transition = originalTransition;
+    throw error;
+  }
+  if (showSequence !== _showSequence) {
+    card.style.transition = originalTransition;
+    return;
+  }
   const size = measureTargetSize(card, opts);
   card.style.height = `${size.height}px`;
   positionCard(card, target, size, opts, true);
@@ -270,6 +313,7 @@ export function hideCard(
   delayMs: number,
 ): void {
   if (_owner && _owner !== owner) return;
+  _showSequence++;
   cancelHide();
   _hideTimer = setTimeout(() => {
     _hideTimer = null;
@@ -278,6 +322,9 @@ export function hideCard(
       _owner = null;
       _currentTarget = null;
       return;
+    }
+    if (card.style.transition === "none") {
+      card.style.transition = card.dataset.vtCardTransition || "";
     }
     card.style.opacity = "0";
     // Let the opacity transition actually play before removing the card
@@ -294,9 +341,13 @@ export function hideCard(
 /** Immediate hide (dismiss on click/right-click/drag, dead target, destroy). */
 export function hideCardNow(doc: Document, owner: HoverCardOwner | null): void {
   if (owner && _owner && _owner !== owner) return;
+  _showSequence++;
   cancelHide();
   const card = doc.getElementById(HOVER_CARD_ID) as HTMLElement | null;
   if (card) {
+    if (card.style.transition === "none") {
+      card.style.transition = card.dataset.vtCardTransition || "";
+    }
     card.style.opacity = "0";
     card.style.display = "none";
   }
@@ -306,6 +357,7 @@ export function hideCardNow(doc: Document, owner: HoverCardOwner | null): void {
 
 /** Remove the element and clear all state (full teardown). */
 export function destroyCardEl(doc: Document): void {
+  _showSequence++;
   cancelHide();
   _owner = null;
   _currentTarget = null;

@@ -1154,7 +1154,10 @@ function animatePinToggle(doc: Document, toPinned: boolean): void {
 
   cancelPinAnimation(doc);
   cancelFloatingWrapperAnimation(doc);
-  if (isEmbeddedAutoExpansionEnabled() && !areExpandCollapseAnimationsEnabled()) {
+  if (
+    isEmbeddedAutoExpansionEnabled() &&
+    !areExpandCollapseAnimationsEnabled()
+  ) {
     finish();
     return;
   }
@@ -1525,19 +1528,13 @@ function performCollapse(doc: Document): void {
         ":scope > .vertical-tabs-minimal-icon",
       ) as HTMLElement | null)
     : null;
-  if (
-    minimalIcon &&
-    (!embeddedAutoExpansion || embeddedAnimationsEnabled)
-  ) {
+  if (minimalIcon && (!embeddedAutoExpansion || embeddedAnimationsEnabled)) {
     startMinimalIconFadeIn(doc, minimalIcon);
   }
   // Collapsed now: the minimal 16px strip may apply (prefs changed while
   // expanded never gets the class, so it is applied here on collapse).
   applyCollapsedStripPresentation(doc, true);
-  if (
-    minimalIcon &&
-    (!embeddedAutoExpansion || embeddedAnimationsEnabled)
-  ) {
+  if (minimalIcon && (!embeddedAutoExpansion || embeddedAnimationsEnabled)) {
     void minimalIcon.offsetHeight;
     minimalIcon.style.opacity = "1";
   }
@@ -1562,6 +1559,12 @@ export function collapseFloatingSidebar(doc: Document): void {
     return;
   }
 
+  performCollapse(doc);
+}
+
+/** Collapse immediately for actions that must remove the expanded sidebar. */
+export function collapseFloatingSidebarNow(doc: Document): void {
+  if (isPinned() || !isFloatingExpanded(doc)) return;
   performCollapse(doc);
 }
 
@@ -1731,17 +1734,12 @@ export function applyCollapsedStripPresentation(
 }
 
 /** Apply the animation preference and settle any in-flight transition. */
-export function applyExpandCollapseAnimationPreference(
-  doc: Document,
-): void {
+export function applyExpandCollapseAnimationPreference(doc: Document): void {
   const sidebar = getSidebar(doc);
   if (!sidebar) return;
 
   const enabled = areExpandCollapseAnimationsEnabled();
-  sidebar.classList.toggle(
-    "vertical-tabs-sidebar-no-animations",
-    !enabled,
-  );
+  sidebar.classList.toggle("vertical-tabs-sidebar-no-animations", !enabled);
   if (enabled) return;
 
   cancelFloatingWrapperAnimation(doc);
