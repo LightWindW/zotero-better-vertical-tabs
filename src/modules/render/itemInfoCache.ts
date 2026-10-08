@@ -33,7 +33,13 @@ export function computeItemInfo(item: Zotero.Item): ItemInfo {
   const authorsLabel = creators.length > 3 ? `${authors} et al.` : authors;
 
   const date = (item.getField("date") as string) || "";
-  const year = date ? date.slice(0, 4) : "";
+  const yearMatch = date.match(/^(\d{4})(?:-(\d{2}))?/);
+  const month = Number(yearMatch?.[2] || 0);
+  const year = yearMatch
+    ? month >= 1 && month <= 12
+      ? `${yearMatch[1]}-${yearMatch[2]}`
+      : yearMatch[1]
+    : "";
   const journal =
     (item.getField("publicationTitle") as string) ||
     (item.getField("proceedingsTitle") as string) ||

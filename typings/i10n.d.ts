@@ -94,6 +94,8 @@ export type FluentMessageId =
   | 'vertical-tabs-apply-category'
   | 'vertical-tabs-authors'
   | 'vertical-tabs-cancel'
+  | 'vertical-tabs-card-figure-delete'
+  | 'vertical-tabs-card-figure-delete-failed'
   | 'vertical-tabs-card-figure-input'
   | 'vertical-tabs-category-default'
   | 'vertical-tabs-category-new'

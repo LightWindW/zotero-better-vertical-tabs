@@ -417,8 +417,14 @@ export function getStyles(): string {
       transition: padding 0.2s ease-out, gap 0.2s ease-out, margin 0.2s ease-out, transform 0.2s ease-out, background 0.2s ease, box-shadow 0.2s ease;
     }
 
-    #${SIDEBAR_ID} .vertical-tabs-item:hover {
+    #${SIDEBAR_ID} .vertical-tabs-item:hover,
+    #${SIDEBAR_ID} .vertical-tabs-item.vt-sidebar-row-hover {
       background: var(--material-hover, rgba(0, 0, 0, 0.04));
+    }
+
+    #${SIDEBAR_ID}.vt-sidebar-row-band-hover,
+    #${SIDEBAR_ID}.vt-sidebar-row-band-hover * {
+      cursor: pointer;
     }
 
     /* Category headers get the same hover block in light mode (the dark
@@ -497,9 +503,24 @@ export function getStyles(): string {
       border-radius: 5px;
     }
 
-    #${SIDEBAR_ID} .vertical-tabs-item.active:hover {
+    #${SIDEBAR_ID} .vertical-tabs-item.active:hover,
+    #${SIDEBAR_ID} .vertical-tabs-item.active.vt-sidebar-row-hover {
       background: #fff;
       box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+    }
+
+    #${SIDEBAR_ID}.vt-hover-locked .vertical-tabs-item:hover:not(.vt-sidebar-row-hover) {
+      background: transparent;
+      box-shadow: none;
+    }
+
+    #${SIDEBAR_ID}.vt-hover-locked .vertical-tabs-item.active:hover:not(.vt-sidebar-row-hover) {
+      background: #fff;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+    }
+
+    #${SIDEBAR_ID}.vt-hover-locked .vertical-tabs-item:hover:not(.vt-sidebar-row-hover) .vertical-tabs-item-close {
+      opacity: 0;
     }
 
     /* While a category is collapsed, the active row's highlight stays
@@ -1303,6 +1324,7 @@ export function getStyles(): string {
 
       #${SIDEBAR_ID} .vertical-tabs-category-header:hover,
       #${SIDEBAR_ID} .vertical-tabs-item:hover,
+      #${SIDEBAR_ID} .vertical-tabs-item.vt-sidebar-row-hover,
       #${SIDEBAR_ID} .vertical-tabs-home-btn:hover {
         background: var(--material-hover, rgba(255, 255, 255, 0.05));
       }
@@ -1326,9 +1348,15 @@ export function getStyles(): string {
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
       }
 
-      #${SIDEBAR_ID} .vertical-tabs-item.active:hover {
+      #${SIDEBAR_ID} .vertical-tabs-item.active:hover,
+      #${SIDEBAR_ID} .vertical-tabs-item.active.vt-sidebar-row-hover {
         background: #626262;
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+      }
+
+      #${SIDEBAR_ID}.vt-hover-locked .vertical-tabs-item.active:hover:not(.vt-sidebar-row-hover) {
+        background: #626262;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
       }
 
       #${SIDEBAR_ID} .vertical-tabs-home-btn.active:hover {

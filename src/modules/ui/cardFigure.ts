@@ -253,6 +253,29 @@ export async function getCardFigureDataUrl(
   }
 }
 
+export async function hasCardFigure(itemId: number): Promise<boolean> {
+  if (!Number.isInteger(itemId) || itemId <= 0) return false;
+  const path = getFigurePath(getCardFigureItemId(itemId));
+  try {
+    return await IOUtils.exists(path);
+  } catch (error) {
+    ztoolkit.log("Failed to check card figure:", error);
+    return false;
+  }
+}
+
+export async function deleteCardFigure(itemId: number): Promise<boolean> {
+  if (!Number.isInteger(itemId) || itemId <= 0) return false;
+  const path = getFigurePath(getCardFigureItemId(itemId));
+  try {
+    if (await IOUtils.exists(path)) await IOUtils.remove(path);
+    return true;
+  } catch (error) {
+    ztoolkit.log("Failed to delete card figure:", error);
+    return false;
+  }
+}
+
 export async function clearCardFigures(): Promise<number[]> {
   const ids: number[] = [];
   try {

@@ -137,6 +137,10 @@ export interface CardShowOptions {
   maxWidth?: number;
   /** Cursor Y — used for the first show; switches center on the row rect. */
   mouseY?: number;
+  /** Align this content element's top with the target row's top. */
+  titleSelector?: string;
+  /** Align the outer top with the row when no title anchor is present. */
+  alignTop?: boolean;
 }
 
 function cancelHide(): void {
@@ -200,7 +204,7 @@ function positionCard(
   size: CardTargetSize,
   opts: CardShowOptions,
   useMouseY: boolean,
-): void {
+): { left: number; top: number } {
   const rect = target.getBoundingClientRect();
   const win = target.ownerDocument?.defaultView;
   const winWidth = win?.innerWidth ?? 800;
@@ -211,7 +215,14 @@ function positionCard(
     left = Math.max(8, rect.left - size.width - 8);
   }
   let top: number;
-  if (useMouseY && opts.mouseY != null) {
+  const title = opts.titleSelector
+    ? card.querySelector<HTMLElement>(opts.titleSelector)
+    : null;
+  if (title) {
+    const titleOffset =
+      title.getBoundingClientRect().top - card.getBoundingClientRect().top;
+    top = rect.top - titleOffset;
+  } else if (!opts.alignTop && useMouseY && opts.mouseY != null) {
     top = opts.mouseY - size.height / 2;
   } else {
     top = rect.top;
@@ -220,6 +231,32 @@ function positionCard(
 
   card.style.left = `${left}px`;
   card.style.top = `${top}px`;
+  return { left, top };
+}
+
+/** Move an already visible card to the newest target before async content
+ * rendering finishes. The current card geometry is retained for this quick
+ * retarget, then showCard() will morph its size/content when rendering ends. */
+export function moveCardToTarget(
+  doc: Document,
+  target: HTMLElement,
+  opts: CardShowOptions,
+): void {
+  const card = doc.getElementById(HOVER_CARD_ID) as HTMLElement | null;
+  if (!card || card.style.display !== "block") return;
+  const transition =
+    card.style.transition === "none"
+      ? card.dataset.vtCardTransition || ""
+      : card.style.transition;
+  card.style.transition = transition;
+  const rect = card.getBoundingClientRect();
+  positionCard(
+    card,
+    target,
+    { width: rect.width, height: rect.height },
+    opts,
+    false,
+  );
 }
 
 /**
@@ -253,9 +290,14 @@ export async function showCard(
   card.style.transition = "none";
 
   if (isSwitch) {
-    // Current rendered size = transition start (may be mid-animation).
-    const fromWidth = card.offsetWidth;
-    const fromHeight = card.offsetHeight;
+    // Use the current rendered geometry as the transition start. The inline
+    // left/top can already contain the previous target while a transition is
+    // in flight, so getBoundingClientRect() is the authoritative position.
+    const fromRect = card.getBoundingClientRect();
+    const fromWidth = fromRect.width;
+    const fromHeight = fromRect.height;
+    const fromLeft = fromRect.left;
+    const fromTop = fromRect.top;
     // Lay out the new content at its final width before the async renderer
     // reads image dimensions. Restore the old outer width only for the
     // transition's starting frame.
@@ -272,14 +314,23 @@ export async function showCard(
       return;
     }
     const size = measureTargetSize(card, opts);
-    // Restore the from-size, commit it, then transition to the targets.
+    // Calculate the target position while the card has its final size. This
+    // matters for figure cards because their title anchor is at the bottom
+    // of the image and its offset changes with the card height.
+    const toPosition = positionCard(card, target, size, opts, false);
+
+    // Restore the current rendered geometry, commit it, then transition to
+    // the already-calculated target size and position in one frame.
+    card.style.left = `${fromLeft}px`;
+    card.style.top = `${fromTop}px`;
     card.style.width = `${fromWidth}px`;
     card.style.height = `${fromHeight}px`;
     void card.offsetWidth;
     card.style.transition = originalTransition;
     card.style.width = `${size.width}px`;
     card.style.height = `${size.height}px`;
-    positionCard(card, target, size, opts, false);
+    card.style.left = `${toPosition.left}px`;
+    card.style.top = `${toPosition.top}px`;
     // Restore opacity in case the card was mid fade-out.
     card.style.opacity = "1";
     return;

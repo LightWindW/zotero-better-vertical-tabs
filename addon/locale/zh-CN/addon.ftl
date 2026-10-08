@@ -114,7 +114,9 @@ vertical-tabs-close-selected-tabs = 关闭已选标签
 vertical-tabs-close-other-tabs = 关闭其他标签页
 vertical-tabs-extra = 备注
 vertical-tabs-edit-extra = 编辑额外字段
-vertical-tabs-card-figure-input = 悬浮卡图片输入
+vertical-tabs-card-figure-input = 截取预览图
+vertical-tabs-card-figure-delete = 删除预览图
+vertical-tabs-card-figure-delete-failed = 删除预览图失败
 vertical-tabs-university = 学校
 
 # 保存 / 导入分类

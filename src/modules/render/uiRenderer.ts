@@ -4,6 +4,7 @@ import {
   claimContextMenuOpen,
   collapseFloatingSidebar,
   collapseFloatingSidebarNow,
+  deferContextMenuReleaseUntilSidebarEnter,
   getCategoriesContainer,
   releaseContextMenuOpen,
   scheduleCollapse,
@@ -86,11 +87,17 @@ import {
 } from "../ui/popupAnimation";
 import { animateTabsExit } from "./tabExit";
 import {
+  lockSidebarHoverForContextMenu,
   releaseCardSuppression,
   setCardFigureCaptureItem,
   suppressCard,
 } from "../ui/hoverCard";
-import { captureCardFigure, getCardFigureItemId } from "../ui/cardFigure";
+import {
+  captureCardFigure,
+  deleteCardFigure,
+  getCardFigureItemId,
+  hasCardFigure,
+} from "../ui/cardFigure";
 import { showToast } from "../ui/toast";
 import {
   consumeMultiTabRelease,
@@ -1103,7 +1110,7 @@ function createItemElement(
   // ── Right-click context menu ──
   row.addEventListener("contextmenu", (e: MouseEvent) => {
     e.preventDefault();
-    showItemContextMenu(doc, pdf, e.clientX, e.clientY);
+    showItemContextMenu(doc, pdf, e.clientX, e.clientY, row);
   });
 
   row.addEventListener("dragstart", (event: DragEvent) => {
@@ -1177,20 +1184,6 @@ function createItemElement(
       clearAllItemDropIndicators(doc);
       clearDropPreview(doc);
     }
-  });
-
-  row.addEventListener("mouseenter", () => {
-    dispatchVtEvent(row, "vertical-tabs:item-hover", {
-      itemId: pdf.itemId,
-      tabId: pdf.tabId,
-    });
-  });
-
-  row.addEventListener("mouseleave", () => {
-    dispatchVtEvent(row, "vertical-tabs:item-hover-end", {
-      itemId: pdf.itemId,
-      tabId: pdf.tabId,
-    });
   });
 
   // Click to switch to this tab — unless a selection modifier is held:
@@ -1712,11 +1705,13 @@ function createMenuShell(doc: Document, x: number, y: number): MenuShell {
     });
     el.addEventListener("click", () => {
       // After a menu action VT stays open — nothing is scheduled here. It
-      // collapses only when the mouse returns to VT and leaves again (the
-      // normal rule), per the confirmed context-menu behavior.
-      animatePopupClose(menu, () => releaseContextMenuOpen(doc, menuToken));
+      // remains protected until the pointer returns to VT, then normal
+      // leave-collapse behavior resumes.
+      deferContextMenuReleaseUntilSidebarEnter(doc, menuToken);
+      animatePopupClose(menu);
       action();
     });
+    el.dataset.vtContextMenuAction = "true";
     menu.appendChild(el);
   };
 
@@ -1743,22 +1738,22 @@ function createMenuShell(doc: Document, x: number, y: number): MenuShell {
         w.document.removeEventListener("mousedown", closeMenu, true);
     };
     const closeMenu = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
       if (!menu.isConnected) {
         cleanup();
+        releaseContextMenuOpen(doc, menuToken);
+        if (!target.closest(`#${SIDEBAR_ID}`)) scheduleCollapse(doc);
         return;
       }
-      const target = e.target as HTMLElement;
       // Don't close if clicking inside the menu
       if (target.closest(`#${menuId}`)) return;
-      // Click inside VT → close menu, keep VT open (normal rules apply).
+      // Click inside VT → close menu and resume normal sidebar behavior.
       if (target.closest(`#${SIDEBAR_ID}`)) {
         animatePopupClose(menu, () => releaseContextMenuOpen(doc, menuToken));
         cleanup();
         return;
       }
-      // Click outside VT and the menu → close menu AND collapse VT. The
-      // collapse is scheduled only after the suppression is released,
-      // otherwise scheduleCollapse would be blocked by it.
+      // Click outside VT and the menu → close menu and collapse the sidebar.
       animatePopupClose(menu, () => {
         releaseContextMenuOpen(doc, menuToken);
         scheduleCollapse(doc);
@@ -1780,9 +1775,10 @@ export function showItemContextMenu(
   pdf: OpenedPDF,
   x: number,
   y: number,
+  row: HTMLElement,
 ): void {
-  // Right-click immediately suppresses (fades out) the hover card; it won't
-  // reappear until the user moves the mouse away and back over a row.
+  lockSidebarHoverForContextMenu(doc, row);
+  // Right-click suppresses the hover card until the user clicks again.
   suppressCard(doc);
 
   // Right-clicking an already-selected row with a live multi selection opens
@@ -1793,11 +1789,12 @@ export function showItemContextMenu(
     getSelectedTabCount(doc) > 1 &&
     isTabSelected(doc, pdf.tabId)
   ) {
-    showMultiSelectContextMenu(doc, x, y);
+    void showMultiSelectContextMenu(doc, x, y);
     return;
   }
 
   const { addItem, addDivider, open } = createMenuShell(doc, x, y);
+  addCardFigureMenuItems(doc, [pdf], addItem, addDivider);
 
   addItem(getString("vertical-tabs-add-category"), async () => {
     if (!pdf.tabId) return;
@@ -1929,21 +1926,6 @@ export function showItemContextMenu(
     addDivider();
   }
 
-  const captureItemId = getCardFigureItemId(pdf.itemId, pdf.parentItemId);
-  if (Number.isInteger(captureItemId) && captureItemId > 0) {
-    addItem(getString("vertical-tabs-card-figure-input"), () => {
-      // Keep the capture target independent from hover-card ownership.
-      // Hiding the card clears its target while selecting a rectangle.
-      setCardFigureCaptureItem(captureItemId, pdf.itemId);
-      suppressCard(doc, true, true);
-      collapseFloatingSidebarNow(doc);
-      void captureCardFigure(doc, captureItemId).finally(() => {
-        setCardFigureCaptureItem(null);
-        releaseCardSuppression();
-      });
-    });
-  }
-
   addItem(getString("vertical-tabs-close-tab"), () => {
     if (!pdf.tabId) return;
     const tabId = pdf.tabId;
@@ -1985,6 +1967,58 @@ export function showItemContextMenu(
   open();
 }
 
+function addCardFigureMenuItems(
+  doc: Document,
+  pdfs: OpenedPDF[],
+  addItem: MenuShell["addItem"],
+  addDivider: MenuShell["addDivider"],
+): void {
+  const captureTarget = pdfs.find((pdf) => {
+    const itemId = getCardFigureItemId(pdf.itemId, pdf.parentItemId);
+    return Number.isInteger(itemId) && itemId > 0;
+  });
+  if (!captureTarget) return;
+  const captureItemId = getCardFigureItemId(
+    captureTarget.itemId,
+    captureTarget.parentItemId,
+  );
+  if (!Number.isInteger(captureItemId) || captureItemId <= 0) return;
+
+  addItem(getString("vertical-tabs-card-figure-input"), () => {
+    // Keep the capture target independent from hover-card ownership.
+    // Hiding the card clears its target while selecting a rectangle.
+    setCardFigureCaptureItem(captureItemId, captureTarget.itemId);
+    suppressCard(doc, true, true);
+    collapseFloatingSidebarNow(doc);
+    void captureCardFigure(doc, captureItemId).finally(() => {
+      setCardFigureCaptureItem(null);
+      releaseCardSuppression();
+    });
+  });
+  addItem(getString("vertical-tabs-card-figure-delete"), async () => {
+    if (!(await deleteCardFigure(captureItemId))) {
+      showToast(doc, getString("vertical-tabs-card-figure-delete-failed"));
+    }
+  });
+  addDivider();
+}
+
+function addDeleteSelectedCardFiguresMenuItem(
+  doc: Document,
+  itemIds: number[],
+  addItem: MenuShell["addItem"],
+  addDivider: MenuShell["addDivider"],
+): void {
+  if (!itemIds.length) return;
+  addItem(getString("vertical-tabs-card-figure-delete"), async () => {
+    const results = await Promise.all(itemIds.map(deleteCardFigure));
+    if (results.some((success) => !success)) {
+      showToast(doc, getString("vertical-tabs-card-figure-delete-failed"));
+    }
+  });
+  addDivider();
+}
+
 /**
  * Context menu shown when right-clicking a row that belongs to a live multi
  * selection (2+ tabs). Every action applies to the whole selection:
@@ -1992,15 +2026,39 @@ export function showItemContextMenu(
  * open/close readers (reader tabs in the selection), close selected, close
  * others.
  */
-function showMultiSelectContextMenu(doc: Document, x: number, y: number): void {
-  const { addItem, addDivider, open } = createMenuShell(doc, x, y);
-
+async function showMultiSelectContextMenu(
+  doc: Document,
+  x: number,
+  y: number,
+): Promise<void> {
   // Snapshot the selection up front (visual order) — later actions must not
   // re-read it after awaits or other events.
   const selectedTabIds = getOrderedSelectedTabIds(doc);
   const selectedPdfs = selectedTabIds
     .map((id) => getOpenedPDFByTabId(id))
     .filter((p): p is OpenedPDF => !!p && !!p.tabId);
+  const selectedFigureIds = [
+    ...new Set(
+      selectedPdfs
+        .map((pdf) => getCardFigureItemId(pdf.itemId, pdf.parentItemId))
+        .filter((itemId) => Number.isInteger(itemId) && itemId > 0),
+    ),
+  ];
+  const existingFigureIds = (
+    await Promise.all(
+      selectedFigureIds.map(async (itemId) =>
+        (await hasCardFigure(itemId)) ? itemId : null,
+      ),
+    )
+  ).filter((itemId): itemId is number => itemId !== null);
+
+  const { addItem, addDivider, open } = createMenuShell(doc, x, y);
+  addDeleteSelectedCardFiguresMenuItem(
+    doc,
+    existingFigureIds,
+    addItem,
+    addDivider,
+  );
   const isReaderTab = (p: OpenedPDF) => !!p.type?.startsWith("reader");
   const hasUnloadedReader = selectedPdfs.some(
     (p) => isReaderTab(p) && !isReaderLoaded(p.tabId),

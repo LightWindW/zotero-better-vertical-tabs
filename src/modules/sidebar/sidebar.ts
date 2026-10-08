@@ -380,6 +380,7 @@ interface DocState {
   leaveTimer: TimerHandle | null;
   expanded: boolean;
   contextMenuOpen: boolean;
+  releaseContextMenuOnSidebarEnter: boolean;
   searchFocused: boolean;
   waitMouseMoveAfterInput: boolean;
   dialogOpen: boolean;
@@ -401,6 +402,7 @@ function getDocState(doc: Document): DocState {
       leaveTimer: null,
       expanded: false,
       contextMenuOpen: false,
+      releaseContextMenuOnSidebarEnter: false,
       searchFocused: false,
       waitMouseMoveAfterInput: false,
       dialogOpen: false,
@@ -420,7 +422,10 @@ function getDocState(doc: Document): DocState {
 export function setContextMenuOpen(doc: Document, open: boolean): void {
   const state = getDocState(doc);
   state.contextMenuOpen = open;
-  if (!open) state.menuToken = null;
+  if (!open) {
+    state.menuToken = null;
+    state.releaseContextMenuOnSidebarEnter = false;
+  }
 }
 
 /**
@@ -432,16 +437,36 @@ export function setContextMenuOpen(doc: Document, open: boolean): void {
  */
 export function claimContextMenuOpen(doc: Document): object {
   const state = getDocState(doc);
+  clearLeaveTimer(doc);
   const token = {};
   state.contextMenuOpen = true;
+  state.releaseContextMenuOnSidebarEnter = false;
   state.menuToken = token;
   return token;
+}
+
+export function deferContextMenuReleaseUntilSidebarEnter(
+  doc: Document,
+  token: object,
+): void {
+  const state = getDocState(doc);
+  if (state.menuToken === token) {
+    state.releaseContextMenuOnSidebarEnter = true;
+  }
+}
+
+export function releaseDeferredContextMenuOnSidebarEnter(doc: Document): void {
+  const state = getDocState(doc);
+  if (state.contextMenuOpen && state.releaseContextMenuOnSidebarEnter) {
+    setContextMenuOpen(doc, false);
+  }
 }
 
 export function releaseContextMenuOpen(doc: Document, token: object): void {
   const state = getDocState(doc);
   if (state.menuToken === token) {
     state.contextMenuOpen = false;
+    state.releaseContextMenuOnSidebarEnter = false;
     state.menuToken = null;
   }
 }
@@ -858,10 +883,9 @@ export function createSidebar(doc: Document): HTMLElement {
   // Mouse enter to expand, mouse leave to collapse (only when floating / unpinned)
   sidebar.addEventListener("mouseenter", (e: MouseEvent) => {
     clearLeaveTimer(doc);
-    // The mouse returned to VT after a context menu opened: the menu-open
-    // collapse suppression ends here. From now on the normal leave-collapse
-    // rule applies (the menu itself still closes on click as usual).
-    if (isContextMenuOpen(doc)) setContextMenuOpen(doc, false);
+    // A menu click keeps the expanded panel open until the pointer returns.
+    // Merely moving away from the row/menu must not release this suppression.
+    releaseDeferredContextMenuOnSidebarEnter(doc);
     if (isPinned() || isFloatingExpanded(doc)) return;
     // Auto-expand disabled: hovering the strip never expands VT — only the
     // pin button does (pinned panel).

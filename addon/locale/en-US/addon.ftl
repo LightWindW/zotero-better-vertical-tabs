@@ -113,7 +113,9 @@ vertical-tabs-close-selected-tabs = Close Selected Tabs
 vertical-tabs-close-other-tabs = Close Other Tabs
 vertical-tabs-extra = Extra
 vertical-tabs-edit-extra = Edit Extra
-vertical-tabs-card-figure-input = Capture Image for Hover Card
+vertical-tabs-card-figure-input = Capture Preview Image
+vertical-tabs-card-figure-delete = Delete Preview Image
+vertical-tabs-card-figure-delete-failed = Failed to delete preview image
 vertical-tabs-university = University
 
 # Save / Import Categories
