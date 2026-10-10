@@ -130,6 +130,8 @@ export type FluentMessageId =
   | 'vertical-tabs-help-section-4-title'
   | 'vertical-tabs-help-section-5-content'
   | 'vertical-tabs-help-section-5-title'
+  | 'vertical-tabs-help-section-6-content'
+  | 'vertical-tabs-help-section-6-title'
   | 'vertical-tabs-hide-native-tab-bar'
   | 'vertical-tabs-hours-ago'
   | 'vertical-tabs-import-category'

@@ -28,6 +28,17 @@ La VT de la ventana principal admite actualmente:
 
 2. **Tarjeta flotante de detalles**: Muestra información detallada del elemento al pasar el ratón sobre una pestaña.
 
+   **Imagen de vista previa de la tarjeta flotante**:
+
+   En un lector de Zotero, haga clic derecho en la pestaña y seleccione **"Capturar imagen de vista previa"** para entrar en el modo de captura. Seleccione un área de imagen para asociarla con el elemento principal de la pestaña y mostrarla en la tarjeta flotante.
+
+   <img src=".\figs\CardFigs.gif" />
+
+   - La imagen de vista previa se conserva al cerrar y volver a abrir la pestaña.
+   - Capturar otra imagen de vista previa reemplaza la anterior.
+   - La imagen se adapta al ancho de la tarjeta flotante y tiene una altura máxima.
+   - La parte que supere la altura máxima no se muestra en la tarjeta flotante.
+
 3. **Búsqueda de pestañas**: Filtra rápidamente las pestañas abiertas mediante el cuadro de búsqueda situado en la parte superior.
 
 4. **Arrastrar y soltar**: Arrastre pestañas para reordenarlas o clasificarlas; también se pueden arrastrar categorías enteras. Use **Ctrl/Shift+clic** para seleccionar múltiples pestañas y arrastrarlas en lote.
@@ -80,6 +91,7 @@ Para evitar la acumulación de pestañas no leídas durante mucho tiempo, el com
 
 - **Desactivado por defecto**: Debe habilitarse manualmente en Preferencias.
 - Se puede configurar un umbral de días — las pestañas no leídas más allá de este límite se cierran automáticamente.
+- Las pestañas dentro de categorías están protegidas contra el cierre automático de forma predeterminada, porque se usan con frecuencia y las categorías se pueden contraer. Esta protección se puede desactivar.
 
 ## 6️⃣ Preferencias
 
@@ -88,6 +100,8 @@ El complemento ofrece las siguientes preferencias (`Editar` → `Preferencias` �
 - **Altura de pestaña personalizada**: Ajuste la altura de visualización de cada elemento de pestaña en la VT.
 - **Modo de expansión**: Cambie entre los modos Automático / Manual / Mínimo.
 - **Habilitar efecto de desenfoque**: Use un fondo de cristal esmerilado para ventanas emergentes y tarjetas flotantes; desactívelo si su entorno no admite `backdrop-filter` o según su preferencia personal.
+- **Habilitar expansión automática integrada**: Al activarla, al pasar el ratón por la parte superior de la barra lateral esta se expande de forma integrada en lugar de flotar sobre el contenido.
+- **Habilitar animación de expansión/contracción de la barra lateral**: Aplica animaciones al expandir o contraer la barra lateral. Desactívela si la animación resulta entrecortada; no afecta a la animación de expansión automática del modo flotante.
 - **Indicador de resalte del lector PDF**: Muestra una barra indicadora verde en las pestañas con un lector PDF abierto; puede desactivarse.
 - **Cierre automático de lectores inactivos**: Cuando está activado, los lectores PDF inactivos durante más de X minutos se cierran automáticamente.
 - **Cierre automático de pestañas inactivas**: Cuando está activado, las pestañas inactivas durante más de X días se cierran automáticamente; desactivado por defecto.

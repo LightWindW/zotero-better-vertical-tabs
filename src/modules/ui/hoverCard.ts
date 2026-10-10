@@ -92,6 +92,12 @@ function createField(
   return row;
 }
 
+function createMetadataSeparator(doc: Document): HTMLElement {
+  const separator = createEl(doc, "div");
+  separator.style.cssText = `width:100%;height:1px;margin:6px auto 0;background:${isDarkMode(doc) ? "#555" : "#d9d9d9"};`;
+  return separator;
+}
+
 async function renderCard(
   doc: Document,
   card: HTMLElement,
@@ -128,6 +134,80 @@ async function renderCard(
   const separator = createEl(doc, "div");
   separator.style.cssText = `width:100%;height:1px;margin:6px auto 0;background:${isDarkMode(doc) ? "#555" : "#d9d9d9"};`;
   card.appendChild(separator);
+
+  const metadata = createEl(doc, "div");
+  metadata.style.cssText = "opacity: 1;";
+  card.appendChild(metadata);
+  if (isNote && parentId) {
+    const parentItem = Zotero.Items.get(parentId as number) as
+      | Zotero.Item
+      | false;
+    const parentTitle = parentItem
+      ? (parentItem.getField("title") as string) || ""
+      : "";
+    if (parentTitle) {
+      metadata.appendChild(createField(doc, "父条目", parentTitle));
+    }
+  }
+  if (info.authors) {
+    metadata.appendChild(
+      createField(
+        doc,
+        getString("vertical-tabs-authors"),
+        info.authors,
+        `chrome://${config.addonRef}/content/icons/author.svg`,
+        isDarkMode(doc) ? "brightness(0) invert(1)" : "",
+      ),
+    );
+  }
+  if (info.year) {
+    metadata.appendChild(
+      createField(
+        doc,
+        getString("vertical-tabs-year"),
+        info.year,
+        `chrome://${config.addonRef}/content/icons/time.svg`,
+        isDarkMode(doc) ? "brightness(0) invert(1)" : "",
+      ),
+    );
+  }
+  if (!isNote) {
+    const pubLabel = info.journal
+      ? getString("vertical-tabs-journal")
+      : info.university
+        ? getString("vertical-tabs-university")
+        : "";
+    const pubValue = info.journal || info.university || "";
+    if (pubValue) {
+      const itemTypeIcon = metaItem
+        ? getItemTypeImageSrc((metaItem as Zotero.Item).itemType)
+        : "";
+      metadata.appendChild(
+        createField(
+          doc,
+          pubLabel,
+          pubValue,
+          itemTypeIcon.replace(/\/(?:light|dark)\//, "/white/") || undefined,
+          isDarkMode(doc) ? "" : "brightness(0) saturate(100%) invert(40%)",
+        ),
+      );
+    }
+  }
+  const showExtra = Zotero.Prefs.get(
+    `${config.prefsPrefix}.verticalTabs.showExtra`,
+    false,
+  ) as boolean;
+  if (showExtra) {
+    const extraClean = info.extra.replace(/<\/?[^>]+(>|$)/g, "").trim();
+    if (extraClean) {
+      if (metadata.childElementCount > 0) {
+        metadata.appendChild(createMetadataSeparator(doc));
+      }
+      metadata.appendChild(
+        createField(doc, getString("vertical-tabs-extra"), extraClean),
+      );
+    }
+  }
 
   let figureUrl: string | null = null;
   try {
@@ -237,84 +317,90 @@ async function renderCard(
     }
   }
 
-  // 父条目 (for notes)
-  if (isNote && parentId) {
-    const parentItem = Zotero.Items.get(parentId as number) as
-      | Zotero.Item
-      | false;
-    if (parentItem) {
-      const parentTitle = (parentItem.getField("title") as string) || "";
-      if (parentTitle) {
-        card.appendChild(createField(doc, "父条目", parentTitle));
+  // Fallback for an item with no metadata created before image loading.
+  if (metadata.childElementCount === 0) {
+    // 父条目 (for notes)
+    if (isNote && parentId) {
+      const parentItem = Zotero.Items.get(parentId as number) as
+        | Zotero.Item
+        | false;
+      if (parentItem) {
+        const parentTitle = (parentItem.getField("title") as string) || "";
+        if (parentTitle) {
+          metadata.appendChild(createField(doc, "父条目", parentTitle));
+        }
       }
     }
-  }
 
-  // Authors
-  if (info.authors) {
-    card.appendChild(
-      createField(
-        doc,
-        getString("vertical-tabs-authors"),
-        info.authors,
-        `chrome://${config.addonRef}/content/icons/author.svg`,
-        isDarkMode(doc) ? "brightness(0) invert(1)" : "",
-      ),
-    );
-  }
-
-  // Date
-  if (info.year) {
-    card.appendChild(
-      createField(
-        doc,
-        getString("vertical-tabs-year"),
-        info.year,
-        `chrome://${config.addonRef}/content/icons/time.svg`,
-        isDarkMode(doc) ? "brightness(0) invert(1)" : "",
-      ),
-    );
-  }
-
-  // Publication / Conference / School (skip for notes)
-  if (!isNote) {
-    const pubLabel = info.journal
-      ? getString("vertical-tabs-journal")
-      : info.university
-        ? getString("vertical-tabs-university")
-        : "";
-    const pubValue = info.journal || info.university || "";
-    if (pubValue) {
-      const itemTypeIcon = metaItem
-        ? getItemTypeImageSrc((metaItem as Zotero.Item).itemType)
-        : "";
-      const whiteItemTypeIcon = itemTypeIcon.replace(
-        /\/(?:light|dark)\//,
-        "/white/",
-      );
-      card.appendChild(
+    // Authors
+    if (info.authors) {
+      metadata.appendChild(
         createField(
           doc,
-          pubLabel,
-          pubValue,
-          whiteItemTypeIcon || undefined,
-          isDarkMode(doc) ? "" : "brightness(0) saturate(100%) invert(40%)",
+          getString("vertical-tabs-authors"),
+          info.authors,
+          `chrome://${config.addonRef}/content/icons/author.svg`,
+          isDarkMode(doc) ? "brightness(0) invert(1)" : "",
         ),
       );
     }
-  }
 
-  // Extra (备注) — only when preference enabled
-  const showExtra = Zotero.Prefs.get(
-    `${config.prefsPrefix}.verticalTabs.showExtra`,
-    false,
-  ) as boolean;
-  if (showExtra) {
-    const extraClean = info.extra.replace(/<\/?[^>]+(>|$)/g, "").trim();
-    if (extraClean) {
-      card.appendChild(
-        createField(doc, getString("vertical-tabs-extra"), extraClean),
+    // Date
+    if (info.year) {
+      metadata.appendChild(
+        createField(
+          doc,
+          getString("vertical-tabs-year"),
+          info.year,
+          `chrome://${config.addonRef}/content/icons/time.svg`,
+          isDarkMode(doc) ? "brightness(0) invert(1)" : "",
+        ),
       );
+    }
+
+    // Publication / Conference / School (skip for notes)
+    if (!isNote) {
+      const pubLabel = info.journal
+        ? getString("vertical-tabs-journal")
+        : info.university
+          ? getString("vertical-tabs-university")
+          : "";
+      const pubValue = info.journal || info.university || "";
+      if (pubValue) {
+        const itemTypeIcon = metaItem
+          ? getItemTypeImageSrc((metaItem as Zotero.Item).itemType)
+          : "";
+        const whiteItemTypeIcon = itemTypeIcon.replace(
+          /\/(?:light|dark)\//,
+          "/white/",
+        );
+        metadata.appendChild(
+          createField(
+            doc,
+            pubLabel,
+            pubValue,
+            whiteItemTypeIcon || undefined,
+            isDarkMode(doc) ? "" : "brightness(0) saturate(100%) invert(40%)",
+          ),
+        );
+      }
+    }
+
+    // Extra (备注) — only when preference enabled
+    const showExtra = Zotero.Prefs.get(
+      `${config.prefsPrefix}.verticalTabs.showExtra`,
+      false,
+    ) as boolean;
+    if (showExtra) {
+      const extraClean = info.extra.replace(/<\/?[^>]+(>|$)/g, "").trim();
+      if (extraClean) {
+        if (metadata.childElementCount > 0) {
+          metadata.appendChild(createMetadataSeparator(doc));
+        }
+        metadata.appendChild(
+          createField(doc, getString("vertical-tabs-extra"), extraClean),
+        );
+      }
     }
   }
 }

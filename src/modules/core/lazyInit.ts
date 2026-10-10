@@ -65,6 +65,7 @@ import {
   destroyNativeTabBarToggle,
   initNativeTabBarObserver,
   isNativeTabBarHidden,
+  syncNativeTabBarLayout,
 } from "../sidebar/nativeTabBarToggle";
 import { showLibraryHomeButton } from "../sidebar/libraryHomeButton";
 
@@ -195,10 +196,11 @@ export async function initVerticalTabs(
   if (!_pinnedObserverID) {
     _pinnedObserverID = Zotero.Prefs.registerObserver(
       `${PREF_NAMESPACE}.verticalTabs.pinned`,
-      () => {
+      (pinned: boolean) => {
         for (const w of Zotero.getMainWindows()) {
           const ws = getWindowState(w);
           if (!ws.initialized) continue;
+          syncNativeTabBarLayout(w.document, pinned);
           // The window where the user clicked pin/unpin handles itself with
           // a width animation — snapping it here would kill the animation.
           if (isPinToggleHandled(w.document)) continue;

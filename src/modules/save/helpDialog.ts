@@ -169,6 +169,10 @@ export function showHelpDialog(doc: Document): void {
       titleKey: "vertical-tabs-help-section-5-title",
       contentKey: "vertical-tabs-help-section-5-content",
     },
+    {
+      titleKey: "vertical-tabs-help-section-6-title",
+      contentKey: "vertical-tabs-help-section-6-content",
+    },
   ] as const;
 
   for (let i = 0; i < sections.length; i++) {

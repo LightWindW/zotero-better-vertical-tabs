@@ -87,9 +87,10 @@ export function getStyles(): string {
       height: 40px;
       box-sizing: border-box;
       padding: 5.5px 6px 6px 5.5px;
+      margin-top: 0px;
       border-bottom: 1px solid var(--material-border, #ccc);
       font-weight: 600;
-      transition: padding 0.2s ease-out, gap 0.2s ease-out;
+      transition: padding 0.2s ease-out, gap 0.2s ease-out, margin-top 0.3s ease;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-search {
@@ -945,6 +946,12 @@ export function getStyles(): string {
       padding: 6px 0;
     }
 
+    /* macOS traffic lights overlap the sidebar's top edge after the native
+       tab bar is hidden. Reserve 30px of space above controls. */
+    #${SIDEBAR_ID}.vertical-tabs-macos-native-tabbar-hidden .vertical-tabs-header {
+      margin-top: 30px;
+    }
+
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-search,
     #${SIDEBAR_ID}.vertical-tabs-sidebar-floating:not(.vertical-tabs-sidebar-expanded) .vertical-tabs-more-btn {
       pointer-events: none;
@@ -1059,9 +1066,10 @@ export function getStyles(): string {
       opacity: var(--vt-content-opacity, 1);
     }
 
-    /* Disable transitions while dragging the resize handle */
-    #${SIDEBAR_ID}.vertical-tabs-sidebar-resizing,
-    #${SIDEBAR_ID}.vertical-tabs-sidebar-resizing * {
+    /* Disable only the sidebar's own layout transition while pin/strip
+       animation writes width every frame. Child rows keep their margin,
+       padding, and opacity transitions so the expanded layout does not pop. */
+    #${SIDEBAR_ID}.vertical-tabs-sidebar-resizing {
       transition: none !important;
     }
 

@@ -28,6 +28,17 @@ The main window VT currently supports:
 
 2. **Hover Detail Card**: Shows detailed item information when hovering over a tab.
 
+   **Hover Card Preview Image**:
+
+   In a Zotero reader, right-click the tab and select **"Capture Preview Image"** to enter screenshot mode. Select an image area to associate it with the tab's parent item and display it in the hover card.
+
+   <img src=".\doc\figs\CardFigs.gif" />
+
+   - The preview image remains after closing and reopening the tab.
+   - Capturing another preview image replaces the previous one.
+   - The image scales to the hover card width and is subject to a maximum height.
+   - Content beyond the maximum height is not displayed in the hover card.
+
 3. **Tab Search**: Quickly filter open tabs via the search box at the top.
 
 4. **Drag & Drop**: Drag tabs to reorder or categorize them; entire categories can also be dragged. Use **Ctrl/Shift+click** to multi-select tabs for batch drag-and-drop.
@@ -80,6 +91,7 @@ To prevent tab clutter from long-unread tabs, the plugin can automatically close
 
 - **Disabled by default**: Must be manually enabled in Preferences.
 - A configurable day threshold — tabs unread beyond this limit are automatically closed.
+- Tabs inside categories are protected from automatic closure by default because they are commonly used and categories can be collapsed. This protection can be disabled.
 
 ## 6️⃣ Preferences
 
@@ -88,6 +100,8 @@ The plugin provides the following preferences (`Edit` → `Preferences` → `Bet
 - **Custom Tab Height**: Adjust the display height of individual tab items in VT.
 - **Expand Mode**: Switch between Auto / Manual / Minimal modes.
 - **Enable Blur Effect**: Use a frosted-glass background for popups/hover cards; disable it if your environment does not support `backdrop-filter` or based on personal preference.
+- **Enable Embedded Auto-Expand**: When enabled, hovering over the top of the sidebar expands it in embedded mode instead of floating mode.
+- **Enable Sidebar Expand/Collapse Animation**: Apply animations when expanding or collapsing the sidebar. Disable it if the animation is too laggy; this does not affect automatic expansion animation in floating mode.
 - **PDF Reader Highlight Indicator**: Show a green indicator bar on tabs with an open PDF reader; can be disabled.
 - **Auto-Close Idle Readers**: When enabled, PDF readers idle for more than X minutes are automatically closed.
 - **Auto-Close Idle Tabs**: When enabled, tabs idle for more than X days are automatically closed; disabled by default.

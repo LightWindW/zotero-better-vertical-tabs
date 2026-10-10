@@ -287,22 +287,21 @@ export async function showCard(
     card.style.transition === "none"
       ? card.dataset.vtCardTransition || ""
       : card.style.transition;
-  card.style.transition = "none";
+  // A visible switch may already be moving toward the newest target from
+  // moveCardToTarget(). Keep that positional transition alive while the new
+  // content loads; disabling it here would turn the retarget into a jump.
+  if (!isSwitch) card.style.transition = "none";
 
   if (isSwitch) {
     // Use the current rendered geometry as the transition start. The inline
     // left/top can already contain the previous target while a transition is
     // in flight, so getBoundingClientRect() is the authoritative position.
-    const fromRect = card.getBoundingClientRect();
-    const fromWidth = fromRect.width;
-    const fromHeight = fromRect.height;
-    const fromLeft = fromRect.left;
-    const fromTop = fromRect.top;
+    const initialRect = card.getBoundingClientRect();
     // Lay out the new content at its final width before the async renderer
     // reads image dimensions. Restore the old outer width only for the
     // transition's starting frame.
     prepareRenderWidth(card, opts);
-    card.style.width = `${fromWidth}px`;
+    card.style.width = `${initialRect.width}px`;
     try {
       await render(getCardInner(card));
     } catch (error) {
@@ -313,6 +312,15 @@ export async function showCard(
       card.style.transition = originalTransition;
       return;
     }
+    // Capture the rendered position after the immediate retarget has had
+    // time to move. Freeze exactly that geometry while measuring the new
+    // content, then transition from it to the final size and position.
+    const fromRect = card.getBoundingClientRect();
+    const fromWidth = fromRect.width || initialRect.width;
+    const fromHeight = fromRect.height || initialRect.height;
+    const fromLeft = fromRect.left;
+    const fromTop = fromRect.top;
+    card.style.transition = "none";
     const size = measureTargetSize(card, opts);
     // Calculate the target position while the card has its final size. This
     // matters for figure cards because their title anchor is at the bottom
