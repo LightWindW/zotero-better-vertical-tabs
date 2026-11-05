@@ -2,6 +2,13 @@ import { config } from "../../../package.json";
 
 const DATA_VERSION = 3;
 const DATA_FILE_NAME = `BVT-vertical-tabs.json`;
+let _dataWriteQueue: Promise<void> = Promise.resolve();
+
+function enqueueDataWrite(write: () => Promise<void>): Promise<void> {
+  const pending = _dataWriteQueue.then(write);
+  _dataWriteQueue = pending.catch(() => {});
+  return pending;
+}
 
 export interface Category {
   id: string;
@@ -19,6 +26,10 @@ export interface VerticalTabsData {
   uncategorizedOrder: string[]; // tabIds for uncategorized items order
   uncategorizedItemIds: number[]; // parallel itemIds for restart restore
   lastReadTimes: Record<string, number>; // tabId -> timestamp
+  // Store the identity beside the time: tab IDs change on Zotero restart,
+  // and category/order entries may already belong to a newer session.
+  lastReadItemIds?: Record<string, number>; // tabId -> itemId
+  itemReadTimes?: Record<string, number>; // itemId -> timestamp
 }
 
 function getDataFilePath(): string {
@@ -92,6 +103,11 @@ export function importCategoryFromSnapshot(
 }
 
 export async function loadData(): Promise<VerticalTabsData> {
+  await _dataWriteQueue;
+  return readData();
+}
+
+async function readData(): Promise<VerticalTabsData> {
   const path = getDataFilePath();
   try {
     if (!(await IOUtils.exists(path))) {
@@ -147,6 +163,11 @@ export async function loadData(): Promise<VerticalTabsData> {
         typeof parsed.lastReadTimes === "object" && parsed.lastReadTimes
           ? { ...parsed.lastReadTimes }
           : {},
+      lastReadItemIds:
+        typeof parsed.lastReadItemIds === "object" && parsed.lastReadItemIds
+          ? { ...parsed.lastReadItemIds }
+          : {},
+      itemReadTimes: parsed.itemReadTimes ?? {},
     };
   } catch (error) {
     ztoolkit.log("Failed to load vertical tabs data:", error);
@@ -154,13 +175,51 @@ export async function loadData(): Promise<VerticalTabsData> {
   }
 }
 
-export async function saveData(data: VerticalTabsData): Promise<void> {
+export function saveData(data: VerticalTabsData): Promise<void> {
+  return enqueueDataWrite(() => writeData(data));
+}
+
+async function writeData(data: VerticalTabsData): Promise<void> {
   const path = getDataFilePath();
   try {
     // Compact JSON: the file is rewritten on every persist/lastReadTimes
     // save, and the pretty-print indent roughly doubles its size (and the IO
     // time) for no consumer benefit — nothing reads it by hand.
-    await IOUtils.writeUTF8(path, JSON.stringify(data));
+    const lastReadItemIds = { ...data.lastReadItemIds };
+    const remember = (tabId: string, itemId: number) => {
+      if (itemId && data.lastReadTimes[tabId] !== undefined) {
+        lastReadItemIds[tabId] = itemId;
+      }
+    };
+    for (const category of data.categories) {
+      category.tabIds.forEach((tabId, i) =>
+        remember(tabId, category.itemIds[i]),
+      );
+    }
+    data.uncategorizedOrder.forEach((tabId, i) =>
+      remember(tabId, data.uncategorizedItemIds[i]),
+    );
+    for (const tabId of Object.keys(lastReadItemIds)) {
+      if (data.lastReadTimes[tabId] === undefined)
+        delete lastReadItemIds[tabId];
+    }
+    const lastReadTimes: Record<string, number> = {};
+    const itemReadTimes = { ...data.itemReadTimes };
+    for (const [tabId, itemId] of Object.entries(lastReadItemIds)) {
+      const time = data.lastReadTimes[tabId];
+      if (!Number.isFinite(time)) continue;
+      lastReadTimes[tabId] = time;
+      itemReadTimes[itemId] = Math.max(itemReadTimes[itemId] ?? 0, time);
+    }
+    await IOUtils.writeUTF8(
+      path,
+      JSON.stringify({
+        ...data,
+        lastReadTimes,
+        lastReadItemIds,
+        itemReadTimes,
+      }),
+    );
   } catch (error) {
     ztoolkit.log("Failed to save vertical tabs data:", error);
   }
@@ -171,11 +230,20 @@ export async function saveData(data: VerticalTabsData): Promise<void> {
  * This is safe to call frequently (e.g. on tab selection) because it merges
  * with the existing file content.
  */
-export async function saveLastReadTimes(
+export function saveLastReadTimes(
   lastReadTimes: Record<string, number>,
+  lastReadItemIds?: Record<string, number>,
+  itemReadTimes?: Record<string, number>,
 ): Promise<void> {
-  const data = await loadData();
-  await saveData({ ...data, lastReadTimes });
+  return enqueueDataWrite(async () => {
+    const data = await readData();
+    await writeData({
+      ...data,
+      lastReadTimes,
+      lastReadItemIds: lastReadItemIds ?? data.lastReadItemIds,
+      itemReadTimes: itemReadTimes ?? data.itemReadTimes,
+    });
+  });
 }
 
 export function createCategory(data: VerticalTabsData, name: string): Category {

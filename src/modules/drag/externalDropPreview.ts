@@ -26,6 +26,7 @@ import {
   applyDropPreview,
   clearDropPreview,
   clearItemShiftPreview,
+  getDropPreviewRowHeight,
   isSameGapPreviewAnchor,
   isSameRowPreviewAnchor,
   setGapPreviewAnchor,
@@ -225,7 +226,11 @@ function applyGapPreview(
     clearItemShiftPreview(doc);
     const lastItem = visibleItems[visibleItems.length - 1];
     clearAllItemDropIndicators(doc);
-    setItemDropIndicator(lastItem, false, lastItem.offsetHeight || 0);
+    setItemDropIndicator(
+      lastItem,
+      false,
+      getDropPreviewRowHeight(doc, lastItem),
+    );
   } else {
     const targetRow = visibleItems[insertIndex];
     const shiftHeight = applyDropPreview(doc, {

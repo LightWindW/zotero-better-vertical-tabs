@@ -52,6 +52,7 @@ import {
   applyDropPreview,
   clearDropPreview,
   clearItemShiftPreview,
+  getDropPreviewRowHeight,
   isSameGapPreviewAnchor,
   isSameRowPreviewAnchor,
   setGapPreviewAnchor,
@@ -536,8 +537,6 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
 
     const preview = getDragPreviewParams(doc);
     applyCategoryPreview(doc, dropZone, preview.source, 1);
-    clearAllItemDropIndicators(doc);
-
     const visibleItems = getContainerVisibleItems(dropZone);
     const draggedTabId = getDraggedTabId(doc);
     if (!draggedTabId) return;
@@ -547,6 +546,8 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
     const insertIndex = computeDropZoneInsertIndex(dropZone, e.clientY);
     if (isSameGapPreviewAnchor(doc, dropZone, insertIndex)) return;
 
+    clearAllItemDropIndicators(doc);
+
     if (visibleItems.length === 0) {
       setEmptyDropZoneIndicator(dropZone);
       clearItemShiftPreview(doc);
@@ -555,7 +556,7 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
       // in the one-tag-height blank space.
       clearItemShiftPreview(doc);
       const lastItem = visibleItems[visibleItems.length - 1];
-      const shiftHeight = lastItem.offsetHeight || 0;
+      const shiftHeight = getDropPreviewRowHeight(doc, lastItem);
       setItemDropIndicator(lastItem, false, shiftHeight);
     } else {
       // The cursor is inside a gap opened between visible items (target drag
@@ -1038,7 +1039,6 @@ function createItemElement(
       // inside the row — and with the preview anchor still set, it stayed
       // gone until the cursor crossed a row boundary.
       if (row.contains(e.relatedTarget as Node | null)) return;
-      clearItemDropIndicator(row);
       const sidebar = doc.getElementById(SIDEBAR_ID);
       if (!sidebar?.contains(e.relatedTarget as Node)) {
         if (!isDropRenderPending(doc)) {
@@ -1430,7 +1430,7 @@ function createCategoryElement(
       // Append-to-end: no item shift, indicator centered below the last item.
       clearItemShiftPreview(doc);
       const lastItem = visibleItems[visibleItems.length - 1];
-      const shiftHeight = lastItem.offsetHeight || 0;
+      const shiftHeight = getDropPreviewRowHeight(doc, lastItem);
       clearAllItemDropIndicators(doc);
       setItemDropIndicator(lastItem, false, shiftHeight);
     } else {
@@ -2373,25 +2373,58 @@ function refreshRelativeTimes(doc: Document): void {
  * .active, matching what a full render would produce.
  */
 function updateActiveTabRow(doc: Document, tabId: string): void {
-  doc.querySelectorAll(".vertical-tabs-item.active").forEach((el: Element) => {
-    if ((el as HTMLElement).dataset.tabId !== tabId) {
-      el.classList.remove("active");
-    }
-  });
-  if (tabId) {
+  // Selection notifications can arrive in quick succession while Zotero is
+  // still switching reader documents.  Do the outgoing fade immediately and
+  // schedule only the latest incoming row; otherwise an older queued update
+  // can put the white highlight back on the previous tab.
+  const stateKey = "__verticalTabsActiveRowState";
+  const state = ((doc as any)[stateKey] ??= {
+    generation: 0,
+    frame: 0,
+  }) as { generation: number; frame: number };
+  state.generation += 1;
+  const generation = state.generation;
+  if (state.frame) {
+    doc.defaultView?.cancelAnimationFrame(state.frame);
+    state.frame = 0;
+  }
+
+  const activeRows = Array.from(
+    doc.querySelectorAll(".vertical-tabs-item.active"),
+  ) as HTMLElement[];
+  for (const row of activeRows) row.classList.remove("active");
+  // Commit removal before adding the next row so CSS gets a real fade-out /
+  // fade-in pair even when the two rows are changed in the same event tick.
+  if (activeRows.length > 0) {
+    void (doc.documentElement as HTMLElement | null)?.offsetHeight;
+  }
+
+  if (!tabId) {
+    updateActiveCategoryHighlight(doc);
+    return;
+  }
+
+  const addIncoming = () => {
+    state.frame = 0;
+    if (generation !== state.generation) return;
     const row = doc.querySelector(
       `.vertical-tabs-item[data-tab-id="${CSS.escape(tabId)}"]`,
     ) as HTMLElement | null;
-    if (row) {
-      row.classList.add("active");
-      const pdf = getOpenedPDFByTabId(tabId);
-      const timeEl = row.querySelector(".vertical-tabs-item-time");
-      if (pdf && timeEl) {
-        timeEl.textContent = formatRowTime(pdf);
-      }
+    if (!row) {
+      updateActiveCategoryHighlight(doc);
+      return;
     }
-  }
-  updateActiveCategoryHighlight(doc);
+    row.classList.add("active");
+    const pdf = getOpenedPDFByTabId(tabId);
+    const timeEl = row.querySelector(".vertical-tabs-item-time");
+    if (pdf && timeEl) {
+      timeEl.textContent = formatRowTime(pdf);
+    }
+    updateActiveCategoryHighlight(doc);
+  };
+  const win = doc.defaultView;
+  state.frame = win ? win.requestAnimationFrame(addIncoming) : 0;
+  if (!win) addIncoming();
 }
 
 export function subscribeToRenderEvents(

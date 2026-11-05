@@ -1,7 +1,12 @@
 import { assert } from "chai";
 import {
   getLastReadTimes,
+  getLastReadItemIds,
+  getItemReadTimes,
+  matchLastReadTime,
+  removeTabsFromTrackingSilently,
   getOpenedPDFs,
+  loadStartupReadTimeCandidates,
   loadLastReadTimes,
   markStartupRestoreDone,
   refreshOpenedPDFs,
@@ -14,6 +19,7 @@ import {
 import {
   loadData,
   restoreCategoryTabIdsAndOrder,
+  saveLastReadTimes,
 } from "../src/modules/track/dataStore";
 
 /**
@@ -148,6 +154,7 @@ describe("lastReadTimes restart survival", function () {
   async function runStartupFlow(): Promise<void> {
     let data = await loadData();
     loadLastReadTimes(data.lastReadTimes);
+    loadStartupReadTimeCandidates(data);
     await refreshOpenedPDFs();
     data = restoreCategoryTabIdsAndOrder(data, getNonNewLiveEntries());
     loadLastReadTimes(data.lastReadTimes);
@@ -160,6 +167,141 @@ describe("lastReadTimes restart survival", function () {
     await runStartupFlow();
     assert.equal(openedAtOf("newT1"), T1);
     assert.equal(openedAtOf("newT2"), T2);
+  });
+
+  it("restores JSON times even when category/order IDs belong to a different session", async function () {
+    fileContent = JSON.stringify({
+      version: 3,
+      categories: [],
+      uncategorizedOrder: ["intermediateT1", "intermediateT2"],
+      uncategorizedItemIds: [1, 2],
+      lastReadTimes: { oldT1: T1, oldT2: T2 },
+      lastReadItemIds: { oldT1: 1, oldT2: 2 },
+    });
+    liveTabs.push({ id: "newT2", itemID: 2 }, { id: "newT1", itemID: 1 });
+    await runStartupFlow();
+    assert.equal(openedAtOf("newT1"), T1);
+    assert.equal(openedAtOf("newT2"), T2);
+  });
+
+  it("writes identities with times and restores them after two restarts without order metadata", async function () {
+    fileContent = JSON.stringify({
+      version: 3,
+      categories: [],
+      uncategorizedOrder: [],
+      uncategorizedItemIds: [],
+      lastReadTimes: {},
+    });
+    liveTabs.push({ id: "session1", itemID: 1 });
+    await runStartupFlow();
+    setLastReadTime("session1", T1);
+    await saveLastReadTimes(getLastReadTimes(), getLastReadItemIds());
+    assert.equal(JSON.parse(fileContent).lastReadItemIds.session1, 1);
+    stopTracking();
+    liveTabs.splice(0, liveTabs.length, { id: "session2", itemID: 1 });
+    await runStartupFlow();
+    assert.equal(openedAtOf("session2"), T1);
+    setLastReadTime("session2", T2);
+    await saveLastReadTimes(getLastReadTimes(), getLastReadItemIds());
+    stopTracking();
+    liveTabs.splice(0, liveTabs.length, { id: "session3", itemID: 1 });
+    await runStartupFlow();
+    assert.equal(openedAtOf("session3"), T2);
+  });
+
+  it("late session-restored tabs keep their stored time after startup retries", async function () {
+    seedFile();
+    const data = await loadData();
+    loadLastReadTimes(data.lastReadTimes);
+    loadStartupReadTimeCandidates(data);
+    await refreshOpenedPDFs();
+
+    // Zotero restores this tab after the plugin's startup retry window.
+    markStartupRestoreDone();
+    liveTabs.push({ id: "lateT1", itemID: 1 });
+    await scanOpenedTabs();
+
+    assert.equal(openedAtOf("lateT1"), T1);
+    assert.equal(getLastReadTimes()["lateT1"], T1);
+  });
+
+  it("shares the item reading time with another tab for the same item", async function () {
+    seedFile();
+    const data = await loadData();
+    loadLastReadTimes(data.lastReadTimes);
+    loadStartupReadTimeCandidates(data);
+    liveTabs.push({ id: "oldT1", itemID: 1 });
+    await refreshOpenedPDFs();
+    markStartupRestoreDone();
+
+    liveTabs.push({ id: "newDuplicate", itemID: 1 });
+    await scanOpenedTabs();
+
+    assert.equal(openedAtOf("newDuplicate"), T1);
+  });
+
+  it("removes closed item records from JSON but retains a remaining duplicate tab", async function () {
+    seedFile();
+    liveTabs.push({ id: "newT1", itemID: 1 }, { id: "newT2", itemID: 2 });
+    await runStartupFlow();
+    markStartupRestoreDone();
+    liveTabs.push({ id: "duplicate", itemID: 1 });
+    await scanOpenedTabs();
+    setLastReadTime("duplicate", NOW);
+    assert.equal(openedAtOf("newT1"), NOW);
+    removeTabsFromTrackingSilently(["newT1"]);
+    let data = await loadData();
+    assert.equal(data.itemReadTimes?.[1], NOW);
+    assert.notProperty(data.lastReadTimes, "newT1");
+    removeTabsFromTrackingSilently(["duplicate"]);
+    data = await loadData();
+    assert.notProperty(data.itemReadTimes ?? {}, "1");
+    assert.notProperty(data.lastReadTimes, "duplicate");
+    assert.equal(data.itemReadTimes?.[2], T2);
+  });
+
+  it("matches directly by item ID and drops orphan tab-keyed history", async function () {
+    fileContent = JSON.stringify({
+      version: 3,
+      categories: [],
+      uncategorizedOrder: [],
+      uncategorizedItemIds: [],
+      lastReadTimes: { orphanA: T1, orphanB: T2 },
+      itemReadTimes: { 1: T1, 99: T2 },
+    });
+    liveTabs.push({ id: "newSession", itemID: 1 });
+    await runStartupFlow();
+    assert.equal(openedAtOf("newSession"), T1);
+    assert.equal(matchLastReadTime(1), T1);
+    markStartupRestoreDone();
+    await saveLastReadTimes(
+      getLastReadTimes(),
+      getLastReadItemIds(),
+      getItemReadTimes(),
+    );
+    const data = await loadData();
+    assert.deepEqual(data.lastReadTimes, { newSession: T1 });
+    assert.deepEqual(data.itemReadTimes, { 1: T1, 99: T2 });
+  });
+
+  it("keeps item times when a tab is restored after the startup deadline", async function () {
+    fileContent = JSON.stringify({
+      version: 3,
+      categories: [],
+      uncategorizedOrder: [],
+      uncategorizedItemIds: [],
+      lastReadTimes: {},
+      itemReadTimes: { 1: T1 },
+    });
+    const data = await loadData();
+    loadLastReadTimes(data.lastReadTimes);
+    loadStartupReadTimeCandidates(data);
+    await refreshOpenedPDFs();
+    markStartupRestoreDone();
+    liveTabs.push({ id: "lateNewTab", itemID: 1 });
+    await scanOpenedTabs();
+    assert.equal(openedAtOf("lateNewTab"), T1);
+    assert.equal(matchLastReadTime(1), T1);
   });
 
   it("RETRY-CLOBBER: a select-write before a retry restore must survive", async function () {
@@ -190,6 +332,37 @@ describe("lastReadTimes restart survival", function () {
       getLastReadTimes()["newT3"] !== undefined,
       "new tab's initial openedAt must be written to lastReadTimes",
     );
+  });
+
+  it("persists an initial timestamp for every open sidebar item after startup", async function () {
+    fileContent = JSON.stringify({
+      version: 3,
+      categories: [],
+      uncategorizedOrder: [],
+      uncategorizedItemIds: [],
+      lastReadTimes: {},
+    });
+    for (let i = 1; i <= 12; i++) {
+      liveTabs.push({ id: `restored-${i}`, itemID: i });
+    }
+
+    await runStartupFlow();
+    markStartupRestoreDone();
+
+    const times = getLastReadTimes();
+    const identities = getLastReadItemIds();
+    assert.equal(Object.keys(times).length, 12);
+    assert.equal(Object.keys(identities).length, 12);
+    for (let i = 1; i <= 12; i++) {
+      assert.isNumber(times[`restored-${i}`]);
+      assert.equal(identities[`restored-${i}`], i);
+    }
+
+    await saveLastReadTimes(times, identities, getItemReadTimes());
+    const persisted = JSON.parse(fileContent);
+    assert.equal(Object.keys(persisted.lastReadTimes).length, 12);
+    assert.equal(Object.keys(persisted.lastReadItemIds).length, 12);
+    assert.equal(Object.keys(persisted.itemReadTimes).length, 12);
   });
 
   it("startup-restored tabs do NOT persist a fresh timestamp (migration owns them)", async function () {

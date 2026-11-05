@@ -39,6 +39,8 @@ import {
   removeTabsFromTrackingSilently,
   loadLastReadTimes,
   getLastReadTimes,
+  getLastReadItemIds,
+  getItemReadTimes,
 } from "./itemTracker";
 import { isReaderRestoreInProgress } from "./orderSyncControl";
 import {
@@ -116,7 +118,12 @@ function dispatchDataChanged(doc: Document): void {
 
 async function persist(doc: Document): Promise<void> {
   if (!_data) return;
-  _data = { ..._data, lastReadTimes: getLastReadTimes() };
+  _data = {
+    ..._data,
+    lastReadTimes: getLastReadTimes(),
+    lastReadItemIds: getLastReadItemIds(),
+    itemReadTimes: getItemReadTimes(),
+  };
   await saveData(_data);
   dispatchDataChanged(doc);
 }
@@ -853,6 +860,8 @@ function handleToggleCollapsed(event: Event): void {
     // file's lastReadTimes to an older map (wiping times recorded since
     // startup: the file-side clobber of the restart-time-reset bug).
     lastReadTimes: getLastReadTimes(),
+    lastReadItemIds: getLastReadItemIds(),
+    itemReadTimes: getItemReadTimes(),
   };
   // Persist without dispatching data-changed: the UI already toggled the
   // collapsed class in place, and re-rendering the whole container would

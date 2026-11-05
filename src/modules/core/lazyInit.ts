@@ -8,6 +8,7 @@ import {
   initCategoryManager,
   cleanupStaleTabIds,
   restoreCategoriesAtStartup,
+  forceReload,
 } from "../track/categoryManager";
 import { destroyHoverCard, initHoverCard } from "../ui/hoverCard";
 import {
@@ -35,6 +36,7 @@ import {
   markStartupRestoreDone,
   applyLastReadTimesToOpenedPDFs,
   loadLastReadTimes,
+  loadStartupReadTimeCandidates,
 } from "../track/itemTracker";
 import {
   subscribeToRenderEvents,
@@ -109,8 +111,9 @@ export async function initVerticalTabs(
   ) as boolean;
   const visible = enabled;
 
-  startTracking();
   await initCategoryManager(win.document);
+  loadStartupReadTimeCandidates(getData());
+  startTracking();
 
   // Categories only track currently open tabs; dormant/remembered slots have
   // been removed. Any leftover stale tabIds are cleaned up after Zotero finishes
@@ -138,11 +141,19 @@ export async function initVerticalTabs(
   if (!_prefsObserverID) {
     _prefsObserverID = Zotero.Prefs.registerObserver(
       `${PREF_NAMESPACE}.verticalTabs.enabled`,
-      (value: boolean) => {
+      async (value: boolean) => {
         for (const w of Zotero.getMainWindows()) {
           const ws = getWindowState(w);
           if (!ws.initialized) continue;
           if (value) {
+            // Re-enabling the sidebar stops and starts tracking without
+            // rebuilding the category manager. Restore the persisted clocks
+            // before scanning tabs; otherwise stopTracking() has cleared the
+            // in-memory maps and every existing tab is stamped with Date.now.
+            await forceReload();
+            const persistedData = getData();
+            loadLastReadTimes(persistedData.lastReadTimes ?? {});
+            loadStartupReadTimeCandidates(persistedData);
             startTracking();
             setSidebarVisibility(w.document, true);
             initMainPaneDrop(w.document);
@@ -302,9 +313,15 @@ export async function initVerticalTabs(
   // Exponential backoff retry — Zotero session restore may not have completed yet.
   const RETRY_DELAYS = [1000, 2500, 5000];
   RETRY_DELAYS.forEach((delay, index) => {
-    setTimeout(() => {
+    setTimeout(async () => {
       const before = getOpenedPDFs().length;
-      scanOpenedTabs();
+      // scanOpenedTabs is asynchronous: Zotero may still be constructing the
+      // reader/tab info when the retry fires. Wait for it before restoring
+      // categories or marking startup complete, otherwise the late tabs are
+      // classified as newly opened and lose their stored read time.
+      loadStartupReadTimeCandidates(getData());
+      await scanOpenedTabs();
+      applyLastReadTimesToOpenedPDFs();
       const after = getOpenedPDFs().length;
       if (after > before) {
         // New tabs appeared: restore them as well before the next render.

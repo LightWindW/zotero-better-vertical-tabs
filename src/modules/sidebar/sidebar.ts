@@ -13,6 +13,7 @@ import { dispatchVtEvent } from "../core/events";
 import { dispatchTimeTick } from "../track/itemTracker";
 import { isDarkMode } from "../render/colorUtils";
 import { pinFillIcon, pinIcon, svgElement } from "../ui/iconSvgs";
+import { setReaderResizeCursor } from "./readerResizeCursor";
 
 const PREF_NAMESPACE = config.prefsPrefix;
 const DEFAULT_WIDTH = 260;
@@ -43,6 +44,8 @@ let _displayRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
 const HOVER_DELAY_MS = 300;
 const LEAVE_DELAY_MS = 250;
+const EDGE_COLLAPSE_GRACE_MS = 4000;
+const EDGE_COLLAPSE_ZONE_PX = 5;
 
 function vtLog(msg: string): void {
   Zotero.logError(new Error("[BVT] " + msg));
@@ -378,6 +381,7 @@ function removeWrapper(doc: Document): void {
 interface DocState {
   hoverTimer: TimerHandle | null;
   leaveTimer: TimerHandle | null;
+  edgeGraceTimer: TimerHandle | null;
   expanded: boolean;
   contextMenuOpen: boolean;
   releaseContextMenuOnSidebarEnter: boolean;
@@ -391,6 +395,8 @@ interface DocState {
   pinAnimRaf: number | null;
   wrapperAnimRaf: number | null;
   expandAnimationToken: object | null;
+  resizing: boolean;
+  suppressResizeClick: boolean;
 }
 
 function getDocState(doc: Document): DocState {
@@ -400,6 +406,7 @@ function getDocState(doc: Document): DocState {
     state = {
       hoverTimer: null,
       leaveTimer: null,
+      edgeGraceTimer: null,
       expanded: false,
       contextMenuOpen: false,
       releaseContextMenuOnSidebarEnter: false,
@@ -413,6 +420,8 @@ function getDocState(doc: Document): DocState {
       pinAnimRaf: null,
       wrapperAnimRaf: null,
       expandAnimationToken: null,
+      resizing: false,
+      suppressResizeClick: false,
     };
     (doc as any)[key] = state;
   }
@@ -595,6 +604,22 @@ function isMouseOverVt(
   );
 }
 
+function isPointInRightEdgeGraceZone(
+  doc: Document,
+  clientX: number,
+  clientY: number,
+): boolean {
+  const sidebar = getSidebar(doc);
+  if (!sidebar) return false;
+  const rect = sidebar.getBoundingClientRect();
+  return (
+    clientX >= rect.right &&
+    clientX <= rect.right + EDGE_COLLAPSE_ZONE_PX &&
+    clientY >= rect.top &&
+    clientY <= rect.bottom
+  );
+}
+
 const HOME_BLOCK_CLASS = "vertical-tabs-home-block";
 
 /**
@@ -634,7 +659,10 @@ function setupInputPositionListener(doc: Document): void {
     if (isPinned()) return;
     if (!isFloatingExpanded(doc)) return;
 
-    if (isMouseOverVt(doc, e.clientX, e.clientY)) {
+    if (
+      isMouseOverVt(doc, e.clientX, e.clientY) ||
+      isPointInRightEdgeGraceZone(doc, e.clientX, e.clientY)
+    ) {
       // Mouse is still inside VT; keep waiting for a decisive move/outside click.
       return;
     }
@@ -689,8 +717,27 @@ function clearLeaveTimer(doc: Document): void {
   }
 }
 
+function clearEdgeGraceTimer(doc: Document): void {
+  const state = getDocState(doc);
+  if (state.edgeGraceTimer) {
+    clearTimeout(state.edgeGraceTimer);
+    state.edgeGraceTimer = null;
+  }
+}
+
+function startEdgeGraceTimer(doc: Document): void {
+  const state = getDocState(doc);
+  if (state.edgeGraceTimer) return;
+  clearLeaveTimer(doc);
+  state.edgeGraceTimer = setTimeout(() => {
+    state.edgeGraceTimer = null;
+    collapseFloatingSidebar(doc);
+  }, EDGE_COLLAPSE_GRACE_MS);
+}
+
 export function cancelPendingCollapse(doc: Document): void {
   clearLeaveTimer(doc);
+  clearEdgeGraceTimer(doc);
 }
 
 function isFloatingExpanded(doc: Document): boolean {
@@ -701,12 +748,18 @@ export function getFloatingExpanded(doc: Document): boolean {
   return isFloatingExpanded(doc);
 }
 
+/** True while the sidebar width resize handle is held down. */
+export function isSidebarResizing(doc: Document): boolean {
+  return getDocState(doc).resizing;
+}
+
 function setFloatingExpanded(doc: Document, expanded: boolean): void {
   getDocState(doc).expanded = expanded;
 }
 
 export function scheduleCollapse(doc: Document): void {
   if (
+    getDocState(doc).resizing ||
     isContextMenuOpen(doc) ||
     isSearchFocused(doc) ||
     isWaitingMouseMoveAfterInput(doc) ||
@@ -714,6 +767,7 @@ export function scheduleCollapse(doc: Document): void {
   )
     return;
   clearLeaveTimer(doc);
+  clearEdgeGraceTimer(doc);
   const timer = setTimeout(() => {
     setLeaveTimer(doc, null);
     collapseFloatingSidebar(doc);
@@ -883,6 +937,7 @@ export function createSidebar(doc: Document): HTMLElement {
   // Mouse enter to expand, mouse leave to collapse (only when floating / unpinned)
   sidebar.addEventListener("mouseenter", (e: MouseEvent) => {
     clearLeaveTimer(doc);
+    clearEdgeGraceTimer(doc);
     // A menu click keeps the expanded panel open until the pointer returns.
     // Merely moving away from the row/menu must not release this suppression.
     releaseDeferredContextMenuOnSidebarEnter(doc);
@@ -922,6 +977,14 @@ export function createSidebar(doc: Document): HTMLElement {
     // Always clear pending expand timer so a quick mouse pass doesn't expand VT
     clearHoverTimer(doc);
     if (isPinned() || !isFloatingExpanded(doc)) return;
+    if (
+      isAutoExpandEnabled() &&
+      isPointInRightEdgeGraceZone(doc, e.clientX, e.clientY)
+    ) {
+      startEdgeGraceTimer(doc);
+      return;
+    }
+    clearEdgeGraceTimer(doc);
     if (isWaitingMouseMoveAfterInput(doc)) {
       setWaitMouseMoveAfterInput(doc, false);
       clearInputPositionListener(doc);
@@ -932,6 +995,22 @@ export function createSidebar(doc: Document): HTMLElement {
       return;
     }
     scheduleCollapse(doc);
+  });
+
+  // Keep the expanded panel open while the pointer rests just beyond its
+  // resize edge, giving the user time to bring the pointer onto the handle.
+  // Leaving the 5px zone starts the normal collapse delay again.
+  doc.addEventListener("mousemove", (e: MouseEvent) => {
+    if (isPinned() || !isFloatingExpanded(doc) || !isAutoExpandEnabled())
+      return;
+    if (isPointInRightEdgeGraceZone(doc, e.clientX, e.clientY)) {
+      startEdgeGraceTimer(doc);
+      return;
+    }
+    if (getDocState(doc).edgeGraceTimer) {
+      clearEdgeGraceTimer(doc);
+      if (!isMouseOverVt(doc, e.clientX, e.clientY)) scheduleCollapse(doc);
+    }
   });
 
   // Create resize handle
@@ -945,8 +1024,44 @@ export function createSidebar(doc: Document): HTMLElement {
   // Drag-to-resize logic
   let startX = 0;
   let startWidth = 0;
+  let previousDocumentCursor = "";
+  let resizeOverlay: HTMLElement | null = null;
+  let mouseCaptured = false;
+
+  function releaseResizeMouseCapture(): void {
+    if (!mouseCaptured) return;
+    mouseCaptured = false;
+    try {
+      (
+        resizeHandle as HTMLElement & { releaseCapture?: () => void }
+      ).releaseCapture?.();
+    } catch {
+      // The window may already have released capture during shutdown.
+    }
+  }
+
+  // A resize release can generate a click on whichever row is underneath the
+  // pointer. That click is part of the resize gesture, not a tab activation.
+  doc.addEventListener(
+    "click",
+    (e: MouseEvent) => {
+      const state = getDocState(doc);
+      if (!state.suppressResizeClick) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      state.suppressResizeClick = false;
+    },
+    true,
+  );
 
   function onMouseMove(e: MouseEvent): void {
+    // Reader documents are sandboxed, so the main-window cursor rule cannot
+    // override PDF text-layer cursors. Re-scan in case a reader loaded mid-drag.
+    setReaderResizeCursor(true);
+    // Moving the resize pointer outside the sidebar fires mouseleave on the
+    // panel. Keep the expanded panel alive for the whole drag; the pointer
+    // position is still the source of truth for the live width below.
+    clearLeaveTimer(doc);
     const delta = e.clientX - startX;
     const newWidth = startWidth + delta;
     const clamped = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, newWidth));
@@ -969,19 +1084,73 @@ export function createSidebar(doc: Document): HTMLElement {
   function onMouseUp(e: MouseEvent): void {
     resizeHandle.classList.remove("active");
     sidebar.classList.remove("vertical-tabs-sidebar-resizing");
+    resizeOverlay?.remove();
+    resizeOverlay = null;
     doc.removeEventListener("mousemove", onMouseMove);
     doc.removeEventListener("mouseup", onMouseUp);
+    releaseResizeMouseCapture();
+    getDocState(doc).resizing = false;
+    getDocState(doc).suppressResizeClick = true;
+    setReaderResizeCursor(false);
+    dispatchVtEvent(doc, "vertical-tabs:resize-end");
+    const rootElement = doc.documentElement as HTMLElement | null;
+    if (rootElement) {
+      rootElement.style.cursor = previousDocumentCursor;
+      rootElement.classList.remove("vertical-tabs-resizing-cursor");
+    }
+    sidebar.style.cursor = "";
+    // Keep the guard only through the native click generated by mouseup.
+    setTimeout(() => {
+      getDocState(doc).suppressResizeClick = false;
+    }, 0);
     const finalWidth = sidebar.offsetWidth;
     saveWidth(finalWidth);
     sidebar.style.setProperty("--vt-content-opacity", "1");
+    // Resume the normal hover policy only after the pointer is released. If
+    // it was released outside the panel, schedule the usual delayed collapse;
+    // releasing inside leaves the expanded panel open.
+    if (!isPinned() && !isMouseOverVt(doc, e.clientX, e.clientY)) {
+      scheduleCollapse(doc);
+    }
   }
 
   resizeHandle.addEventListener("mousedown", (e: MouseEvent) => {
     e.preventDefault();
     startX = e.clientX;
     startWidth = sidebar.offsetWidth;
+    getDocState(doc).resizing = true;
+    setReaderResizeCursor(true);
+    clearLeaveTimer(doc);
+    // Gecko's mouse capture keeps this resize handle as the active pointer
+    // target while dragging outside the Zotero window, so the resize cursor
+    // and mouseup tracking remain active until the user releases the button.
+    try {
+      const captureHandle = resizeHandle as HTMLElement & {
+        setCapture?: (retargetToElement?: boolean) => void;
+      };
+      if (captureHandle.setCapture) {
+        captureHandle.setCapture(false);
+        mouseCaptured = true;
+      }
+    } catch {
+      // CSS cursor rules still cover the main and reader documents.
+    }
+    const root = doc.documentElement as HTMLElement | null;
+    previousDocumentCursor = root?.style.cursor ?? "";
+    if (root) {
+      root.style.cursor = "col-resize";
+      root.classList.add("vertical-tabs-resizing-cursor");
+    }
+    sidebar.style.cursor = "col-resize";
+    dispatchVtEvent(doc, "vertical-tabs:resize-start");
     resizeHandle.classList.add("active");
     sidebar.classList.add("vertical-tabs-sidebar-resizing");
+    resizeOverlay = doc.createElementNS(
+      "http://www.w3.org/1999/xhtml",
+      "div",
+    ) as HTMLElement;
+    resizeOverlay.className = "vertical-tabs-resize-overlay";
+    sidebar.appendChild(resizeOverlay);
     doc.addEventListener("mousemove", onMouseMove);
     doc.addEventListener("mouseup", onMouseUp);
   });
@@ -1566,6 +1735,7 @@ function performCollapse(doc: Document): void {
 
 export function collapseFloatingSidebar(doc: Document): void {
   if (isPinned()) return;
+  if (getDocState(doc).resizing) return;
   if (
     isContextMenuOpen(doc) ||
     isSearchFocused(doc) ||

@@ -83,6 +83,13 @@ export function getStyles(): string {
       display: flex;
       align-items: center;
       justify-content: flex-start;
+      /* Keep the fixed controls above the scrollable tab rows.  The rows can
+         still occupy the same screen coordinates while the list is scrolled;
+         an opaque stacking layer makes the header a real hit-test boundary. */
+      position: relative;
+      z-index: 2;
+      background: var(--material-sidepane, #f5f5f5);
+      pointer-events: auto;
       /* Total height is exactly 40px (padding and border included). */
       height: 40px;
       box-sizing: border-box;
@@ -171,6 +178,7 @@ export function getStyles(): string {
       /* Anchors the category-reorder gap indicator (absolute, scrolls with
          the content) and offsetTop-based layout measurements. */
       position: relative;
+      z-index: 0;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category {
@@ -380,6 +388,10 @@ export function getStyles(): string {
       height: 0;
       padding: 0;
       opacity: 0;
+      /* overflow:hidden clips the rows visually, but does not reliably stop
+         them from becoming the event target while another header overlaps
+         their old layout rectangle. */
+      pointer-events: none;
       transition: opacity 0.15s ease-out;
     }
 
@@ -390,11 +402,13 @@ export function getStyles(): string {
        the height transition from the base rule. */
     #${SIDEBAR_ID} .vertical-tabs-category.vt-height-animating .vertical-tabs-items {
       opacity: 1;
+      pointer-events: auto;
       transition: height 0.3s ease-out, opacity 0s;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-category.vt-category-preview .vertical-tabs-items {
       opacity: 1;
+      pointer-events: auto;
       transition: height 0.3s ease-out, opacity 0.15s ease-out;
     }
 
@@ -763,8 +777,11 @@ export function getStyles(): string {
        tab bar is hidden. */
     #${SIDEBAR_ID} .vertical-tabs-home-block {
       flex: 0 0 auto;
+      position: relative;
+      z-index: 2;
       overflow: hidden;
       box-sizing: border-box;
+      background: var(--material-sidepane, #f5f5f5);
       transition: height 0.3s ease, opacity 0.3s ease;
     }
 
@@ -1071,6 +1088,26 @@ export function getStyles(): string {
        padding, and opacity transitions so the expanded layout does not pop. */
     #${SIDEBAR_ID}.vertical-tabs-sidebar-resizing {
       transition: none !important;
+    }
+
+    /* Keep the resize cursor stable while the pointer crosses rows and
+       controls inside the expanded sidebar. Their own cursor declarations
+       would otherwise override the inherited cursor during the drag. */
+    :root.vertical-tabs-resizing-cursor,
+    :root.vertical-tabs-resizing-cursor * {
+      cursor: col-resize !important;
+    }
+
+    /* An overlay owns pointer hit testing across the sidebar during resize,
+       preventing row hover/click cursors while document mouse listeners
+       continue tracking the drag. */
+    #${SIDEBAR_ID} .vertical-tabs-resize-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 2147483647;
+      pointer-events: auto !important;
+      cursor: col-resize !important;
+      background: transparent;
     }
 
     /* Resize handle: draggable right edge */

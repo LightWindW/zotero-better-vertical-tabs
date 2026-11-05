@@ -49,6 +49,18 @@ let _openedPDFs: OpenedPDF[] = [];
 let _selectedTabId = "";
 let _startupRestoreDone = false;
 let _lastReadTimes: Record<string, number> = {};
+let _lastReadItemIds: Record<string, number> = {};
+let _itemReadTimes: Record<string, number> = {};
+/**
+ * Times belonging to tabs from the previous Zotero session. Zotero can emit
+ * the tab-added notification after our startup retry loop, with a new tabId;
+ * keep these itemId candidates so a late session-restored tab does not look
+ * like a newly opened tab and get a Date.now() timestamp.
+ */
+let _startupItemReadTimes = new Map<
+  number,
+  Array<{ tabId: string; time: number }>
+>();
 let _saveLastReadTimesTimer: ReturnType<typeof setTimeout> | null = null;
 const SAVE_LAST_READ_TIMES_DELAY_MS = 1000;
 
@@ -63,6 +75,37 @@ export function getMainWindows(): Window[] {
 
 export function markStartupRestoreDone(): void {
   _startupRestoreDone = true;
+  const liveTabIds = new Set(getLiveOpenTabIds());
+  for (const tabId of Object.keys(_lastReadTimes)) {
+    if (liveTabIds.has(tabId)) continue;
+    delete _lastReadTimes[tabId];
+    delete _lastReadItemIds[tabId];
+  }
+  // Every item tab shown in the sidebar needs a persisted timestamp, even if
+  // it had no history in the previous JSON (for example, a tab opened before
+  // the initial-time persistence was added). During startup handleTabAdded
+  // deliberately keeps such timestamps provisional so they cannot overwrite
+  // an old timestamp that is still waiting to be migrated by itemId.
+  for (const pdf of _openedPDFs) {
+    if (!liveTabIds.has(pdf.tabId)) continue;
+    const storedTime = Math.max(
+      _lastReadTimes[pdf.tabId] ?? 0,
+      _itemReadTimes[pdf.itemId] ?? 0,
+    );
+    const time = storedTime || pdf.openedAt || Date.now();
+    pdf.openedAt = time;
+    _lastReadTimes[pdf.tabId] = time;
+    _lastReadItemIds[pdf.tabId] = pdf.itemId;
+    _itemReadTimes[pdf.itemId] = Math.max(
+      _itemReadTimes[pdf.itemId] ?? 0,
+      time,
+    );
+  }
+  // Keep itemReadTimes across the startup boundary. Zotero can restore a tab
+  // after this point; deleting an item record here made that late tab look
+  // newly opened and reset its label to "just now". Records are removed by
+  // the normal tab-close path once a tab is actually closed.
+  debouncedSaveLastReadTimes();
 }
 
 export function isStartupRestoreDone(): boolean {
@@ -94,24 +137,133 @@ export function getLastReadTimes(): Record<string, number> {
   return { ..._lastReadTimes };
 }
 
+export function getLastReadItemIds(): Record<string, number> {
+  return { ..._lastReadItemIds };
+}
+
+export function getItemReadTimes(): Record<string, number> {
+  return { ..._itemReadTimes };
+}
+
+/** Match by stable item identity, independently of session tab IDs. */
+export function matchLastReadTime(itemId: number): number | undefined {
+  return _itemReadTimes[itemId];
+}
+
+export function loadStartupReadTimeCandidates(data: VerticalTabsData): void {
+  // Startup retries can run after a tab has already been opened and stamped.
+  // Merge persisted values instead of replacing the live map, otherwise a
+  // retry reading the still-old `_data` snapshot can roll a newer in-memory
+  // time back to the old value (or to zero when the field is absent).
+  for (const [itemId, time] of Object.entries(data.itemReadTimes ?? {})) {
+    if (!Number.isFinite(time)) continue;
+    _itemReadTimes[itemId] = Math.max(_itemReadTimes[itemId] ?? 0, time);
+  }
+  const candidates = new Map<number, Array<{ tabId: string; time: number }>>();
+  const seenTabIds = new Set<string>();
+  const add = (itemId: number | undefined, tabId: string | undefined) => {
+    if (!itemId || !tabId || seenTabIds.has(tabId)) return;
+    const time = data.lastReadTimes?.[tabId];
+    if (typeof time !== "number" || !Number.isFinite(time)) return;
+    seenTabIds.add(tabId);
+    _lastReadItemIds[tabId] = itemId;
+    _itemReadTimes[itemId] = Math.max(_itemReadTimes[itemId] ?? 0, time);
+    const times = candidates.get(itemId);
+    if (times) times.push({ tabId, time });
+    else candidates.set(itemId, [{ tabId, time }]);
+  };
+
+  // Prefer identities persisted with the times. Category/order data is only
+  // a compatibility fallback for older files that still have matching IDs.
+  for (const [tabId, itemId] of Object.entries(data.lastReadItemIds ?? {})) {
+    add(itemId, tabId);
+  }
+
+  for (const category of data.categories ?? []) {
+    for (let i = 0; i < category.tabIds.length; i++) {
+      add(category.itemIds[i], category.tabIds[i]);
+    }
+  }
+  for (let i = 0; i < data.uncategorizedOrder.length; i++) {
+    add(data.uncategorizedItemIds[i], data.uncategorizedOrder[i]);
+  }
+
+  _startupItemReadTimes = candidates;
+  // Keep legacy tab-keyed values until the data store can associate them with
+  // a live item. A delayed Zotero restore may provide that association after
+  // this scan; deleting them here would make recovery impossible.
+}
+
+function takeStartupReadTime(
+  itemId: number,
+  targetTabId: string,
+  preferredTime?: number,
+): number | undefined {
+  const times = _startupItemReadTimes.get(itemId);
+  if (!times?.length) return undefined;
+  const index =
+    preferredTime === undefined
+      ? 0
+      : times.findIndex((candidate) => candidate.time === preferredTime);
+  if (index < 0) return undefined;
+  const [candidate] = times.splice(index, 1);
+  if (times.length === 0) _startupItemReadTimes.delete(itemId);
+  if (candidate.tabId !== targetTabId) {
+    delete _lastReadTimes[candidate.tabId];
+    delete _lastReadItemIds[candidate.tabId];
+  }
+  return candidate.time;
+}
+
 function debouncedSaveLastReadTimes(): void {
   if (_saveLastReadTimesTimer) {
     clearTimeout(_saveLastReadTimesTimer);
   }
   _saveLastReadTimesTimer = setTimeout(() => {
     _saveLastReadTimesTimer = null;
-    void saveLastReadTimes({ ..._lastReadTimes });
+    void saveLastReadTimes(
+      getLastReadTimes(),
+      getLastReadItemIds(),
+      getItemReadTimes(),
+    );
   }, SAVE_LAST_READ_TIMES_DELAY_MS);
 }
 
 export function setLastReadTime(tabId: string, time: number): void {
   _lastReadTimes[tabId] = time;
+  const itemId = _lastReadItemIds[tabId];
+  if (itemId) {
+    _itemReadTimes[itemId] = time;
+    for (const pdf of _openedPDFs) {
+      if (pdf.itemId !== itemId) continue;
+      pdf.openedAt = time;
+      _lastReadTimes[pdf.tabId] = time;
+    }
+  }
   debouncedSaveLastReadTimes();
 }
 
-export function removeLastReadTime(tabId: string): void {
+function forgetClosedTabTime(tabId: string): void {
+  const itemId = _lastReadItemIds[tabId];
   delete _lastReadTimes[tabId];
-  void saveLastReadTimes({ ..._lastReadTimes });
+  delete _lastReadItemIds[tabId];
+  if (!itemId || _openedPDFs.some((pdf) => pdf.itemId === itemId)) return;
+  delete _itemReadTimes[itemId];
+  _startupItemReadTimes.delete(itemId);
+  for (const [id, storedItemId] of Object.entries(_lastReadItemIds)) {
+    if (storedItemId !== itemId) continue;
+    delete _lastReadItemIds[id];
+    delete _lastReadTimes[id];
+  }
+}
+
+export function removeLastReadTime(tabId: string): void {
+  forgetClosedTabTime(tabId);
+  void saveLastReadTimes(
+    getLastReadTimes(),
+    getLastReadItemIds(),
+    getItemReadTimes(),
+  );
 }
 
 /**
@@ -138,13 +290,17 @@ export function removeTabsFromTrackingSilently(tabIds: string[]): void {
     const beforeLength = _openedPDFs.length;
     _openedPDFs = _openedPDFs.filter((pdf) => pdf.tabId !== tabId);
     if (_openedPDFs.length !== beforeLength) {
-      delete _lastReadTimes[tabId];
+      forgetClosedTabTime(tabId);
       removedAny = true;
     }
   }
   if (removedAny) {
     // One disk write for the whole batch (close-others can be many tabs).
-    void saveLastReadTimes({ ..._lastReadTimes });
+    void saveLastReadTimes(
+      getLastReadTimes(),
+      getLastReadItemIds(),
+      getItemReadTimes(),
+    );
     dispatchPDFsChanged();
   }
 }
@@ -152,9 +308,15 @@ export function removeTabsFromTrackingSilently(tabIds: string[]): void {
 export function applyLastReadTimesToOpenedPDFs(): void {
   let changed = false;
   for (const pdf of _openedPDFs) {
-    const time = _lastReadTimes[pdf.tabId];
+    const time = Math.max(
+      _itemReadTimes[pdf.itemId] ?? 0,
+      _lastReadTimes[pdf.tabId] ?? 0,
+    );
+    if (time === 0) continue;
     if (time !== undefined && time !== pdf.openedAt) {
       pdf.openedAt = time;
+      _lastReadTimes[pdf.tabId] = time;
+      _lastReadItemIds[pdf.tabId] = pdf.itemId;
       changed = true;
     }
   }
@@ -345,8 +507,19 @@ async function handleTabAdded(tabId: string): Promise<void> {
     ? getItemDisplayTitle(item, tabInfo.title || "")
     : tabInfo.title || "";
 
-  const time = _lastReadTimes[tabId];
-  const openedAt = time ?? Date.now();
+  const directTime = _lastReadTimes[tabId];
+  _lastReadItemIds[tabId] = itemId;
+  if (directTime !== undefined) {
+    takeStartupReadTime(itemId, tabId, directTime);
+  }
+  const candidateTime =
+    directTime === undefined ? takeStartupReadTime(itemId, tabId) : undefined;
+  const time = Math.max(
+    matchLastReadTime(itemId) ?? 0,
+    directTime ?? 0,
+    candidateTime ?? 0,
+  );
+  const openedAt = time || Date.now();
   _openedPDFs.push({
     itemId,
     parentItemId,
@@ -364,7 +537,11 @@ async function handleTabAdded(tabId: string): Promise<void> {
   // real age. Startup-restored tabs are deliberately skipped: their
   // timestamps come from the old→new tabId migration, and a fresh "now"
   // entry would win the merge against the migrated old time.
-  if (time === undefined && _startupRestoreDone) {
+  if (time > 0 && directTime !== time) {
+    // Migrate a restored tab's timestamp to Zotero's new tabId immediately;
+    // this also protects it from a later startup cleanup/persist pass.
+    setLastReadTime(tabId, time);
+  } else if (time === 0 && _startupRestoreDone) {
     setLastReadTime(tabId, openedAt);
   }
 
@@ -581,6 +758,11 @@ export function stopTracking(): void {
   if (_saveLastReadTimesTimer) {
     clearTimeout(_saveLastReadTimesTimer);
     _saveLastReadTimesTimer = null;
+    void saveLastReadTimes(
+      getLastReadTimes(),
+      getLastReadItemIds(),
+      getItemReadTimes(),
+    );
   }
   if (_pendingClosedFlushTimer) {
     clearTimeout(_pendingClosedFlushTimer);
@@ -590,6 +772,9 @@ export function stopTracking(): void {
   _openedPDFs = [];
   _selectedTabId = "";
   _lastReadTimes = {};
+  _lastReadItemIds = {};
+  _itemReadTimes = {};
+  _startupItemReadTimes = new Map();
   // Full state reset: a later re-init must run the startup restore flow
   // again (isNew flags, category/order migration) instead of treating every
   // existing tab as new.

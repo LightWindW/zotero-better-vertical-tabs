@@ -24,6 +24,10 @@ const PREVIEW_STATE_KEY = "__vtCategoryPreviewState";
 const CATEGORY_PREVIEW_CLASS = "vt-category-preview";
 const DROP_ZONE_PREVIEW_CLASS = "vt-drop-zone-preview";
 const DEFAULT_ITEM_HEIGHT = 55;
+// Rows use a 4px margin on both vertical sides. Include this in the fallback
+// slot size when previewing an empty category; otherwise the first inserted
+// row is clipped by the two margins that sit outside the container height.
+const DEFAULT_ITEM_VERTICAL_MARGIN = 8;
 const PREVIEW_ANIMATION_MS = 450;
 
 interface PendingClear {
@@ -89,7 +93,13 @@ function getContainerItemCount(container: Element): number {
 function getItemHeight(container: Element, doc: Document): number {
   const items = getContainerItems(container);
   const first = items[0] as HTMLElement | undefined;
-  if (first) return first.getBoundingClientRect().height;
+  if (first) {
+    const rectHeight = first.getBoundingClientRect().height;
+    const computed = doc.defaultView?.getComputedStyle(first);
+    const marginTop = parseFloat(computed?.marginTop || "0") || 0;
+    const marginBottom = parseFloat(computed?.marginBottom || "0") || 0;
+    return rectHeight + marginTop + marginBottom;
+  }
 
   // Empty container: fall back to the configured item min-height.
   const inner =
@@ -99,9 +109,9 @@ function getItemHeight(container: Element, doc: Document): number {
   const minHeight = computed.getPropertyValue("--vt-item-min-height");
   if (minHeight) {
     const parsed = parseInt(minHeight, 10);
-    if (!Number.isNaN(parsed)) return parsed;
+    if (!Number.isNaN(parsed)) return parsed + DEFAULT_ITEM_VERTICAL_MARGIN;
   }
-  return DEFAULT_ITEM_HEIGHT;
+  return DEFAULT_ITEM_HEIGHT + DEFAULT_ITEM_VERTICAL_MARGIN;
 }
 
 function getVerticalPadding(container: Element, doc: Document): number {

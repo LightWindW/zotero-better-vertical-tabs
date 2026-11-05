@@ -12,6 +12,7 @@ import { getCardFigureDataUrl, getCardFigureItemId } from "./cardFigure";
 import {
   isAutoExpandEnabled,
   isExpandAnimating,
+  isSidebarResizing,
   SIDEBAR_ID,
 } from "../sidebar/sidebar";
 import {
@@ -415,6 +416,80 @@ let _pendingTabId: string | null = null;
 let _suppressed = false;
 const _sidebarHoverRows = new WeakMap<Document, HTMLElement>();
 const _sidebarHoverLocks = new WeakMap<Document, "menu">();
+const SIDEBAR_TOP_ZONE_SELECTOR =
+  ".vertical-tabs-header, .vertical-tabs-home-block";
+
+/**
+ * A collapsed category keeps its item nodes in the DOM so it can expand
+ * without rebuilding the rows.  Their layout rectangles can therefore still
+ * overlap the next category header even though the `.vertical-tabs-items`
+ * container clips them.  Such rows must never participate in document-level
+ * coordinate fallback hit testing.
+ */
+function isSidebarRowPointerVisible(row: HTMLElement): boolean {
+  const category = row.closest(".vertical-tabs-category") as HTMLElement | null;
+  return (
+    !category?.classList.contains("collapsed") ||
+    category.classList.contains("vt-category-preview")
+  );
+}
+
+function getSidebarCategoryHeaderAtPoint(
+  sidebar: HTMLElement,
+  clientX: number,
+  clientY: number,
+): HTMLElement | null {
+  const headers = sidebar.querySelectorAll<HTMLElement>(
+    ".vertical-tabs-category-header",
+  );
+  for (const header of Array.from(headers) as HTMLElement[]) {
+    const rect = header.getBoundingClientRect();
+    if (
+      clientX >= rect.left &&
+      clientX <= rect.right &&
+      clientY >= rect.top &&
+      clientY <= rect.bottom
+    ) {
+      return header;
+    }
+  }
+  return null;
+}
+
+/**
+ * The item hover/click handlers have a coordinate-based fallback for gaps
+ * between rows.  Do not let that fallback treat the fixed controls at the top
+ * of the sidebar as a row when the list has been scrolled underneath them.
+ * Check both the actual hit target and the rendered rectangles so this still
+ * works while an old row is temporarily painted over the controls.
+ */
+function isPointOverSidebarTopZone(
+  doc: Document,
+  clientX: number,
+  clientY: number,
+): boolean {
+  const sidebar = doc.getElementById(SIDEBAR_ID);
+  if (!sidebar) return false;
+
+  const hit = doc.elementFromPoint(clientX, clientY) as Element | null;
+  if (hit?.closest?.(SIDEBAR_TOP_ZONE_SELECTOR)) return true;
+
+  const zones = sidebar.querySelectorAll<HTMLElement>(
+    SIDEBAR_TOP_ZONE_SELECTOR,
+  );
+  for (const zone of Array.from(zones) as HTMLElement[]) {
+    const rect = zone.getBoundingClientRect();
+    if (
+      clientX >= rect.left &&
+      clientX <= rect.right &&
+      clientY >= rect.top &&
+      clientY <= rect.bottom
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
 
 function activateSidebarHoverRow(
   doc: Document,
@@ -449,6 +524,10 @@ function clearSidebarHoverRow(doc: Document, dispatchEnd: boolean): void {
 
 function handleSidebarItemMouseMove(event: MouseEvent): void {
   const doc = event.currentTarget as Document;
+  if (isSidebarResizing(doc)) {
+    clearSidebarHoverRow(doc, true);
+    return;
+  }
   if (_sidebarHoverLocks.has(doc)) return;
   const sidebar = doc.getElementById(SIDEBAR_ID);
   const target = event.target as Element | null;
@@ -458,9 +537,18 @@ function handleSidebarItemMouseMove(event: MouseEvent): void {
     return;
   }
 
+  if (isPointOverSidebarTopZone(doc, event.clientX, event.clientY)) {
+    clearSidebarHoverRow(doc, true);
+    return;
+  }
+
   const rowSelector = ".vertical-tabs-item[data-item-id]";
   const hitRow = target.closest(rowSelector) as HTMLElement | null;
   if (hitRow) {
+    if (!isSidebarRowPointerVisible(hitRow)) {
+      clearSidebarHoverRow(doc, true);
+      return;
+    }
     sidebar.classList.remove("vt-sidebar-row-band-hover");
     activateSidebarHoverRow(doc, hitRow, event.clientY);
     return;
@@ -472,8 +560,8 @@ function handleSidebarItemMouseMove(event: MouseEvent): void {
     return;
   }
 
-  const rows = Array.from(
-    sidebar.querySelectorAll(rowSelector),
+  const rows = Array.from(sidebar.querySelectorAll(rowSelector)).filter(
+    (candidate) => isSidebarRowPointerVisible(candidate as HTMLElement),
   ) as HTMLElement[];
   const row = rows.find((candidate) => {
     const rect = candidate.getBoundingClientRect();
@@ -525,7 +613,58 @@ function handleSidebarItemClick(event: MouseEvent): void {
   const sidebar = doc.getElementById(SIDEBAR_ID);
   const target = event.target as Element | null;
   if (!sidebar || !target || !sidebar.contains(target)) return;
-  if (target.closest(".vertical-tabs-item")) return;
+  if (isPointOverSidebarTopZone(doc, event.clientX, event.clientY)) {
+    // Normally the opaque top layer is the event target, so native controls
+    // (library, search, more) continue to receive their own click handlers.
+    // If a scrolled row is still reported as the target, stop it here so the
+    // row cannot be activated through the controls above it.
+    if (
+      target.closest(".vertical-tabs-item") &&
+      !target.closest(SIDEBAR_TOP_ZONE_SELECTOR)
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    return;
+  }
+  const pointHeader = getSidebarCategoryHeaderAtPoint(
+    sidebar as HTMLElement,
+    event.clientX,
+    event.clientY,
+  );
+  if (pointHeader && !target.closest(".vertical-tabs-category-header")) {
+    // A clipped row from a collapsed category can occasionally be reported
+    // as the target while the pointer is over the next category's header.
+    // Forward the action to that header so the user's intended category is
+    // toggled, then suppress the stale row event.
+    event.preventDefault();
+    event.stopPropagation();
+    pointHeader.dispatchEvent(
+      new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+        view: doc.defaultView,
+        clientX: event.clientX,
+        clientY: event.clientY,
+      }),
+    );
+    return;
+  }
+  // Let a category header's own click handler toggle that category.  The
+  // coordinate fallback below is only for blank gaps, never for a real
+  // header target.
+  if (target.closest(".vertical-tabs-category-header")) return;
+
+  const targetRow = target.closest(
+    ".vertical-tabs-item[data-item-id]",
+  ) as HTMLElement | null;
+  if (targetRow) {
+    if (!isSidebarRowPointerVisible(targetRow)) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    return;
+  }
   const rect = sidebar.getBoundingClientRect();
   if (
     event.clientX < rect.left ||
@@ -537,10 +676,12 @@ function handleSidebarItemClick(event: MouseEvent): void {
   }
   const row = Array.from(
     sidebar.querySelectorAll(".vertical-tabs-item[data-item-id]"),
-  ).find((candidate) => {
-    const rowRect = (candidate as HTMLElement).getBoundingClientRect();
-    return event.clientY >= rowRect.top && event.clientY <= rowRect.bottom;
-  }) as HTMLElement | undefined;
+  )
+    .filter((candidate) => isSidebarRowPointerVisible(candidate as HTMLElement))
+    .find((candidate) => {
+      const rowRect = (candidate as HTMLElement).getBoundingClientRect();
+      return event.clientY >= rowRect.top && event.clientY <= rowRect.bottom;
+    }) as HTMLElement | undefined;
   if (!row) return;
   event.preventDefault();
   event.stopPropagation();
@@ -622,6 +763,7 @@ function handleItemHover(event: Event): void {
   const target = event.target as HTMLElement;
   const doc = target.ownerDocument;
   if (!doc) return;
+  if (isSidebarResizing(doc)) return;
 
   const row = target.closest(
     ".vertical-tabs-item[data-item-id]",
@@ -912,6 +1054,20 @@ export function initHoverCard(doc: Document): void {
   doc.addEventListener("vertical-tabs:item-hover", handleItemHover);
   doc.addEventListener("vertical-tabs:item-hover-end", handleItemHoverEnd);
   doc.addEventListener("mousemove", handleSidebarItemMouseMove);
+  const resizeStartHandler = () => {
+    clearSidebarHoverRow(doc, true);
+    _currentItemId = null;
+    _pendingItemId = null;
+    _pendingTabId = null;
+    _renderToken++;
+    if (_showTimeout) {
+      clearTimeout(_showTimeout);
+      _showTimeout = null;
+    }
+    hideCardNow(doc, "item");
+  };
+  doc.addEventListener("vertical-tabs:resize-start", resizeStartHandler);
+  (doc as any).__vtResizeStartHandler = resizeStartHandler;
   doc.addEventListener("click", handleSidebarHoverClick, true);
   doc.addEventListener("click", handleSidebarItemClick, true);
   doc.addEventListener(
@@ -973,6 +1129,13 @@ export function destroyHoverCard(doc: Document): void {
   doc.removeEventListener("vertical-tabs:item-hover", handleItemHover);
   doc.removeEventListener("vertical-tabs:item-hover-end", handleItemHoverEnd);
   doc.removeEventListener("mousemove", handleSidebarItemMouseMove);
+  const resizeStartHandler = (doc as any).__vtResizeStartHandler as
+    | EventListener
+    | undefined;
+  if (resizeStartHandler) {
+    doc.removeEventListener("vertical-tabs:resize-start", resizeStartHandler);
+    delete (doc as any).__vtResizeStartHandler;
+  }
   doc.removeEventListener("click", handleSidebarHoverClick, true);
   doc.removeEventListener("click", handleSidebarItemClick, true);
   _sidebarHoverLocks.delete(doc);

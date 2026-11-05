@@ -7,6 +7,7 @@
  */
 
 import { clearCategoryPreview } from "./categoryPreview";
+import { measureRowGeometry } from "../render/boxMeasure";
 
 const SHIFT_CLASS = "vt-drop-preview-shift";
 const PREVIEW_STATE_KEY = "__vtDropPreviewState";
@@ -104,6 +105,20 @@ function itemSelectorFor(tabId: string): string {
   return `.vertical-tabs-item[data-tab-id="${CSS.escape(tabId)}"]`;
 }
 
+export function getDropPreviewRowHeight(
+  doc: Document,
+  row: HTMLElement,
+): number {
+  const geometry = measureRowGeometry(doc, row);
+  const rendered = geometry.content + geometry.padTop + geometry.padBottom;
+  return Math.max(
+    0,
+    (rendered || row.offsetHeight || 0) +
+      geometry.marginTop +
+      geometry.marginBottom,
+  );
+}
+
 function applyShift(el: Element, height: number): void {
   const htmlEl = el as HTMLElement;
   htmlEl.style.setProperty("--vt-drop-shift-y", `${height}px`);
@@ -142,6 +157,7 @@ export type DropPreviewTarget =
   | DropZoneEmptyPreviewTarget;
 
 function computeDesiredShifted(
+  doc: Document,
   target: DropPreviewTarget,
   excludeTabIds?: ReadonlySet<string>,
 ): {
@@ -174,7 +190,10 @@ function computeDesiredShifted(
       (container.classList.contains("vertical-tabs-drop-zone") ||
         container.classList.contains("vertical-tabs-items"))
     ) {
-      const height = (target.targetRow as HTMLElement).offsetHeight || 0;
+      const height = getDropPreviewRowHeight(
+        doc,
+        target.targetRow as HTMLElement,
+      );
       return { elements: [], height };
     }
   }
@@ -196,7 +215,9 @@ function computeDesiredShifted(
   });
 
   // The gap is always ONE row tall, regardless of how many tabs are dragged.
-  const height = elements[0] ? (elements[0] as HTMLElement).offsetHeight : 0;
+  const height = elements[0]
+    ? getDropPreviewRowHeight(doc, elements[0] as HTMLElement)
+    : 0;
   return { elements, height };
 }
 
@@ -207,6 +228,7 @@ export function applyDropPreview(
 ): number {
   const state = getState(doc);
   const { elements: desired, height } = computeDesiredShifted(
+    doc,
     target,
     excludeTabIds,
   );
