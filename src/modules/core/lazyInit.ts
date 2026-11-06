@@ -310,11 +310,13 @@ export async function initVerticalTabs(
   loadLastReadTimes(getData().lastReadTimes);
   applyLastReadTimesToOpenedPDFs();
 
-  // Exponential backoff retry — Zotero session restore may not have completed yet.
-  const RETRY_DELAYS = [1000, 2500, 5000];
+  // Zotero can restore tabs later when a macOS main window is closed and
+  // reopened while the application remains running. Keep matching persisted
+  // category slots by itemId throughout the restore window, even when the
+  // number of tabs has not changed (tab metadata may hydrate after discovery).
+  const RETRY_DELAYS = [1000, 2500, 5000, 10000, 15000];
   RETRY_DELAYS.forEach((delay, index) => {
     setTimeout(async () => {
-      const before = getOpenedPDFs().length;
       // scanOpenedTabs is asynchronous: Zotero may still be constructing the
       // reader/tab info when the retry fires. Wait for it before restoring
       // categories or marking startup complete, otherwise the late tabs are
@@ -322,14 +324,13 @@ export async function initVerticalTabs(
       loadStartupReadTimeCandidates(getData());
       await scanOpenedTabs();
       applyLastReadTimesToOpenedPDFs();
-      const after = getOpenedPDFs().length;
-      if (after > before) {
-        // New tabs appeared: restore them as well before the next render.
-        restoreCategoriesAtStartup(win.document);
-        loadLastReadTimes(getData().lastReadTimes);
-        applyLastReadTimesToOpenedPDFs();
-        dispatchVtEvent(win.document, "vertical-tabs:pdfs-changed");
-      }
+      // Retry unconditionally. A stable tab count does not mean the tabId ↔
+      // itemId mapping is ready, and matching lets categories survive a
+      // window close/reopen that assigns fresh tab IDs.
+      restoreCategoriesAtStartup(win.document);
+      loadLastReadTimes(getData().lastReadTimes);
+      applyLastReadTimesToOpenedPDFs();
+      dispatchVtEvent(win.document, "vertical-tabs:pdfs-changed");
 
       if (index === RETRY_DELAYS.length - 1) {
         // Once session restore is likely complete, do a final restore and mark

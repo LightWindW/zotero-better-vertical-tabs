@@ -26,7 +26,10 @@ function isTabHeight(value: unknown): value is TabHeight {
 }
 
 export function getTabHeightValue(): TabHeight {
-  const raw = Zotero.Prefs.get(TAB_HEIGHT_PREF, true) as string | undefined;
+  // Read the user branch. Passing `true` here reads Zotero's global/default
+  // branch instead, so a saved per-user choice always appeared as "loose"
+  // after reopening preferences or restarting Zotero.
+  const raw = Zotero.Prefs.get(TAB_HEIGHT_PREF) as string | undefined;
   return isTabHeight(raw) ? raw : "loose";
 }
 
