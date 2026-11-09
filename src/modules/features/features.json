@@ -1,0 +1,45 @@
+{
+  "versions": [
+    {
+      "version": "1.2.62",
+      "entries": [
+        {
+          "type": "paragraph",
+          "zh": "新增**插件更新检查**功能。现在在插件首选项页面可以自动检查插件是否有更新版本，并提示用户更新，并新引入功能介绍功能。首选项页面还可以检查不同版本的具体更新日志，并回顾所有版本的功能介绍",
+          "en": "Added the **plugin update check**. The plugin preferences page can now automatically check whether a newer version of the plugin exists and prompt you to update, and it also introduces the new-features feature. From the same page you can review per-version changelogs and browse the feature introductions of every version.",
+          "es": "Añadida la **comprobación de actualizaciones del complemento**. La página de preferencias del complemento ahora comprueba automáticamente si existe una versión más reciente y te avisa para actualizar, e incorpora la sección de novedades. Desde esa misma página puedes consultar el registro de cambios de cada versión y repasar las novedades de todas las versiones."
+        }
+      ]
+    },
+    {
+      "version": "1.2.6",
+      "entries": [
+        {
+          "type": "paragraph",
+          "zh": "新增**自定义标签悬浮卡片预览图**功能。考虑到某些文献名称很相近，放在一起也不是很好辨认。但是文献中某些图或功能能给人留下深刻印象，现在支持对标签自定义截取原图，来更快速地分辨不同的文献！",
+          "en": "Added **custom hover-card preview images**. Similar paper titles can be hard to tell apart when they sit side by side, but a figure or a detail from the paper often leaves a lasting impression. You can now capture a custom image for a tab, making it much faster to identify different papers.",
+          "es": "Añadidas las **imágenes de vista previa personalizadas en la tarjeta flotante**. Algunos títulos de artículos son muy parecidos y difíciles de distinguir cuando están juntos, pero una figura o un detalle del artículo suele quedarse en la memoria. Ahora puedes capturar una imagen personalizada para cada pestaña y distinguir los artículos mucho más rápido."
+        },
+        {
+          "type": "bullet",
+          "zh": "实现步骤：进入阅读器，滚动到想要截屏的位置后，在垂直侧边栏的标签处\"右键\"->\"截取预览图\"，进入截屏模式，在文献中框选截屏区域，即可完成预览图自定义。",
+          "en": "How to: open the reader, scroll to the position you want to capture, right-click the tab in the vertical sidebar and choose \"Capture Preview Image\". In capture mode, drag a selection over the paper to finish your custom preview.",
+          "es": "Cómo hacerlo: abre el lector, desplázate hasta la posición que quieras capturar, haz clic derecho en la pestaña de la barra lateral vertical y elige «Capturar imagen de vista previa». En el modo de captura, selecciona la zona del artículo para completar la vista previa personalizada."
+        },
+        {
+          "type": "image",
+          "file": "CardFigs.gif",
+          "zh": "预览图说明",
+          "en": "Example of a custom preview image",
+          "es": "Ejemplo de imagen de vista previa personalizada"
+        },
+        {
+          "type": "bullet",
+          "zh": "预览图跟随标签id，标签关闭后下次恢复预览图依旧存在。注意预览图保持和卡片一样的宽度，但高度有上限，超过最高高度的部分不会显示，所以过狭长的图片只会展示上方区域，推荐使用横向比例截图。",
+          "en": "The preview is tied to the tab ID, so it is still there the next time the tab is restored after being closed. The image keeps the card width but has a maximum height — anything taller is cropped, so very tall and narrow images only show their top area. A landscape screenshot is recommended.",
+          "es": "La vista previa está asociada al ID de la pestaña, así que sigue ahí la próxima vez que se restaure tras cerrarla. La imagen mantiene el ancho de la tarjeta pero tiene una altura máxima: lo que sobresale se recorta, por lo que las imágenes muy alargadas solo muestran la parte superior. Se recomienda capturar en horizontal."
+        }
+      ]
+    }
+  ]
+}

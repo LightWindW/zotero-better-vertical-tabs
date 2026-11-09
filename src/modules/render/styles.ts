@@ -148,6 +148,7 @@ export function getStyles(): string {
     }
 
     #${SIDEBAR_ID} .vertical-tabs-more-btn {
+      position: relative;
       background: transparent;
       border: none;
       cursor: pointer;
@@ -156,6 +157,40 @@ export function getStyles(): string {
       padding: 0 4px;
       margin: 0 3px 0 3.5px;
       color: #6C6C6C;
+    }
+
+    /* 有新版本时的红点：贴在「⋯」按钮右上角，外圈用侧栏底色描边避免糊在
+       按钮笔画上。由 updateBadge.ts 切换 data-vt-update 属性。 */
+    #${SIDEBAR_ID} .vertical-tabs-more-btn[data-vt-update="1"]::after {
+      content: "";
+      position: absolute;
+      top: 1px;
+      right: 1px;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #e5484d;
+      box-shadow: 0 0 0 1.5px var(--material-sidepane, #f5f5f5);
+      pointer-events: none;
+    }
+
+    /* 有新功能未读时的绿点：颜色 = 拖拽占位符原色（深色模式在下面覆盖为更亮的绿）。
+       默认贴右；与红点并存时红点让位到左侧（右 8px），绿点保持最右。 */
+    #${SIDEBAR_ID} .vertical-tabs-more-btn[data-vt-features="1"]::before {
+      content: "";
+      position: absolute;
+      top: 1px;
+      right: 1px;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #42614d;
+      box-shadow: 0 0 0 1.5px var(--material-sidepane, #f5f5f5);
+      pointer-events: none;
+    }
+
+    #${SIDEBAR_ID} .vertical-tabs-more-btn[data-vt-update="1"][data-vt-features="1"]::after {
+      right: 8px;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-more-btn:hover {
@@ -761,6 +796,12 @@ export function getStyles(): string {
       text-align: center;
       color: var(--material-text-muted, #888);
       font-size: 12px;
+      /* 展开/折叠动画期间侧栏变窄时保持一行，不换行（淡入淡出不变）。 */
+      min-width: 0;
+      max-width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     /* Separator line between categories and uncategorized items */
@@ -866,6 +907,9 @@ export function getStyles(): string {
       align-items: center;
       justify-content: center;
       min-height: 100%;
+      /* 展开/折叠动画期间侧栏变窄：空列表文案保持一行，不跟随宽度换行。 */
+      white-space: nowrap;
+      overflow: hidden;
     }
 
     #${SIDEBAR_ID} .vertical-tabs-drop-zone.drag-over {
@@ -1154,6 +1198,48 @@ export function getStyles(): string {
       display: block;
     }
 
+    /* 「插件设置」行右侧的新版本胶囊（moreMenu.ts 在有更新时插入）。 */
+    .vertical-tabs-more-menu-item .vertical-tabs-update-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      margin-left: auto;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: rgba(217, 48, 37, 0.12);
+      color: #d93025;
+      font-size: 11px;
+      line-height: 1.5;
+      white-space: nowrap;
+    }
+
+    .vertical-tabs-more-menu-item .vertical-tabs-update-pill svg {
+      display: block;
+      width: 10px;
+      height: 10px;
+    }
+
+    /* 「新功能介绍」行右侧的绿色胶囊（moreMenu.ts 在有未读新功能时插入）。 */
+    .vertical-tabs-more-menu-item .vertical-tabs-features-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      margin-left: auto;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: rgba(66, 97, 77, 0.12);
+      color: #2e7d4f;
+      font-size: 11px;
+      line-height: 1.5;
+      white-space: nowrap;
+    }
+
+    .vertical-tabs-more-menu-item .vertical-tabs-features-pill svg {
+      display: block;
+      width: 10px;
+      height: 10px;
+    }
+
     /* Save success animation */
     .vt-save-success-overlay {
       position: absolute;
@@ -1324,6 +1410,38 @@ export function getStyles(): string {
     }
 
     @keyframes vt-help-dialog-content-leave {
+      from { opacity: 1; transform: scale(1); }
+      to { opacity: 0; transform: scale(0.96); }
+    }
+
+    /* New-features dialog（与 help 弹窗同一套动画节奏） */
+    #vt-features-dialog-overlay {
+      font-family: message-box;
+    }
+
+    .vt-features-dialog {
+      animation: vt-features-dialog-appear 0.15s ease-out;
+    }
+
+    @keyframes vt-features-dialog-appear {
+      from { opacity: 0; transform: scale(0.96); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    #vt-features-dialog-overlay.vt-features-dialog-leaving {
+      animation: vt-features-overlay-leave 0.15s ease-out forwards;
+    }
+
+    #vt-features-dialog-overlay.vt-features-dialog-leaving .vt-features-dialog {
+      animation: vt-features-content-leave 0.15s ease-out forwards;
+    }
+
+    @keyframes vt-features-overlay-leave {
+      from { opacity: 1; }
+      to { opacity: 0; }
+    }
+
+    @keyframes vt-features-content-leave {
       from { opacity: 1; transform: scale(1); }
       to { opacity: 0; transform: scale(0.96); }
     }
@@ -1529,6 +1647,21 @@ export function getStyles(): string {
       #${SPLITTER_ID} {
         background: var(--material-border, #555);
         border-right-color: var(--material-border, #555);
+      }
+
+      .vertical-tabs-more-menu-item .vertical-tabs-update-pill {
+        background: rgba(255, 138, 128, 0.16);
+        color: #ff8a80;
+      }
+
+      /* 深色模式绿点用更亮的绿（拖拽占位符色 #42614D 在深色侧栏上太暗）。 */
+      #${SIDEBAR_ID} .vertical-tabs-more-btn[data-vt-features="1"]::before {
+        background: #4a9e6e;
+      }
+
+      .vertical-tabs-more-menu-item .vertical-tabs-features-pill {
+        background: rgba(74, 158, 110, 0.18);
+        color: #6fbf8f;
       }
     }
   `;

@@ -1,5 +1,6 @@
 import { config } from "../../package.json";
 import { dispatchVtEvent } from "../modules/core/events";
+import { initPrefsVersionUI } from "../modules/prefs/index";
 import {
   applyTabHeightToAllWindows,
   getTabHeightValue,
@@ -15,6 +16,7 @@ export async function registerPrefsScripts(_window: Window) {
     window: _window,
   };
   bindPrefEvents();
+  initPrefsVersionUI(_window);
 }
 
 function bindPrefEvents() {

@@ -25,6 +25,13 @@ declare namespace _ZoteroTypes {
       "verticalTabs.autoExpandEmbedded": boolean;
       "verticalTabs.applyExpandCollapseAnimation": boolean;
       "verticalTabs.compactStrip": boolean;
+      "versionCheck.lastCheckMinutes": number;
+      "versionCheck.latestVersion": string;
+      "versionCheck.latestReleaseUrl": string;
+      "versionCheck.latestDownloadUrl": string;
+      "update.keepPaneOnReload": string;
+      "newFeatures.readVersions": string;
+      "newFeatures.initialized": boolean;
     };
   }
 }

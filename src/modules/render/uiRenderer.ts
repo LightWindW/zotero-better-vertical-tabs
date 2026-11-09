@@ -2225,6 +2225,11 @@ export function renderCategories(
     const empty = createEl(doc, "div");
     empty.className = "vertical-tabs-empty";
     empty.textContent = getString("vertical-tabs-empty");
+    // 双保险：展开/折叠动画期间侧栏宽度在变，空列表文案必须保持一行。
+    // 内联样式不依赖 styles.ts 的注入顺序；淡入淡出仍由 CSS 的 opacity 控制。
+    empty.style.cssText =
+      "white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" +
+      " min-width: 0; max-width: 100%;";
     dropZone.appendChild(empty);
 
     attachDropZoneDragEvents(doc, dropZone);

@@ -12,5 +12,15 @@ export default zotero({
         "@typescript-eslint/no-unused-vars": "off",
       },
     },
+    {
+      // Node 脚本（scripts/sync-features.mjs）
+      files: ["scripts/**/*.mjs"],
+      languageOptions: {
+        globals: {
+          console: "readonly",
+          process: "readonly",
+        },
+      },
+    },
   ],
 });

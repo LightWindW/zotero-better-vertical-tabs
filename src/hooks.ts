@@ -3,6 +3,8 @@ import { registerPrefsScripts } from "./modules/preferenceScript";
 import { createZToolkit } from "./utils/ztoolkit";
 
 import { destroyVerticalTabs, initVerticalTabs } from "./modules/core";
+import { restorePaneAfterReload } from "./modules/update/keepPane";
+import { ensureFeaturesBaseline } from "./modules/features/featuresState";
 
 async function onStartup() {
   await Promise.all([
@@ -13,6 +15,12 @@ async function onStartup() {
 
   initLocale();
 
+  // 首次运行：把「当前版本之前」的新功能条目视为已读（只提示当前版本）。
+  ensureFeaturesBaseline();
+
+  // 如果是「一键更新」触发的热重载，把首选项窗口拉回本插件面板（须在 register 前）。
+  restorePaneAfterReload();
+
   // Register the preferences pane — REQUIRED for Zotero 8/9 to show the pane
   Zotero.PreferencePanes.register({
     pluginID: addon.data.config.addonID,
@@ -20,6 +28,7 @@ async function onStartup() {
     src: rootURI + "content/preferences.xhtml",
     label: getString("prefs-title"),
     image: `chrome://${addon.data.config.addonRef}/content/icons/favicon.png`,
+    stylesheets: [rootURI + "content/preferences.css"],
   });
 
   await Promise.all(

@@ -10,4 +10,5 @@ pnpm-lock.yaml
 CLAUDE.md
 memory-bank/
 other/
+doc/features.md
 .reasonix/

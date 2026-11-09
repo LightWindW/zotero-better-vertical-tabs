@@ -85,3 +85,13 @@ export function arrowIcon(): string {
 export function tabsIcon(color: string): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="${color}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12V5.5a2 2 0 0 1 2-2h2.6l1.4 2h3a2 2 0 0 1 2 2V12"/><line x1="1.5" y1="12.5" x2="14.5" y2="12.5"/></svg>`;
 }
+
+/** 新版本胶囊里的上箭头。 */
+export function upArrowIcon(color: string): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V3"/><path d="M3.5 7.5 8 3l4.5 4.5"/></svg>`;
+}
+
+/** 「新功能介绍」星标。 */
+export function starIcon(color: string): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="${color}"><path d="M8 1.4l1.86 4.02 4.4.53-3.27 2.97.87 4.34L8 11.1l-3.86 2.16.87-4.34L1.74 5.95l4.4-.53z"/></svg>`;
+}

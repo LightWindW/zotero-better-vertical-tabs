@@ -70,6 +70,12 @@ import {
   syncNativeTabBarLayout,
 } from "../sidebar/nativeTabBarToggle";
 import { showLibraryHomeButton } from "../sidebar/libraryHomeButton";
+import { scheduleStartupUpdateCheck } from "../update/versionInfo";
+import { destroyUpdateBadge, initUpdateBadge } from "../update/updateBadge";
+import {
+  destroyFeaturesBadge,
+  initFeaturesBadge,
+} from "../features/featuresBadge";
 
 function vtLog(msg: string): void {
   Zotero.logError(new Error("[BVT] " + msg));
@@ -366,6 +372,11 @@ export async function initVerticalTabs(
   }
   initNativeTabBarObserver(win.document);
 
+  // 新版本红点（读本地缓存）+ 启动后延迟检查（24h 节流，不阻塞启动）。
+  initUpdateBadge(win.document);
+  initFeaturesBadge(win.document);
+  scheduleStartupUpdateCheck();
+
   // Trigger initial render
   dispatchVtEvent(win.document, "vertical-tabs:visibility-changed", {
     visible,
@@ -379,6 +390,8 @@ export function destroyVerticalTabs(win: Window): void {
   destroyAutoClose();
   destroyReaderReleaseTimer();
   destroyNativeTabBarToggle(win.document);
+  destroyUpdateBadge(win.document);
+  destroyFeaturesBadge(win.document);
 
   unsubscribeFromRenderEvents(win.document);
   destroyHoverCard(win.document);

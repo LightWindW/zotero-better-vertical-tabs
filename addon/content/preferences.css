@@ -1,0 +1,494 @@
+/* Better Vertical Tabs —— 首选项面板的「版本提醒 + Changelog」。
+ *
+ * preferences.css 会作用于整个预置窗口，所以每条规则都必须以 .vt-prefs- 开头，
+ * 避免影响 Zotero 原生首选项控件。颜色全部使用 Zotero 主题变量，深浅色自动适配。
+ */
+
+/* ── 状态条 ── */
+
+.vt-prefs-version-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  min-height: 26px;
+  margin: -2px 0 8px;
+  font-size: 12px;
+  color: var(--fill-secondary);
+}
+
+.vt-prefs-version-bar button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  font: inherit;
+  color: var(--fill-secondary);
+  cursor: pointer;
+}
+
+.vt-prefs-version-bar button:hover {
+  background: var(--fill-quinary);
+}
+
+.vt-prefs-version-bar button:active {
+  background: var(--fill-quarternary);
+}
+
+.vt-prefs-icon {
+  display: block;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+}
+
+.vt-prefs-chevron {
+  width: 12px;
+  height: 12px;
+  transition: transform 0.15s ease;
+}
+
+.vt-prefs-version-bar .vt-prefs-refresh.vt-prefs-checking .vt-prefs-icon {
+  animation: vt-prefs-spin 0.8s linear infinite;
+}
+
+.vt-prefs-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.vt-prefs-status-icon {
+  display: none;
+  width: 14px;
+  height: 14px;
+}
+
+.vt-prefs-status-version {
+  color: var(--fill-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.vt-prefs-status-latest .vt-prefs-status-icon {
+  display: inline-flex;
+  color: var(--accent-green);
+}
+
+.vt-prefs-status-outdated .vt-prefs-status-icon,
+.vt-prefs-status-updating .vt-prefs-status-icon,
+.vt-prefs-status-update-error .vt-prefs-status-icon {
+  display: inline-flex;
+  color: var(--accent-red);
+}
+
+.vt-prefs-status-latest .vt-prefs-status-text {
+  color: var(--accent-green);
+}
+
+.vt-prefs-status-outdated {
+  cursor: pointer;
+}
+
+.vt-prefs-status-outdated .vt-prefs-status-text,
+.vt-prefs-status-outdated .vt-prefs-status-version {
+  color: var(--accent-red);
+}
+
+.vt-prefs-status-outdated:hover .vt-prefs-status-text {
+  text-decoration: underline;
+}
+
+.vt-prefs-status-updating {
+  cursor: default;
+}
+
+.vt-prefs-status-update-error {
+  cursor: pointer;
+}
+
+.vt-prefs-status-updating .vt-prefs-status-text,
+.vt-prefs-status-updating .vt-prefs-status-version,
+.vt-prefs-status-update-error .vt-prefs-status-text,
+.vt-prefs-status-update-error .vt-prefs-status-version {
+  color: var(--accent-red);
+}
+
+.vt-prefs-status-update-error:hover .vt-prefs-status-text {
+  text-decoration: underline;
+}
+
+.vt-prefs-status-checking .vt-prefs-status-text,
+.vt-prefs-status-error .vt-prefs-status-text {
+  color: var(--fill-tertiary);
+}
+
+.vt-prefs-divider {
+  display: block;
+  width: 1px;
+  height: 14px;
+  background: var(--color-panedivider);
+}
+
+.vt-prefs-version-bar .vt-prefs-changelog-btn {
+  color: var(--accent-blue);
+}
+
+.vt-prefs-version-bar .vt-prefs-features-btn {
+  color: var(--accent-blue);
+}
+
+.vt-prefs-changelog-btn[aria-expanded="true"] .vt-prefs-chevron {
+  transform: rotate(180deg);
+}
+
+/* ── Changelog 弹层 ── */
+
+.vt-prefs-changelog-panel {
+  position: fixed;
+  z-index: 100000;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: 420px;
+  max-width: calc(100vw - 24px);
+  max-height: min(64vh, 560px);
+  padding: 0;
+  border: 1px solid var(--color-panedivider);
+  border-radius: 10px;
+  background: var(--material-background);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+  color: var(--fill-primary);
+  font-size: 12.5px;
+  text-align: start;
+}
+
+.vt-prefs-changelog-panel::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: var(--vt-prefs-beak-left, 50%);
+  width: 11px;
+  height: 11px;
+  margin-left: -5px;
+  border-top: 1px solid var(--color-panedivider);
+  border-left: 1px solid var(--color-panedivider);
+  border-top-left-radius: 2px;
+  background: var(--material-background);
+  transform: rotate(45deg);
+}
+
+.vt-prefs-changelog-panel.vt-prefs-panel-flipped::before {
+  top: auto;
+  bottom: -6px;
+  border-top: 0;
+  border-left: 0;
+  border-right: 1px solid var(--color-panedivider);
+  border-bottom: 1px solid var(--color-panedivider);
+  border-radius: 0 0 2px 0;
+}
+
+.vt-prefs-changelog-head {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 12px 8px 16px;
+  border-bottom: 1px solid var(--fill-quinary);
+  border-radius: 10px 10px 0 0;
+}
+
+.vt-prefs-changelog-title {
+  flex: 1 1 auto;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.vt-prefs-changelog-close {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--fill-secondary);
+  cursor: pointer;
+}
+
+.vt-prefs-changelog-close:hover {
+  background: var(--fill-quinary);
+}
+
+.vt-prefs-changelog-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.vt-prefs-changelog-empty {
+  padding: 20px 16px;
+  color: var(--fill-tertiary);
+}
+
+.vt-prefs-changelog-version {
+  border-top: 1px solid var(--fill-quinary);
+}
+
+.vt-prefs-changelog-body > .vt-prefs-changelog-version:first-child {
+  border-top: 0;
+}
+
+.vt-prefs-changelog-version-head {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 10px 16px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: var(--fill-primary);
+  text-align: start;
+  cursor: pointer;
+}
+
+.vt-prefs-changelog-version-head:hover {
+  background: var(--fill-quinary);
+}
+
+.vt-prefs-changelog-version-num {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.vt-prefs-changelog-current {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-green) 16%, transparent);
+  color: var(--accent-green);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.vt-prefs-changelog-date {
+  margin-inline-start: auto;
+  color: var(--fill-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.vt-prefs-changelog-version-head .vt-prefs-chevron {
+  color: var(--fill-tertiary);
+}
+
+.vt-prefs-changelog-version.is-expanded .vt-prefs-chevron {
+  transform: rotate(90deg);
+}
+
+.vt-prefs-changelog-entries {
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 16px 12px;
+}
+
+.vt-prefs-changelog-version.is-expanded .vt-prefs-changelog-entries {
+  display: flex;
+}
+
+.vt-prefs-changelog-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.5;
+}
+
+.vt-prefs-changelog-chip {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.vt-prefs-changelog-chip.is-new {
+  background: color-mix(in srgb, var(--accent-green) 15%, transparent);
+  color: var(--accent-green);
+}
+
+.vt-prefs-changelog-chip.is-optimize {
+  background: color-mix(in srgb, var(--accent-blue) 15%, transparent);
+  color: var(--accent-blue);
+}
+
+.vt-prefs-changelog-chip.is-fix {
+  background: color-mix(in srgb, var(--accent-orange) 15%, transparent);
+  color: var(--accent-orange);
+}
+
+.vt-prefs-changelog-text {
+  flex: 1 1 auto;
+  word-break: break-word;
+}
+
+.vt-prefs-changelog-footer {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 16px;
+  border-top: 1px solid var(--color-panedivider);
+  border-radius: 0 0 10px 10px;
+  background: var(--material-background);
+  color: var(--fill-secondary);
+  font-size: 12px;
+}
+
+.vt-prefs-changelog-synced {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vt-prefs-changelog-synced .vt-prefs-icon {
+  width: 13px;
+  height: 13px;
+}
+
+.vt-prefs-changelog-full {
+  appearance: none;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  font: inherit;
+  color: var(--accent-blue);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.vt-prefs-changelog-full:hover {
+  background: var(--fill-quinary);
+}
+
+.vt-prefs-changelog-full .vt-prefs-icon {
+  width: 12px;
+  height: 12px;
+}
+
+/* ── 动画（与主窗口弹层保持同一节奏） ── */
+
+.vt-popup-appear {
+  animation: vt-prefs-popup-appear 0.15s ease-out;
+}
+
+.vt-popup-leaving {
+  animation: vt-prefs-popup-leave 0.15s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes vt-prefs-popup-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes vt-prefs-popup-leave {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}
+
+@keyframes vt-prefs-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── 新功能介绍弹窗（首选项窗口内）── */
+
+#vt-features-dialog-overlay {
+  font-family: message-box;
+}
+
+.vt-features-dialog {
+  animation: vt-prefs-features-appear 0.15s ease-out;
+}
+
+#vt-features-dialog-overlay.vt-features-dialog-leaving {
+  animation: vt-prefs-features-overlay-leave 0.15s ease-out forwards;
+}
+
+#vt-features-dialog-overlay.vt-features-dialog-leaving .vt-features-dialog {
+  animation: vt-prefs-features-content-leave 0.15s ease-out forwards;
+}
+
+@keyframes vt-prefs-features-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes vt-prefs-features-overlay-leave {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes vt-prefs-features-content-leave {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}

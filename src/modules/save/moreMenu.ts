@@ -8,10 +8,18 @@ import {
   importIcon,
   plusIcon,
   settingIcon,
+  starIcon,
   svgElement,
   tabsIcon,
+  upArrowIcon,
   yesIcon,
 } from "../ui/iconSvgs";
+import { getCachedStatus } from "../update/versionInfo";
+import {
+  getUnreadFeatureVersions,
+  markFeatureVersionsRead,
+} from "../features/featuresState";
+import { showFeaturesDialog } from "../features/featuresDialog";
 import {
   isNativeTabBarHidden,
   toggleNativeTabBar,
@@ -33,7 +41,12 @@ export function showMoreMenu(doc: Document, anchorEl: HTMLElement): void {
 
   const mc = getContextMenuColors(doc);
   const rect = anchorEl.getBoundingClientRect();
-  const iconColor = isDarkMode(doc) ? "#A2A2A2" : "#6C6C6C";
+  const dark = isDarkMode(doc);
+  const iconColor = dark ? "#A2A2A2" : "#6C6C6C";
+  const updateBadgeColor = dark ? "#ff8a80" : "#d93025";
+  const featuresBadgeColor = dark ? "#6fbf8f" : "#2e7d4f";
+  const hasUpdate = getCachedStatus().state === "outdated";
+  const unreadFeatures = getUnreadFeatureVersions();
 
   const menu = doc.createElementNS(
     "http://www.w3.org/1999/xhtml",
@@ -57,6 +70,7 @@ export function showMoreMenu(doc: Document, anchorEl: HTMLElement): void {
     label: string;
     action: () => void;
     divider?: boolean;
+    badge?: { icon: string; label: string; kind: "update" | "features" };
   }[] = [
     {
       icon: plusIcon(iconColor),
@@ -104,7 +118,37 @@ export function showMoreMenu(doc: Document, anchorEl: HTMLElement): void {
       icon: settingIcon(iconColor),
       label: getString("vertical-tabs-plugin-settings"),
       action: () => dispatchVtEvent(doc, "vertical-tabs:open-preferences"),
+      // 有新版本时在这行右侧挂一个淡红胶囊，提示用户进去更新。
+      ...(hasUpdate
+        ? {
+            badge: {
+              icon: upArrowIcon(updateBadgeColor),
+              label: getString("vertical-tabs-update-available"),
+              kind: "update" as const,
+            },
+          }
+        : {}),
     },
+    // 只有存在未读的新功能介绍时才出现；点击后弹窗只展示未读版本，并记为已读。
+    ...(unreadFeatures.length
+      ? [
+          {
+            icon: starIcon(featuresBadgeColor),
+            label: getString("vertical-tabs-features"),
+            action: () => {
+              showFeaturesDialog(doc, { versions: unreadFeatures });
+              markFeatureVersionsRead(
+                unreadFeatures.map((item) => item.version),
+              );
+            },
+            badge: {
+              icon: starIcon(featuresBadgeColor),
+              label: getString("vertical-tabs-features-badge"),
+              kind: "features" as const,
+            },
+          },
+        ]
+      : []),
     {
       icon: helpIcon(iconColor),
       label: getString("vertical-tabs-help"),
@@ -170,6 +214,26 @@ export function showMoreMenu(doc: Document, anchorEl: HTMLElement): void {
     ) as HTMLElement;
     labelEl.textContent = item.label;
     row.appendChild(labelEl);
+
+    if (item.badge) {
+      const pill = doc.createElementNS(
+        "http://www.w3.org/1999/xhtml",
+        "span",
+      ) as HTMLElement;
+      pill.className =
+        item.badge.kind === "features"
+          ? "vertical-tabs-features-pill"
+          : "vertical-tabs-update-pill";
+      const badgeIcon = svgElement(doc, item.badge.icon);
+      if (badgeIcon) pill.appendChild(badgeIcon);
+      const badgeText = doc.createElementNS(
+        "http://www.w3.org/1999/xhtml",
+        "span",
+      ) as HTMLElement;
+      badgeText.textContent = item.badge.label;
+      pill.appendChild(badgeText);
+      row.appendChild(pill);
+    }
 
     row.addEventListener("click", () => {
       closeMoreMenu(true);

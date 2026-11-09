@@ -1,0 +1,118 @@
+{
+  "versions": [
+    {
+      "version": "1.2.61",
+      "date": "2026-11-06",
+      "entries": [
+        {
+          "type": "fix",
+          "zh": "点击已折叠的分类标题时，可能误触上方分类内的标签",
+          "en": "Clicking a collapsed category header could accidentally trigger a tab in the section above it",
+          "es": "Al hacer clic en el encabezado de una categoría contraída se podía activar por error una pestaña de la sección superior"
+        },
+        {
+          "type": "fix",
+          "zh": "重启 Zotero 后标签高度设置会恢复默认",
+          "en": "Tab height setting reverting to the default after restarting Zotero",
+          "es": "La altura de pestaña volvía a la predeterminada tras reiniciar Zotero"
+        },
+        {
+          "type": "fix",
+          "zh": "重启 Zotero 后分类可能丢失的隐患",
+          "en": "Categories could disappear after restarting Zotero",
+          "es": "Las categorías podían desaparecer tras reiniciar Zotero"
+        },
+        {
+          "type": "fix",
+          "zh": "拖动调整侧边栏宽度时会触发自动折叠",
+          "en": "Dragging to resize the sidebar could trigger auto-collapse",
+          "es": "Arrastrar para cambiar el ancho de la barra lateral podía activar el colapso automático"
+        },
+        {
+          "type": "optimize",
+          "zh": "阅读时间持久化更稳健：清理已关闭标签的过期记录，避免重启后阅读时间被重置为「刚刚」",
+          "en": "Reading-time persistence is more robust: stale entries are cleaned up and times no longer reset to \"just now\" after a restart",
+          "es": "La persistencia del tiempo de lectura es más robusta: se limpian las entradas obsoletas y los tiempos ya no se reinician a \"ahora mismo\""
+        },
+        {
+          "type": "fix",
+          "zh": "拖动标签时绿色占位指示条可能消失",
+          "en": "The green drag placeholder could disappear while dragging tabs",
+          "es": "El indicador verde de arrastre podía desaparecer al arrastrar pestañas"
+        }
+      ]
+    },
+    {
+      "version": "1.2.6",
+      "date": "2026-10-10",
+      "entries": [
+        {
+          "type": "new",
+          "zh": "悬浮卡片预览图：可为文献自定义代表图并保存为悬浮卡缩略图",
+          "en": "Hover card preview images: pick a representative figure for an item and save it as a hover card thumbnail",
+          "es": "Imágenes de vista previa en la tarjeta flotante: elige una figura representativa y guárdala como miniatura"
+        },
+        {
+          "type": "optimize",
+          "zh": "悬浮卡字段改为图标显示，观感更简洁",
+          "en": "Hover card fields replaced with icons for a cleaner look",
+          "es": "Los campos de la tarjeta flotante se muestran con iconos para un aspecto más limpio"
+        },
+        {
+          "type": "optimize",
+          "zh": "自动展开模式支持嵌入式展开",
+          "en": "Auto-expand mode now supports embedded expansion",
+          "es": "El modo de expansión automática ahora admite la expansión integrada"
+        },
+        {
+          "type": "optimize",
+          "zh": "可在首选项中关闭侧边栏展开/折叠动画",
+          "en": "Sidebar expand/collapse animation can be disabled in Preferences",
+          "es": "La animación de expansión/colapso de la barra lateral se puede desactivar en Ajustes"
+        },
+        {
+          "type": "fix",
+          "zh": "修复 macOS 原生标签关闭按钮与侧边栏元素重叠",
+          "en": "Fixed macOS native tab close button overlapping sidebar elements",
+          "es": "Corregido el solapamiento del botón nativo de cerrar pestaña en macOS con la barra lateral"
+        },
+        {
+          "type": "fix",
+          "zh": "手动展开模式下图标右侧不触发悬停",
+          "en": "Hover not triggering on the right side of icons in manual expand mode",
+          "es": "El hover no se activaba en el lado derecho de los iconos en modo de expansión manual"
+        },
+        {
+          "type": "fix",
+          "zh": "右键标签后侧边栏意外自动折叠",
+          "en": "Sidebar unexpectedly auto-collapsing after right-clicking a tab",
+          "es": "La barra lateral se contraía inesperadamente tras hacer clic derecho en una pestaña"
+        },
+        {
+          "type": "fix",
+          "zh": "右键标签后高亮消失",
+          "en": "Highlight disappearing after right-clicking a tab",
+          "es": "El resaltado desaparecía tras hacer clic derecho en una pestaña"
+        }
+      ]
+    },
+    {
+      "version": "1.2.5",
+      "date": "2026-09-27",
+      "entries": [
+        {
+          "type": "new",
+          "zh": "适配 Zotero 10",
+          "en": "Ready for Zotero 10",
+          "es": "Compatible con Zotero 10"
+        },
+        {
+          "type": "new",
+          "zh": "全新圆角界面，间距更柔和、观感更轻",
+          "en": "New rounded interface with softer spacing and a lighter feel",
+          "es": "Nueva interfaz redondeada con espaciado más suave y una sensación más ligera"
+        }
+      ]
+    }
+  ]
+}

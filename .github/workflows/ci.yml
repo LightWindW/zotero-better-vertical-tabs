@@ -28,6 +28,8 @@ jobs:
         uses: zotero-plugin-dev/workflows/setup-js@main
       - name: Run Build
         run: npm run build
+      - name: Check new-features data sync
+        run: npm run features:check
       - name: Upload build result
         uses: actions/upload-artifact@v4
         with:
