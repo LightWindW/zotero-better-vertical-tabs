@@ -10,6 +10,8 @@ pref("verticalTabs.protectCategorizedTabs", true);
 pref("verticalTabs.releaseReaderEnabled", true);
 pref("verticalTabs.releaseReaderMinutes", 120);
 pref("verticalTabs.tabHeight", "loose");
+// prettier-ignore
+pref("verticalTabs.subtitleFields", "lastRead,firstAuthorLastName,journalShort");
 pref("verticalTabs.enableBlur", false);
 pref("verticalTabs.nativeTabBarHidden", false);
 pref("verticalTabs.autoExpand", true);
@@ -22,4 +24,3 @@ pref("versionCheck.latestReleaseUrl", "");
 pref("versionCheck.latestDownloadUrl", "");
 pref("update.keepPaneOnReload", "");
 pref("newFeatures.readVersions", "");
-pref("newFeatures.initialized", false);

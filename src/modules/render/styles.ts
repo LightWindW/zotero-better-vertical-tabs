@@ -763,6 +763,18 @@ export function getStyles(): string {
       overflow: hidden;
     }
 
+    /* User-configurable subtitle fields (verticalTabs.subtitleFields).
+       Non-last fields keep their natural width; only the last rendered field
+       (also .vertical-tabs-item-pub) shrinks and ellipsizes, so the line
+       never wraps however many fields are configured. */
+    #${SIDEBAR_ID} .vertical-tabs-item-meta-field {
+      flex: 0 0 auto;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     #${SIDEBAR_ID} .vertical-tabs-item-time {
       flex-shrink: 0;
     }
@@ -772,6 +784,8 @@ export function getStyles(): string {
     }
 
     #${SIDEBAR_ID} .vertical-tabs-item-pub {
+      flex: 0 1 auto;
+      min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;

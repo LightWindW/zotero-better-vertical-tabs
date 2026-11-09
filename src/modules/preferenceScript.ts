@@ -1,6 +1,7 @@
 import { config } from "../../package.json";
 import { dispatchVtEvent } from "../modules/core/events";
 import { initPrefsVersionUI } from "../modules/prefs/index";
+import { openSubtitleDialog } from "../modules/prefs/subtitle/index";
 import {
   applyTabHeightToAllWindows,
   getTabHeightValue,
@@ -17,6 +18,16 @@ export async function registerPrefsScripts(_window: Window) {
   };
   bindPrefEvents();
   initPrefsVersionUI(_window);
+  bindSubtitleDialogButton(_window);
+}
+
+/** 「自定义副标题」按钮 → 打开弹窗（弹窗自身负责持久化与广播）。 */
+function bindSubtitleDialogButton(win: Window): void {
+  const button = win.document?.getElementById(
+    `${config.addonRef}-custom-subtitle`,
+  );
+  if (!button) return;
+  button.addEventListener("click", () => openSubtitleDialog(win));
 }
 
 function bindPrefEvents() {

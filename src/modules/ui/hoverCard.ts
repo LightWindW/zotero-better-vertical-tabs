@@ -7,7 +7,10 @@ import {
   isDarkMode,
   watchDarkMode,
 } from "../render/colorUtils";
-import { getItemTypeImageSrc } from "../render/itemInfoCache";
+import {
+  createEmptyItemInfo,
+  getItemTypeImageSrc,
+} from "../render/itemInfoCache";
 import { getCardFigureDataUrl, getCardFigureItemId } from "./cardFigure";
 import {
   isAutoExpandEnabled,
@@ -115,15 +118,7 @@ async function renderCard(
   const metaItem = parentId ? Zotero.Items.get(parentId as number) : item;
   const info = metaItem
     ? getItemInfo(metaItem as Zotero.Item)
-    : {
-        title: `Item ${itemId}`,
-        authors: "",
-        year: "",
-        journal: "",
-        university: "",
-        extra: "",
-        tags: [],
-      };
+    : createEmptyItemInfo(`Item ${itemId}`);
 
   // Keep the original card content available immediately.  Image loading is
   // optional and must never leave the hover card empty when a render is
@@ -132,13 +127,11 @@ async function renderCard(
   title.style.cssText = "font-weight: 600; line-height: 1.4;";
   title.textContent = info.title;
   card.appendChild(title);
-  const separator = createEl(doc, "div");
-  separator.style.cssText = `width:100%;height:1px;margin:6px auto 0;background:${isDarkMode(doc) ? "#555" : "#d9d9d9"};`;
-  card.appendChild(separator);
 
   const metadata = createEl(doc, "div");
   metadata.style.cssText = "opacity: 1;";
-  card.appendChild(metadata);
+  // 分隔线先创建但延后挂载：只有在确实有元信息行时才插入。
+  const separator = createMetadataSeparator(doc);
   if (isNote && parentId) {
     const parentItem = Zotero.Items.get(parentId as number) as
       | Zotero.Item
@@ -208,6 +201,13 @@ async function renderCard(
         createField(doc, getString("vertical-tabs-extra"), extraClean),
       );
     }
+  }
+
+  // 只有存在元信息行时才渲染标题下的分隔线：笔记/附件没有父条目元数据时
+  // metadata 为空，原来的分隔线会悬空一条线。
+  if (metadata.childElementCount > 0) {
+    card.appendChild(separator);
+    card.appendChild(metadata);
   }
 
   let figureUrl: string | null = null;
@@ -300,7 +300,7 @@ async function renderCard(
     } else {
       // The overlaid title is the only title when a figure is present.
       title.remove();
-      separator.style.marginTop = "0";
+      if (separator.isConnected) separator.style.marginTop = "0";
       const figureWidth = figure.getBoundingClientRect().width;
       const naturalHeight =
         (figureWidth * image.naturalHeight) / image.naturalWidth;
@@ -403,6 +403,12 @@ async function renderCard(
         );
       }
     }
+  }
+
+  // 兜底分支若补出了元信息，仍要挂上分隔线 + metadata（否则内容不可见）。
+  if (metadata.childElementCount > 0 && !metadata.isConnected) {
+    card.appendChild(separator);
+    card.appendChild(metadata);
   }
 }
 

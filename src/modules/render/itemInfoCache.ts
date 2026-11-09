@@ -2,20 +2,76 @@
  * Per-item display-info cache.
  *
  * Computing a row's display fields walks the Zotero item object layer
- * (getField ×6, getCreators, getTags). That used to run for every row on
+ * (getField ×N, getCreators, getTags). That used to run for every row on
  * every render — the dominant cost of a full VT rebuild with many tabs open.
  * Item metadata changes rarely, so the results are cached per itemId and
  * invalidated by the item-modify notifier in itemTracker.
+ *
+ * 自定义标签副标题（verticalTabs.subtitleFields）所需的字段也在这里一次算好，
+ * 缓存复用；既有字段（authors / year / journal / university）的语义保持不变，
+ * 悬浮卡与搜索的显示不受影响。
  */
 
 export interface ItemInfo {
   title: string;
   authors: string;
+  /** 既有语义：YYYY，日期含月份时是 YYYY-MM（悬浮卡用）。 */
   year: string;
   journal: string;
   university: string;
   extra: string;
   tags: string[];
+  /** 副标题字段：第一作者姓氏（fieldMode=1 时即完整姓名）。 */
+  firstAuthorLastName: string;
+  /** 副标题字段：第一作者（族名在前，与 authors 的格式一致）。 */
+  firstAuthor: string;
+  /** 副标题字段：全部作者（不截断、不加 et al.）。 */
+  allAuthors: string;
+  /**
+   * 副标题字段：期刊名。
+   * 期刊 → publicationTitle；会议论文 → 会议名（回落到论文集名）；
+   * 学位论文 → 大学名。
+   */
+  venue: string;
+  /** 副标题字段：刊名简称，为空时回落到 venue（完整刊名）。 */
+  journalShort: string;
+  /** 副标题字段：短标题。 */
+  shortTitle: string;
+  /** 副标题字段：date 字段的原始字符串。 */
+  dateRaw: string;
+  /** 副标题字段：纯 4 位年份（区别于既有 year 的 YYYY-MM）。 */
+  yearOnly: string;
+}
+
+/** 空字段模板：缓存未命中 / 条目不可用时的统一回落。 */
+export function createEmptyItemInfo(title = ""): ItemInfo {
+  return {
+    title,
+    authors: "",
+    year: "",
+    journal: "",
+    university: "",
+    extra: "",
+    tags: [],
+    firstAuthorLastName: "",
+    firstAuthor: "",
+    allAuthors: "",
+    venue: "",
+    journalShort: "",
+    shortTitle: "",
+    dateRaw: "",
+    yearOnly: "",
+  };
+}
+
+/** 单个 creator 的显示名：单字段模式（fieldMode=1）下 lastName 即完整姓名。 */
+function formatCreatorName(creator: {
+  lastName: string;
+  firstName: string;
+  fieldMode?: number;
+}): string {
+  if (creator.fieldMode === 1) return creator.lastName;
+  return `${creator.lastName} ${creator.firstName}`.trim();
 }
 
 /** Pure computation of a row's display fields from a Zotero item. */
@@ -25,12 +81,16 @@ export function computeItemInfo(item: Zotero.Item): ItemInfo {
   const creators = item.getCreators();
   const authors = creators
     .slice(0, 3)
-    .map((creator) => {
-      if (creator.fieldMode === 1) return creator.lastName;
-      return `${creator.lastName} ${creator.firstName}`.trim();
-    })
+    .map((creator) => formatCreatorName(creator))
     .join(", ");
   const authorsLabel = creators.length > 3 ? `${authors} et al.` : authors;
+
+  const firstCreator = creators[0];
+  const firstAuthorLastName = firstCreator?.lastName ?? "";
+  const firstAuthor = firstCreator ? formatCreatorName(firstCreator) : "";
+  const allAuthors = creators
+    .map((creator) => formatCreatorName(creator))
+    .join(", ");
 
   const date = (item.getField("date") as string) || "";
   const yearMatch = date.match(/^(\d{4})(?:-(\d{2}))?/);
@@ -40,14 +100,33 @@ export function computeItemInfo(item: Zotero.Item): ItemInfo {
       ? `${yearMatch[1]}-${yearMatch[2]}`
       : yearMatch[1]
     : "";
-  const journal =
-    (item.getField("publicationTitle") as string) ||
-    (item.getField("proceedingsTitle") as string) ||
-    "";
-  const university =
-    (item.getField("university") as string) ||
-    (item.getField("institution") as string) ||
-    "";
+  const yearOnly = yearMatch ? yearMatch[1] : "";
+
+  const publicationTitle = (item.getField("publicationTitle") as string) || "";
+  const proceedingsTitle = (item.getField("proceedingsTitle") as string) || "";
+  const universityField = (item.getField("university") as string) || "";
+  const institution = (item.getField("institution") as string) || "";
+
+  const journal = publicationTitle || proceedingsTitle;
+  const university = universityField || institution;
+
+  // 期刊名标签：会议论文显示会议名称、学位论文显示大学名称（注释 1）。
+  const itemType = item.itemType;
+  const venue =
+    itemType === "conferencePaper"
+      ? (item.getField("conferenceName") as string) ||
+        proceedingsTitle ||
+        publicationTitle ||
+        ""
+      : itemType === "thesis"
+        ? university
+        : publicationTitle || proceedingsTitle || university || "";
+
+  const journalAbbreviation =
+    (item.getField("journalAbbreviation") as string) || "";
+  // 刊名简称为空时回落到完整刊名（注释 2）。
+  const journalShort = journalAbbreviation || venue;
+  const shortTitle = (item.getField("shortTitle") as string) || "";
 
   const tags = item.getTags().map((tag) => tag.tag);
   const extra = (item.getField("extra") as string) || "";
@@ -60,6 +139,14 @@ export function computeItemInfo(item: Zotero.Item): ItemInfo {
     university,
     extra,
     tags,
+    firstAuthorLastName,
+    firstAuthor,
+    allAuthors,
+    venue,
+    journalShort,
+    shortTitle,
+    dateRaw: date,
+    yearOnly,
   };
 }
 

@@ -71,3 +71,4 @@ pref-changelog-last-checked = 上次检查 { $time }
 pref-changelog-never-checked = 尚未检查更新
 pref-changelog-empty = 暂无更新记录
 pref-changelog-new-version-hint = 点击查看新版本
+pref-vertical-tabs-custom-subtitle = 自定义副标题

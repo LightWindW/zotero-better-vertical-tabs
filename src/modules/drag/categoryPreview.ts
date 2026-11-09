@@ -6,6 +6,15 @@
  * downward by dropPreview.ts remain visible and are not clipped by
  * `overflow: hidden`.
  *
+ * The target height is the container's REAL content height:
+ *   Σ(visible row heights) + (one-row insertion gap) + container padding.
+ * Rows are not a fixed height (a row with the "extra" field enabled is one
+ * line taller), so a row-count × baseline formula under-allocates and clips
+ * the bottom rows. The row sum and the gap height both come from
+ * drag/dragRowMetrics.ts; the collapsed drag-source rows are excluded from the
+ * sum, and for a multi-tab drag the gap stands for the topmost dragged row
+ * (the drop cascade shows that row at full height first).
+ *
  * Categories are animated by transitioning `.vertical-tabs-items` `height`
  * between explicit pixel values, which is more reliable in Firefox/Zotero than
  * `grid-template-rows` transitions involving `auto`/`1fr`.
@@ -18,16 +27,14 @@
  */
 
 import { cancelCategoryCollapseAnimation } from "../render/categoryCollapse";
-import { MULTI_SOURCE_CLASS } from "./multiDrag";
+import {
+  getContainerPreviewDelta,
+  getRowsContentHeight,
+} from "./dragRowMetrics";
 
 const PREVIEW_STATE_KEY = "__vtCategoryPreviewState";
 const CATEGORY_PREVIEW_CLASS = "vt-category-preview";
 const DROP_ZONE_PREVIEW_CLASS = "vt-drop-zone-preview";
-const DEFAULT_ITEM_HEIGHT = 55;
-// Rows use a 4px margin on both vertical sides. Include this in the fallback
-// slot size when previewing an empty category; otherwise the first inserted
-// row is clipped by the two margins that sit outside the container height.
-const DEFAULT_ITEM_VERTICAL_MARGIN = 8;
 const PREVIEW_ANIMATION_MS = 450;
 
 interface PendingClear {
@@ -39,6 +46,16 @@ interface CategoryPreviewState {
   target: HTMLElement | null;
   pendingClear: PendingClear | null;
   naturalHeights: Map<HTMLElement, number>;
+  /** Height most recently applied to each previewed container. */
+  appliedHeights: WeakMap<Element, number>;
+  /**
+   * Target height decided when the container entered preview. It must not be
+   * recomputed while the drag lasts: the source row can collapse AFTER the
+   * first dragover (the rAF callback runs after the first drag events), and
+   * re-deriving the height from the then-changed layout would grow the
+   * container by one extra row.
+   */
+  previewHeights: WeakMap<Element, number>;
 }
 
 function getState(doc: Document): CategoryPreviewState {
@@ -50,6 +67,8 @@ function getState(doc: Document): CategoryPreviewState {
     target: null,
     pendingClear: null,
     naturalHeights: new Map(),
+    appliedHeights: new WeakMap(),
+    previewHeights: new WeakMap(),
   };
   (doc as any)[PREVIEW_STATE_KEY] = state;
   return state;
@@ -60,90 +79,6 @@ function pxValue(computed: CSSStyleDeclaration, property: string): number {
   if (!raw) return 0;
   const parsed = parseFloat(raw);
   return Number.isNaN(parsed) ? 0 : parsed;
-}
-
-function getContainerItems(container: Element): Element[] {
-  return (
-    Array.from(
-      container.querySelectorAll(":scope .vertical-tabs-item"),
-    ) as Element[]
-  ).filter(
-    (el) =>
-      !el.classList.contains("vt-drag-source-collapsed") &&
-      !el.classList.contains(MULTI_SOURCE_CLASS),
-  );
-}
-
-/**
- * Per-container item-count cache. A dragover fires computeTnew (and thus
- * this count) on every event, but the DOM only changes between drags — and
- * a mid-drag re-render destroys the container element, so the WeakMap entry
- * dies with it. Entries never need explicit invalidation.
- */
-let _itemCountCache = new WeakMap<Element, number>();
-
-function getContainerItemCount(container: Element): number {
-  const cached = _itemCountCache.get(container);
-  if (cached !== undefined) return cached;
-  const count = container.querySelectorAll(":scope .vertical-tabs-item").length;
-  _itemCountCache.set(container, count);
-  return count;
-}
-
-function getItemHeight(container: Element, doc: Document): number {
-  const items = getContainerItems(container);
-  const first = items[0] as HTMLElement | undefined;
-  if (first) {
-    const rectHeight = first.getBoundingClientRect().height;
-    const computed = doc.defaultView?.getComputedStyle(first);
-    const marginTop = parseFloat(computed?.marginTop || "0") || 0;
-    const marginBottom = parseFloat(computed?.marginBottom || "0") || 0;
-    return rectHeight + marginTop + marginBottom;
-  }
-
-  // Empty container: fall back to the configured item min-height.
-  const inner =
-    container.querySelector(":scope > .vertical-tabs-items") || container;
-  const win = doc.defaultView || (globalThis as any);
-  const computed = win.getComputedStyle(inner as HTMLElement);
-  const minHeight = computed.getPropertyValue("--vt-item-min-height");
-  if (minHeight) {
-    const parsed = parseInt(minHeight, 10);
-    if (!Number.isNaN(parsed)) return parsed + DEFAULT_ITEM_VERTICAL_MARGIN;
-  }
-  return DEFAULT_ITEM_HEIGHT + DEFAULT_ITEM_VERTICAL_MARGIN;
-}
-
-function getVerticalPadding(container: Element, doc: Document): number {
-  const inner =
-    container.querySelector(":scope > .vertical-tabs-items") || container;
-  const win = doc.defaultView || (globalThis as any);
-  const computed = win.getComputedStyle(inner as HTMLElement);
-  return pxValue(computed, "padding-top") + pxValue(computed, "padding-bottom");
-}
-
-function getContainerCategoryId(container: Element): string {
-  if (container.classList.contains("vertical-tabs-category")) {
-    return (container as HTMLElement).dataset.categoryId || "";
-  }
-  return "__uncategorized__";
-}
-
-function computeTnew(
-  container: Element,
-  sourceCategoryId: string | null | Map<string, number>,
-  draggedCount: number,
-): number {
-  const targetCategoryId = getContainerCategoryId(container);
-  const currentCount = getContainerItemCount(container);
-  let fromTarget = 0;
-  if (sourceCategoryId instanceof Map) {
-    // Multi-tab drag: per-category counts of dragged-away rows.
-    fromTarget = sourceCategoryId.get(targetCategoryId) ?? 0;
-  } else if (sourceCategoryId && sourceCategoryId === targetCategoryId) {
-    fromTarget = draggedCount;
-  }
-  return currentCount - fromTarget + draggedCount;
 }
 
 function isCategoryContainer(container: Element): boolean {
@@ -178,10 +113,14 @@ function getNaturalHeight(container: Element, doc: Document): number {
   if (!target) return 0;
 
   if (isCategoryContainer(container)) {
-    // Use the actual rendered height of the items wrapper. This matches the
-    // current visual height, so the transition starts from the exact visual
-    // height and does not jump.
-    return target.getBoundingClientRect().height;
+    // Collapsed items are pinned to height 0 (padding 0), so their rendered
+    // height says nothing about the content: `scrollHeight` is the height the
+    // preview has to expand to. Expanded containers use the exact rendered
+    // height — it already reflects every remaining row's real height (rows can
+    // be taller with "show extra") and the collapsed drag-source rows.
+    return container.classList.contains("collapsed")
+      ? target.scrollHeight
+      : target.getBoundingClientRect().height;
   }
 
   if (isDropZoneContainer(container)) {
@@ -207,7 +146,6 @@ function addPreviewClass(container: Element): void {
 function removePreviewClassAndVars(htmlEl: HTMLElement): void {
   htmlEl.classList.remove(CATEGORY_PREVIEW_CLASS, DROP_ZONE_PREVIEW_CLASS);
   htmlEl.style.removeProperty("--vt-category-preview-height");
-  htmlEl.style.removeProperty("--vt-category-preview-tnew");
   // Clear any inline height we set on the category items or drop-zone.
   const target = getPreviewTargetElement(htmlEl);
   if (target) target.style.height = "";
@@ -253,6 +191,8 @@ function schedulePreviewClear(
 
   const timeout = win.setTimeout(() => {
     state.naturalHeights.delete(htmlEl);
+    state.appliedHeights.delete(htmlEl);
+    state.previewHeights.delete(htmlEl);
     removePreviewClassAndVars(htmlEl);
     if (state.pendingClear?.element === htmlEl) {
       state.pendingClear = null;
@@ -265,25 +205,36 @@ function schedulePreviewClear(
   state.pendingClear = { element: htmlEl, timeout };
 }
 
+/**
+ * The real height this container needs while the current drag hovers it.
+ * `getContainerPreviewDelta` already encodes the "same container vs other
+ * container" difference (and returns 0 when the source row has not collapsed
+ * yet, because the measured height still contains it).
+ */
 function computePreviewHeight(
-  container: Element,
-  tNew: number,
+  state: CategoryPreviewState,
   doc: Document,
+  container: Element,
 ): number {
-  const itemHeight = getItemHeight(container, doc);
-  const padding = getVerticalPadding(container, doc);
-  return tNew * itemHeight + padding;
+  const delta = getContainerPreviewDelta(doc, container);
+  if (isCategoryContainer(container)) {
+    const base =
+      state.naturalHeights.get(container as HTMLElement) ??
+      getNaturalHeight(container, doc);
+    return base + delta;
+  }
+  // The uncategorized drop-zone previews through `min-height`, so the value
+  // must cover the rows' content (collapsed margins included) + placeholder.
+  return getRowsContentHeight(doc, container) + delta;
 }
 
 function applyPreviewHeight(
   container: Element,
-  tNew: number,
+  height: number,
   doc: Document,
 ): void {
-  setCategoryPreviewHeight(
-    container as HTMLElement,
-    computePreviewHeight(container, tNew, doc),
-  );
+  setCategoryPreviewHeight(container as HTMLElement, height);
+  getState(doc).appliedHeights.set(container, height);
 }
 
 function isPreviewActive(container: Element): boolean {
@@ -293,17 +244,23 @@ function isPreviewActive(container: Element): boolean {
   );
 }
 
-function enterPreview(container: Element, tNew: number, doc: Document): void {
+function enterPreview(container: Element, doc: Document): void {
   const htmlEl = container as HTMLElement;
+  const state = getState(doc);
 
   // Cancel any in-progress collapse/expand animation before taking over the
   // items height, otherwise the old cleanup timeout could wipe out the preview
   // height we are about to set.
   cancelCategoryCollapseAnimation(htmlEl);
 
-  // If the container is already previewed, just update the target height.
+  // Already previewed (rapid A->B->A handoff): re-apply the height that was
+  // decided when this container entered preview.
   if (isPreviewActive(container)) {
-    applyPreviewHeight(container, tNew, doc);
+    const height =
+      state.previewHeights.get(container) ??
+      computePreviewHeight(state, doc, container);
+    state.previewHeights.set(container, height);
+    applyPreviewHeight(container, height, doc);
     return;
   }
 
@@ -311,42 +268,43 @@ function enterPreview(container: Element, tNew: number, doc: Document): void {
   if (!target) return;
 
   // 1. Record the starting (natural) height as an explicit pixel value so the
-  //    browser has a concrete length to interpolate from.
+  //    browser has a concrete length to interpolate from. It is also the base
+  //    the preview height is derived from (collapsed categories: scrollHeight).
   const naturalHeight = getNaturalHeight(container, doc);
-  getState(doc).naturalHeights.set(htmlEl, naturalHeight);
+  state.naturalHeights.set(htmlEl, naturalHeight);
+  // 2. Decide the target height ONCE. The source row may collapse after this
+  //    first dragover (the collapse happens in a rAF callback), so re-deriving
+  //    the height from the later layout would add one extra row of blank space.
+  const targetHeight = computePreviewHeight(state, doc, container);
+  state.previewHeights.set(container, targetHeight);
+
   target.style.height = `${naturalHeight}px`;
 
-  // 2. Enable the preview state. The CSS transition is now active.
+  // 3. Enable the preview state. The CSS transition is now active.
   addPreviewClass(container);
 
-  // 3. Force a reflow so the browser commits the starting height before we
+  // 4. Force a reflow so the browser commits the starting height before we
   //    ask it to animate toward the preview height.
   void target.offsetHeight;
 
-  // 4. Move to the final preview height. This triggers the smooth transition.
-  applyPreviewHeight(container, tNew, doc);
+  // 5. Move to the final preview height. This triggers the smooth transition.
+  applyPreviewHeight(container, targetHeight, doc);
 }
 
 export function applyCategoryPreview(
   doc: Document,
   targetContainer: Element,
-  sourceCategoryId: string | null | Map<string, number>,
-  draggedCount = 1,
 ): void {
   const state = getState(doc);
-  const tNew = computeTnew(targetContainer, sourceCategoryId, draggedCount);
 
-  // Same container: only the count changed; update height smoothly.
+  // Same container: the target height is fixed for the whole drag.
   if (state.target === targetContainer) {
-    const current = (targetContainer as HTMLElement).style.getPropertyValue(
-      "--vt-category-preview-tnew",
-    );
-    if (current === String(tNew)) return;
-    applyPreviewHeight(targetContainer, tNew, doc);
-    (targetContainer as HTMLElement).style.setProperty(
-      "--vt-category-preview-tnew",
-      String(tNew),
-    );
+    const height =
+      state.previewHeights.get(targetContainer) ??
+      computePreviewHeight(state, doc, targetContainer);
+    state.previewHeights.set(targetContainer, height);
+    if (state.appliedHeights.get(targetContainer) === height) return;
+    applyPreviewHeight(targetContainer, height, doc);
     return;
   }
 
@@ -361,11 +319,7 @@ export function applyCategoryPreview(
     schedulePreviewClear(state, state.target, doc);
   }
 
-  enterPreview(targetContainer, tNew, doc);
-  (targetContainer as HTMLElement).style.setProperty(
-    "--vt-category-preview-tnew",
-    String(tNew),
-  );
+  enterPreview(targetContainer, doc);
   state.target = targetContainer as HTMLElement;
 }
 
@@ -387,6 +341,8 @@ export function clearCategoryPreview(doc: Document, animate = false): void {
     schedulePreviewClear(state, target, doc);
   } else {
     state.naturalHeights.delete(target);
+    state.appliedHeights.delete(target);
+    state.previewHeights.delete(target);
     removePreviewClassAndVars(target);
   }
 
@@ -396,7 +352,8 @@ export function clearCategoryPreview(doc: Document, animate = false): void {
 export function destroyCategoryPreviewState(doc: Document): void {
   const state = getState(doc);
   state.naturalHeights.clear();
+  state.appliedHeights = new WeakMap();
+  state.previewHeights = new WeakMap();
   clearCategoryPreview(doc, false);
   delete (doc as any)[PREVIEW_STATE_KEY];
-  _itemCountCache = new WeakMap();
 }

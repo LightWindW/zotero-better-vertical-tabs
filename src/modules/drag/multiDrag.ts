@@ -4,9 +4,10 @@
  * When the user starts dragging a SELECTED tab (selection size > 1), every
  * selected row fades out and collapses (0.25s, batched pin → reflow → zero)
  * so the whole selection disappears smoothly while the native drag image of
- * the grabbed row shows. The ordered tabIds and the per-category source
- * counts are stashed on the document for the preview (gap height = N rows,
- * tNew accounting) and the drop handlers.
+ * the grabbed row shows. The ordered tabIds are stashed on the document for
+ * the drop handlers and the cascade release; the drag previews derive their
+ * heights from the real rows (drag/dragRowMetrics.ts) — the topmost dragged
+ * row stands for the one-row insertion gap.
  *
  * On cancel (dragend without a drop) the rows fade/expand back; on a
  * successful drop the re-render replaces the DOM and the cascade release
@@ -21,7 +22,6 @@ import { markMultiTabRelease } from "../render/multiTabRelease";
 import { measureRowGeometry } from "../render/boxMeasure";
 
 const DRAG_IDS_KEY = "__vtMultiDragTabIds";
-const SOURCE_COUNTS_KEY = "__vtMultiDragSourceCounts";
 export const MULTI_SOURCE_CLASS = "vt-multi-source-collapse";
 const COLLAPSE_MS = 250;
 
@@ -31,22 +31,9 @@ function findRow(doc: Document, tabId: string): HTMLElement | null {
   ) as HTMLElement | null;
 }
 
-/**
- * Start the multi drag: stash ordered ids + source counts, and (after the
- * drag image is captured, handled by the caller's rAF) collapse every
- * selected row.
- */
+/** Stash the ordered (visual) tabIds of the multi drag. */
 export function startMultiDrag(doc: Document, orderedTabIds: string[]): void {
   (doc as any)[DRAG_IDS_KEY] = orderedTabIds;
-
-  const counts = new Map<string, number>();
-  for (const tabId of orderedTabIds) {
-    const catId =
-      (findRow(doc, tabId)?.closest(".vertical-tabs-category") as HTMLElement)
-        ?.dataset.categoryId ?? "__uncategorized__";
-    counts.set(catId, (counts.get(catId) ?? 0) + 1);
-  }
-  (doc as any)[SOURCE_COUNTS_KEY] = counts;
 }
 
 /** Collapse all selected rows (call inside rAF, after image capture). */
@@ -85,13 +72,6 @@ export function getMultiDragTabIds(doc: Document): string[] | null {
   return ids && ids.length ? ids : null;
 }
 
-/** Per-category (or "__uncategorized__") count of dragged-away rows. */
-export function getMultiDragSourceCounts(
-  doc: Document,
-): Map<string, number> | null {
-  return ((doc as any)[SOURCE_COUNTS_KEY] as Map<string, number>) ?? null;
-}
-
 /**
  * dragend: on cancel the rows fade/expand back from their current
  * (possibly interpolated) geometry; on a successful drop the keys are
@@ -101,7 +81,6 @@ export function getMultiDragSourceCounts(
 export function endMultiDrag(doc: Document, dropped: boolean): void {
   const ids = (doc as any)[DRAG_IDS_KEY] as string[] | undefined;
   delete (doc as any)[DRAG_IDS_KEY];
-  delete (doc as any)[SOURCE_COUNTS_KEY];
   if (!ids || dropped) return;
 
   const win = doc.defaultView;
@@ -185,5 +164,4 @@ export function dispatchMultiDrop(
 
 export function destroyMultiDrag(doc: Document): void {
   delete (doc as any)[DRAG_IDS_KEY];
-  delete (doc as any)[SOURCE_COUNTS_KEY];
 }

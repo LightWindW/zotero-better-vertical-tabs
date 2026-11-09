@@ -7,7 +7,7 @@
  */
 
 import { clearCategoryPreview } from "./categoryPreview";
-import { measureRowGeometry } from "../render/boxMeasure";
+import { getPlaceholderHeight } from "./dragRowMetrics";
 
 const SHIFT_CLASS = "vt-drop-preview-shift";
 const PREVIEW_STATE_KEY = "__vtDropPreviewState";
@@ -105,20 +105,6 @@ function itemSelectorFor(tabId: string): string {
   return `.vertical-tabs-item[data-tab-id="${CSS.escape(tabId)}"]`;
 }
 
-export function getDropPreviewRowHeight(
-  doc: Document,
-  row: HTMLElement,
-): number {
-  const geometry = measureRowGeometry(doc, row);
-  const rendered = geometry.content + geometry.padTop + geometry.padBottom;
-  return Math.max(
-    0,
-    (rendered || row.offsetHeight || 0) +
-      geometry.marginTop +
-      geometry.marginBottom,
-  );
-}
-
 function applyShift(el: Element, height: number): void {
   const htmlEl = el as HTMLElement;
   htmlEl.style.setProperty("--vt-drop-shift-y", `${height}px`);
@@ -190,11 +176,7 @@ function computeDesiredShifted(
       (container.classList.contains("vertical-tabs-drop-zone") ||
         container.classList.contains("vertical-tabs-items"))
     ) {
-      const height = getDropPreviewRowHeight(
-        doc,
-        target.targetRow as HTMLElement,
-      );
-      return { elements: [], height };
+      return { elements: [], height: getPlaceholderHeight(doc, container) };
     }
   }
 
@@ -214,11 +196,10 @@ function computeDesiredShifted(
     return !el.matches(sourceSelector);
   });
 
-  // The gap is always ONE row tall, regardless of how many tabs are dragged.
-  const height = elements[0]
-    ? getDropPreviewRowHeight(doc, elements[0] as HTMLElement)
-    : 0;
-  return { elements, height };
+  // The gap is always ONE row tall, regardless of how many tabs are dragged:
+  // the dragged row's real height + one collapsed inter-row margin is exactly
+  // what the container grows by on drop (a row with "show extra" is taller).
+  return { elements, height: getPlaceholderHeight(doc, container) };
 }
 
 export function applyDropPreview(

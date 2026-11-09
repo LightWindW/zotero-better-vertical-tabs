@@ -492,3 +492,565 @@
     transform: scale(0.96);
   }
 }
+
+/* ── 自定义标签副标题弹窗 ──
+ *
+ * 全部选择器以 .vt-prefs-subtitle- 开头（该样式表作用于整个预置窗口）。
+ * 颜色只用 Zotero 主题变量，深浅色自动适配；动画节奏与上面的弹层一致
+ * （0.15s ease-out 开关、0.18s 位移、0.2s 浮影落位）。
+ */
+
+.vt-prefs-subtitle-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100001;
+  display: flex;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.32);
+  font-family: message-box;
+}
+
+.vt-prefs-subtitle-overlay-appear {
+  animation: vt-prefs-subtitle-fade-in 0.15s ease-out;
+}
+
+.vt-prefs-subtitle-overlay-leaving {
+  animation: vt-prefs-subtitle-fade-out 0.15s ease-out forwards;
+}
+
+.vt-prefs-subtitle-card {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: min(720px, calc(100vw - 48px));
+  max-height: min(86vh, calc(100vh - 48px));
+  overflow: hidden;
+  border: 1px solid var(--color-panedivider);
+  border-radius: 10px;
+  background: var(--material-background);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22);
+  color: var(--fill-primary);
+  font-size: 13px;
+}
+
+.vt-prefs-subtitle-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 30px 10px;
+  /* 通栏分割线：header 不设左右 margin，border 从卡片最左到最右。 */
+  border-bottom: 1px solid var(--color-panedivider);
+}
+
+.vt-prefs-subtitle-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vt-prefs-subtitle-close {
+  appearance: none;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--fill-secondary);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.vt-prefs-subtitle-close:hover {
+  background: var(--fill-quinary);
+}
+
+.vt-prefs-subtitle-hint {
+  flex: 0 0 auto;
+  /* header 保持通栏（分割线横跨整卡），标题下方内容统一左右 28px。 */
+  margin: 12px 30px;
+  padding: 0;
+  color: var(--fill-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  transition: color 0.18s ease-out;
+}
+
+/* 已满 3 个仍尝试放入：只让「最多 3 个」段变红加粗（em 层淡入）+ 横向振动。 */
+
+.vt-prefs-subtitle-hint-max-part {
+  position: relative;
+  display: inline-block;
+  /* 前缀与红色段之间的间隔（FTL 前缀以标点结尾，不含尾随空格）。 */
+  margin-left: 0.3em;
+  white-space: nowrap;
+}
+
+/* 流内层：撑出宽度、平时显示原样式文本。 */
+
+.vt-prefs-subtitle-hint-max-normal {
+  display: inline-block;
+  white-space: nowrap;
+  transition: opacity 0.2s ease-out;
+}
+
+/* 覆盖层：红色 + 加粗，平时 opacity 0，满额提示时 0.2s ease-out 淡入。 */
+
+.vt-prefs-subtitle-hint-max-em {
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--accent-red, #d70022);
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.2s ease-out;
+}
+
+.vt-prefs-subtitle-hint-max {
+  animation: vt-prefs-subtitle-hint-shake 0.7s ease-in-out;
+}
+
+.vt-prefs-subtitle-hint-max .vt-prefs-subtitle-hint-max-em {
+  opacity: 1;
+}
+
+/* 加粗层与常规层交叉淡入淡出：避免两层文字同时可见产生重影。 */
+.vt-prefs-subtitle-hint-max .vt-prefs-subtitle-hint-max-normal {
+  opacity: 0;
+}
+
+.vt-prefs-subtitle-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0 30px 18px;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* 预览面板：模拟真实标签卡片（左图标 + 右内容列），灰色圆角底。 */
+
+.vt-prefs-subtitle-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px 16px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--fill-quinary);
+}
+
+/* 条目类型图标列：固定 68px（比上一版大一倍），取不到图时同宽占位。 */
+
+.vt-prefs-subtitle-preview-icon {
+  display: flex;
+  flex: 0 0 68px;
+  align-items: center;
+  justify-content: center;
+  width: 68px;
+  height: 68px;
+}
+
+/* 插件矢量图标：撑满 68px 图标列（width/height:100% 才会放大，max-* 不会）。 */
+
+.vt-prefs-subtitle-preview-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.vt-prefs-subtitle-preview-content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.vt-prefs-subtitle-preview-title {
+  width: 100%;
+  height: 38px;
+  border-radius: 7px;
+  background: var(--fill-quarternary);
+}
+
+.vt-prefs-subtitle-preview-slots {
+  margin-top: 10px;
+}
+
+.vt-prefs-subtitle-preview-row {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-content: flex-start;
+  align-items: flex-start;
+  /* = chip 实际高度（5+5 padding + 18 行高 + 2 边框）：全部移出后面板高度不变，
+     有 chip 时正好一行、不产生额外空白。 */
+  min-height: 30px;
+}
+
+/* chip（预览区与标签池共用；池内只换底色）。 */
+
+.vt-prefs-subtitle-chip {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 5px 14px;
+  border: 1px solid var(--color-panedivider);
+  border-radius: 999px;
+  background: var(--material-background);
+  color: var(--fill-primary);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  cursor: grab;
+  user-select: none;
+}
+
+.vt-prefs-subtitle-pool .vt-prefs-subtitle-chip {
+  background: transparent;
+}
+
+.vt-prefs-subtitle-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ✕ 移除按钮：悬浮在 chip 右上角（对齐参考图），不参与 chip 宽度。 */
+
+.vt-prefs-subtitle-chip-remove {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  border: 2px solid var(--material-background);
+  border-radius: 50%;
+  background: var(--fill-secondary);
+  color: var(--material-background);
+  font: inherit;
+  /* 文本 × 隐藏，改用 ::before/::after 两条细线精确居中（见下）。 */
+  font-size: 0;
+  line-height: 1;
+  cursor: pointer;
+  /* 悬浮变红要淡入淡出（约 130ms ease-out）。 */
+  transition:
+    background-color 130ms ease-out,
+    color 130ms ease-out;
+}
+
+/* 刚落位的 chip：✕ 从透明淡入（动画而非过渡，避免与 pending 类同帧反复切换抵消）。 */
+.vt-prefs-subtitle-chip-remove-entering {
+  animation: vt-prefs-subtitle-remove-in 140ms ease-out;
+}
+
+@keyframes vt-prefs-subtitle-remove-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* ✕ 细线：两条 1.6px 线段绝对居中、各旋转 ±45°（不再依赖字体字形基线）。 */
+
+.vt-prefs-subtitle-chip-remove::before,
+.vt-prefs-subtitle-chip-remove::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 1.6px;
+  border-radius: 1px;
+  background: currentColor;
+}
+
+.vt-prefs-subtitle-chip-remove::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.vt-prefs-subtitle-chip-remove::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.vt-prefs-subtitle-chip-remove:hover {
+  background: var(--accent-red, #d70022);
+  color: #fff;
+}
+
+/* 拖拽期间：源 chip 退出布局（同行 chip 由 FLIP 补位）。 */
+
+.vt-prefs-subtitle-chip-hidden {
+  display: none !important;
+}
+
+/* 等待浮影落位的真实 chip：保留布局、先不可见。 */
+
+.vt-prefs-subtitle-chip-awaiting {
+  visibility: hidden;
+}
+
+/* 新出现 / 回位的 chip：一次 0.18s 淡入（只动 opacity，避免与 FLIP 抢 transform）。 */
+
+.vt-prefs-subtitle-chip-entering {
+  animation: vt-prefs-subtitle-chip-in 0.18s ease-out;
+}
+
+/* 拖拽浮影（fixed + translate3d 跟手，由 dragController 驱动）。
+   阴影从透明淡入（is-lifted 由 rAF 加上），落位时随浮影一起淡出。 */
+
+.vt-prefs-subtitle-ghost {
+  box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+  opacity: 1;
+  transition: box-shadow 120ms ease-out;
+  /* 提前提层，避免首帧创建合成层带来抖动（与 MOTION_EASING 配合消除起步停滞感）。 */
+  will-change: transform, opacity;
+}
+
+.vt-prefs-subtitle-ghost.is-lifted {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+/* 拖拽浮影：右上角不显示 ✕（只有真正放进副标题后，✕ 才在真实 chip 上淡入）。 */
+
+.vt-prefs-subtitle-ghost .vt-prefs-subtitle-chip-remove {
+  display: none;
+}
+
+/* 拖出删除：浮影飞向池内 chip（无 ✕），途中隐藏克隆上的 ✕ 保持交接无缝。 */
+
+.vt-prefs-subtitle-ghost-pool .vt-prefs-subtitle-chip-remove {
+  display: none;
+}
+
+.vt-prefs-subtitle-clone {
+  border-radius: 999px;
+  will-change: transform, opacity;
+}
+
+/* 拖放空槽：插在目标索引处，尺寸取被拖 chip；出现/消失各 120ms 淡入淡出。 */
+
+.vt-prefs-subtitle-gap {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  border: 1px dashed var(--color-panedivider);
+  border-radius: 999px;
+  background: var(--fill-quinary);
+  opacity: 1;
+  transform: scale(1);
+  /* 与 chipFlip.MOTION_EASING 保持一致（起始斜率非 0，避免起步停滞）。 */
+  transition:
+    opacity 120ms cubic-bezier(0.3, 0.25, 0.2, 1),
+    transform 120ms cubic-bezier(0.3, 0.25, 0.2, 1);
+}
+
+/* 空态提示：absolute 浮动层（水平+垂直居中、不占布局），避免拖拽 gap 出现/
+   消失时把占位文字挤到右边；显隐走 150ms opacity 淡入淡出。 */
+
+.vt-prefs-subtitle-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  color: var(--fill-tertiary);
+  font-size: 12px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 150ms ease-out;
+}
+
+.vt-prefs-subtitle-empty.is-visible {
+  opacity: 1;
+}
+
+.vt-prefs-subtitle-preview-row.has-gap .vt-prefs-subtitle-empty {
+  opacity: 0;
+}
+
+/* 标签池：4 组，组名左列 44px。 */
+
+.vt-prefs-subtitle-pool {
+  /* 行名列宽由当前语言最长行名决定（max-content），不再写死 44px：
+     英文 Publication 等较长行名会压到右侧 tag 上。 */
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 8px;
+  row-gap: 8px;
+  margin-top: 16px;
+}
+
+/* 行容器不参与布局，让组名与 tag 行直接成为上面 grid 的两列。 */
+.vt-prefs-subtitle-pool-row {
+  display: contents;
+}
+
+.vt-prefs-subtitle-pool-group {
+  align-self: center;
+  color: var(--fill-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.vt-prefs-subtitle-pool-items {
+  display: flex;
+  align-self: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  /* 某组标签被全部移出后该行不能塌缩：按 chip 实际高度兜底。 */
+  min-height: 30px;
+}
+
+/* 「恢复默认」：小号圆角描边按钮，hover 保持 fill。 */
+
+.vt-prefs-subtitle-restore {
+  appearance: none;
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 4px;
+  margin-top: 14px;
+  padding: 3px 10px;
+  border: 1px solid var(--color-panedivider);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent-blue);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  /* hover 底色淡入淡出。 */
+  transition: background-color 130ms ease-out;
+}
+
+.vt-prefs-subtitle-restore:hover {
+  background: var(--fill-quinary);
+}
+
+/* 注释区。 */
+
+.vt-prefs-subtitle-notes {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-panedivider);
+  color: var(--fill-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.vt-prefs-subtitle-notes-heading {
+  margin-bottom: 2px;
+  color: var(--fill-secondary);
+  font-weight: 600;
+}
+
+.vt-prefs-subtitle-note {
+  position: relative;
+  padding-left: 12px;
+}
+
+.vt-prefs-subtitle-note::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  color: var(--fill-tertiary);
+}
+
+/* 拖拽中：禁选中、抓取光标。 */
+
+.vt-prefs-subtitle-dragging .vt-prefs-subtitle-card,
+.vt-prefs-subtitle-dragging .vt-prefs-subtitle-card * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+@keyframes vt-prefs-subtitle-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes vt-prefs-subtitle-fade-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes vt-prefs-subtitle-chip-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes vt-prefs-subtitle-hint-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  15% {
+    transform: translateX(-4px);
+  }
+
+  30% {
+    transform: translateX(4px);
+  }
+
+  45% {
+    transform: translateX(-3px);
+  }
+
+  60% {
+    transform: translateX(3px);
+  }
+
+  75% {
+    transform: translateX(-1px);
+  }
+
+  90% {
+    transform: translateX(1px);
+  }
+}

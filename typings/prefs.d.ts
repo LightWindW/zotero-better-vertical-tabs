@@ -19,6 +19,7 @@ declare namespace _ZoteroTypes {
       "verticalTabs.releaseReaderEnabled": boolean;
       "verticalTabs.releaseReaderMinutes": number;
       "verticalTabs.tabHeight": string;
+      "verticalTabs.subtitleFields": string;
       "verticalTabs.enableBlur": boolean;
       "verticalTabs.nativeTabBarHidden": boolean;
       "verticalTabs.autoExpand": boolean;
@@ -31,7 +32,6 @@ declare namespace _ZoteroTypes {
       "versionCheck.latestDownloadUrl": string;
       "update.keepPaneOnReload": string;
       "newFeatures.readVersions": string;
-      "newFeatures.initialized": boolean;
     };
   }
 }

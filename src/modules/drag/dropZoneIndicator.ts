@@ -52,17 +52,6 @@ export function clearItemDropIndicator(row: HTMLElement): void {
   if (doc) getActiveIndicators(doc).delete(row);
 }
 
-export function getDefaultItemHeight(container: HTMLElement): number {
-  const win = container.ownerDocument?.defaultView || (globalThis as any);
-  const computed = win.getComputedStyle(container);
-  const minHeight = computed.getPropertyValue("--vt-item-min-height");
-  if (minHeight) {
-    const parsed = parseInt(minHeight, 10);
-    if (!Number.isNaN(parsed)) return parsed;
-  }
-  return 55;
-}
-
 function clearEmptyIndicator(container: HTMLElement): void {
   container.classList.remove(EMPTY_PREVIEW_CLASS);
 }
@@ -73,20 +62,26 @@ function clearTopGapIndicator(container: HTMLElement): void {
   // its current position.
 }
 
-export function setEmptyDropZoneIndicator(dropZone: HTMLElement): void {
+/**
+ * @param gapHeight real height of the one-row gap that just opened (the
+ * dragged row's rendered height, see drag/dragRowMetrics.ts).
+ */
+export function setEmptyDropZoneIndicator(
+  dropZone: HTMLElement,
+  gapHeight: number,
+): void {
   clearEmptyIndicator(dropZone);
   clearTopGapIndicator(dropZone);
   dropZone.classList.add(EMPTY_PREVIEW_CLASS);
   const doc = dropZone.ownerDocument;
   if (doc) getActiveIndicators(doc).add(dropZone);
 
-  // Position the green bar at "half a tag height down from the top of the
-  // uncategorized area" — the center of the virtual first tag slot.
+  // Position the green bar at "half a row height down from the top of the
+  // uncategorized area" — the center of the virtual first row slot.
   const win = dropZone.ownerDocument?.defaultView || (globalThis as any);
   const computed = win.getComputedStyle(dropZone);
   const paddingTop = parseFloat(computed.paddingTop) || 0;
-  const itemHeight = getDefaultItemHeight(dropZone);
-  const offset = paddingTop + Math.floor(itemHeight / 2);
+  const offset = paddingTop + Math.floor(gapHeight / 2);
   dropZone.style.setProperty(TOP_GAP_OFFSET_VAR, `${offset}px`);
 }
 

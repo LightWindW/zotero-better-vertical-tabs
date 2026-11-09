@@ -42,7 +42,10 @@ function fakeStyle() {
 }
 
 const NATURAL_HEIGHT = 100;
-const PREVIEW_HEIGHT = 55; // DEFAULT_ITEM_HEIGHT fallback inside categoryPreview
+// Empty container: preview = natural height + one placeholder slot.
+// The placeholder falls back to the tab-height baseline (36) + both collapsed
+// margins (8) = 44, so 100 + 44 = 144.
+const PREVIEW_HEIGHT = 144;
 
 function fakeItems(): any {
   return {
@@ -80,7 +83,10 @@ function fakeDoc(): Document {
       clearTimeout: (id: number) => {
         timeouts.delete(id);
       },
-      getComputedStyle: () => ({ getPropertyValue: () => "" }),
+      getComputedStyle: () => ({
+        getPropertyValue: (property: string) =>
+          property === "--vt-item-min-height" ? "36px" : "",
+      }),
     },
   } as unknown as Document;
 }
@@ -91,7 +97,7 @@ describe("clearCategoryPreview animated release", function () {
     const items = fakeItems();
     const wrapper = fakeCategoryWrapper(items);
 
-    applyCategoryPreview(doc, wrapper, null, 1);
+    applyCategoryPreview(doc, wrapper);
     // Entering preview moved the items height from natural to preview height.
     assert.equal(items.style.height, `${PREVIEW_HEIGHT}px`);
 
@@ -107,7 +113,7 @@ describe("clearCategoryPreview animated release", function () {
     const items = fakeItems();
     const wrapper = fakeCategoryWrapper(items);
 
-    applyCategoryPreview(doc, wrapper, null, 1);
+    applyCategoryPreview(doc, wrapper);
     clearCategoryPreview(doc, false);
 
     // Instant cleanup: inline height removed, preview class gone.

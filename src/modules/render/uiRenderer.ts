@@ -27,10 +27,13 @@ import {
   releaseReaderForTab,
 } from "../track/readerRelease";
 import {
+  createEmptyItemInfo,
   getItemInfo,
   getItemTypeImageSrc,
   clearItemTypeImageSrc,
 } from "./itemInfoCache";
+import { getSubtitleFields, type SubtitleFieldId } from "./subtitleFields";
+import { appendSubtitle } from "./subtitleRenderer";
 import { openItemAsNewTab } from "../track/tabOpener";
 import { dispatchVtEvent } from "../core/events";
 import {
@@ -52,7 +55,6 @@ import {
   applyDropPreview,
   clearDropPreview,
   clearItemShiftPreview,
-  getDropPreviewRowHeight,
   isSameGapPreviewAnchor,
   isSameRowPreviewAnchor,
   setGapPreviewAnchor,
@@ -64,7 +66,17 @@ import {
   getContainerVisibleItems,
   setWrapperDragOver,
 } from "../drag/dropContainerUtils";
-import { getDraggedTabId, setDraggedTabId } from "../drag/itemDragState";
+import {
+  getPlaceholderHeight,
+  getRowHeight,
+  invalidateRowHeightCache,
+} from "../drag/dragRowMetrics";
+import {
+  getDraggedTabId,
+  setDraggedRowHeight,
+  setDraggedTabId,
+  setDragSourceCategoryId,
+} from "../drag/itemDragState";
 import {
   clearDropOutlineFade,
   consumeDropOutlineFade,
@@ -120,7 +132,6 @@ import {
   collapseMultiDragSource,
   dispatchMultiDrop,
   endMultiDrag,
-  getMultiDragSourceCounts,
   getMultiDragTabIds,
   startMultiDrag,
 } from "../drag/multiDrag";
@@ -144,7 +155,6 @@ import {
 import {
   clearAllItemDropIndicators,
   clearItemDropIndicator,
-  getDefaultItemHeight,
   setEmptyDropZoneIndicator,
   setItemDropIndicator,
   setTopGapIndicator,
@@ -158,19 +168,6 @@ import {
 import { getPopupStyleSheet } from "./popupStyleUtils";
 import { promptCategoryName } from "../ui/categoryNameDialog";
 import { promptEditExtra } from "../ui/editExtraDialog";
-
-const DRAG_SOURCE_CATEGORY_ID_KEY = "__vtDragSourceCategoryId";
-
-function setDragSourceCategoryId(
-  doc: Document,
-  categoryId: string | null,
-): void {
-  (doc as any)[DRAG_SOURCE_CATEGORY_ID_KEY] = categoryId;
-}
-
-function getDragSourceCategoryId(doc: Document): string | null {
-  return (doc as any)[DRAG_SOURCE_CATEGORY_ID_KEY] || null;
-}
 
 const DROP_RENDER_PENDING_KEY = "__vtDropRenderPending";
 const DROP_RENDER_TIMEOUT_KEY = "__vtDropRenderPendingTimeout";
@@ -303,23 +300,12 @@ function getOrderedVisibleTabIds(doc: Document): string[] {
 }
 
 /**
- * Preview parameters for the current drag: the gap stays ONE row tall even
- * for multi drags (per the confirmed behavior). Multi drags use the
- * per-category source count map (accurate tNew accounting across source
- * categories) and the selection set to exclude dragged rows from shifts.
+ * Tab ids excluded from the shift preview: the gap stays ONE row tall even for
+ * multi drags (per the confirmed behavior), so the dragged rows themselves are
+ * never shifted. Single drags have no selection set to exclude.
  */
-function getDragPreviewParams(doc: Document): {
-  source: string | null | Map<string, number>;
-  exclude?: ReadonlySet<string>;
-} {
-  const multiIds = getMultiDragTabIds(doc);
-  if (multiIds) {
-    return {
-      source: getMultiDragSourceCounts(doc),
-      exclude: getSelectedTabIds(doc),
-    };
-  }
-  return { source: getDragSourceCategoryId(doc), exclude: undefined };
+function getDragExcludeIds(doc: Document): ReadonlySet<string> | undefined {
+  return getMultiDragTabIds(doc) ? getSelectedTabIds(doc) : undefined;
 }
 
 /**
@@ -535,8 +521,8 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
     const targetItem = (e.target as Element).closest(".vertical-tabs-item");
     if (targetItem) return;
 
-    const preview = getDragPreviewParams(doc);
-    applyCategoryPreview(doc, dropZone, preview.source, 1);
+    const exclude = getDragExcludeIds(doc);
+    applyCategoryPreview(doc, dropZone);
     const visibleItems = getContainerVisibleItems(dropZone);
     const draggedTabId = getDraggedTabId(doc);
     if (!draggedTabId) return;
@@ -549,14 +535,14 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
     clearAllItemDropIndicators(doc);
 
     if (visibleItems.length === 0) {
-      setEmptyDropZoneIndicator(dropZone);
+      setEmptyDropZoneIndicator(dropZone, getPlaceholderHeight(doc, dropZone));
       clearItemShiftPreview(doc);
     } else if (insertIndex >= visibleItems.length) {
       // Blank append area below the last tag: no item shift, indicator centered
-      // in the one-tag-height blank space.
+      // in the one-row blank space.
       clearItemShiftPreview(doc);
       const lastItem = visibleItems[visibleItems.length - 1];
-      const shiftHeight = getDropPreviewRowHeight(doc, lastItem);
+      const shiftHeight = getPlaceholderHeight(doc, dropZone);
       setItemDropIndicator(lastItem, false, shiftHeight);
     } else {
       // The cursor is inside a gap opened between visible items (target drag
@@ -573,7 +559,7 @@ function attachDropZoneDragEvents(doc: Document, dropZone: HTMLElement): void {
           before: true,
           draggedTabId,
         },
-        preview.exclude,
+        exclude,
       );
       if (insertIndex === 0) {
         setTopGapIndicator(dropZone, shiftHeight);
@@ -764,6 +750,8 @@ interface RowRenderOptions {
   showReaderIndicator: boolean;
   /** Snapshot of loaded-reader tabIds for this render (empty when hidden). */
   loadedReaderTabIds: ReadonlySet<string>;
+  /** Snapshot of the subtitle field combination (pref read once per render). */
+  subtitleFields: SubtitleFieldId[];
 }
 
 function createItemElement(
@@ -778,15 +766,7 @@ function createItemElement(
   const item = Zotero.Items.get(metadataItemId);
   const info = item
     ? getItemInfo(item)
-    : {
-        title: `Item ${pdf.itemId}`,
-        authors: "",
-        year: "",
-        journal: "",
-        university: "",
-        extra: "",
-        tags: [],
-      };
+    : createEmptyItemInfo(`Item ${pdf.itemId}`);
 
   const row = createEl(doc, "div");
   row.className =
@@ -847,57 +827,31 @@ function createItemElement(
   titleEl.textContent = displayTitle;
   contentEl.appendChild(titleEl);
 
-  // PDF reader tabs: show extra ("其他") + separator when pref enabled AND extra non-empty
+  // PDF reader tabs: show extra ("其他") when pref enabled AND extra non-empty.
+  // The separator under extra is only rendered when a subtitle line follows it —
+  // otherwise (0 subtitle fields) it would be a dangling line at the row bottom.
+  let extraEl: HTMLElement | null = null;
   if (isReader && opts.showExtra && info.extra) {
-    const extraEl = createEl(doc, "div");
+    extraEl = createEl(doc, "div");
     extraEl.className = "vertical-tabs-item-extra";
     extraEl.textContent = info.extra;
     contentEl.appendChild(extraEl);
+  }
+
+  // Meta (bottom line): user-configurable subtitle fields. The lastRead span
+  // keeps .vertical-tabs-item-time so the in-place time refresh still works.
+  const metaEl = appendSubtitle(doc, contentEl, {
+    info,
+    fields: opts.subtitleFields,
+    lastReadText: formatRowTime(pdf),
+    isNote,
+  });
+
+  if (extraEl && metaEl) {
     const extraSep = createEl(doc, "div");
     extraSep.className = "vertical-tabs-extra-separator";
-    contentEl.appendChild(extraSep);
+    contentEl.insertBefore(extraSep, metaEl);
   }
-
-  // Meta (bottom line): time · publication
-  const metaEl = createEl(doc, "div");
-  metaEl.className = "vertical-tabs-item-meta";
-  const timeSpan = createEl(doc, "span");
-  timeSpan.className = "vertical-tabs-item-time";
-  timeSpan.textContent = formatRowTime(pdf);
-  metaEl.appendChild(timeSpan);
-
-  // Publication info
-  if (!isNote) {
-    const pubInfo = info.journal || info.university || "";
-    if (pubInfo) {
-      const dot = createEl(doc, "span");
-      dot.className = "vertical-tabs-item-dot";
-      dot.textContent = "·";
-      metaEl.appendChild(dot);
-      const pubSpan = createEl(doc, "span");
-      pubSpan.className = "vertical-tabs-item-pub";
-      pubSpan.textContent = pubInfo;
-      metaEl.appendChild(pubSpan);
-    }
-  } else if (pdf.parentItemId) {
-    // Note with parent: show parent item title
-    const parentItem = Zotero.Items.get(pdf.parentItemId);
-    if (parentItem) {
-      const parentTitle =
-        ((parentItem as Zotero.Item).getField("title") as string) || "";
-      if (parentTitle) {
-        const dot = createEl(doc, "span");
-        dot.className = "vertical-tabs-item-dot";
-        dot.textContent = "·";
-        metaEl.appendChild(dot);
-        const pubSpan = createEl(doc, "span");
-        pubSpan.className = "vertical-tabs-item-pub";
-        pubSpan.textContent = parentTitle;
-        metaEl.appendChild(pubSpan);
-      }
-    }
-  }
-  contentEl.appendChild(metaEl);
 
   row.appendChild(contentEl);
 
@@ -994,9 +948,9 @@ function createItemElement(
       const targetWrapper =
         row.closest(".vertical-tabs-category") ||
         row.closest(".vertical-tabs-drop-zone");
-      const preview = getDragPreviewParams(doc);
+      const exclude = getDragExcludeIds(doc);
       if (targetWrapper) {
-        applyCategoryPreview(doc, targetWrapper, preview.source, 1);
+        applyCategoryPreview(doc, targetWrapper);
         setWrapperDragOver(targetWrapper as HTMLElement, doc);
       }
 
@@ -1009,7 +963,7 @@ function createItemElement(
           before,
           draggedTabId,
         },
-        preview.exclude,
+        exclude,
       );
 
       // Use the same centered-gap indicator model for both categories and the
@@ -1118,6 +1072,9 @@ function createItemElement(
     row.classList.add("dragging");
     const draggedId = pdf.tabId || String(pdf.itemId);
     setDraggedTabId(doc, draggedId);
+    // Source category for the previews: they must know whether a hovered
+    // container is the one the row started in, without relying on the
+    // collapsed class (the first dragover can arrive before the collapse rAF).
     setDragSourceCategoryId(doc, categoryId || "__uncategorized__");
 
     // Multi mode: dragging a SELECTED tab while the selection has 2+ entries.
@@ -1132,6 +1089,20 @@ function createItemElement(
       // fade) and proceeds with the normal single-tab drag.
       clearTabSelection(doc);
     }
+
+    // The drag previews reserve the REAL height of the dragged row (a row with
+    // "show extra" enabled is one line taller than the tab-height baseline), so
+    // it must be measured before the source row collapses. For a multi drag
+    // that row is the TOPMOST selected one: the drop cascade shows it at full
+    // height first and unfolds the rest afterwards, so the one-row gap stands
+    // for exactly that height.
+    invalidateRowHeightCache();
+    const gapRow = multiIds
+      ? (doc.querySelector(
+          `.vertical-tabs-item[data-tab-id="${CSS.escape(multiIds[0])}"]`,
+        ) as HTMLElement | null)
+      : null;
+    setDraggedRowHeight(doc, getRowHeight(gapRow ?? row));
 
     // Collapse the source row(s) after the drag image has been generated so
     // the original slot disappears visually, but the drag image still shows
@@ -1176,6 +1147,12 @@ function createItemElement(
     row.classList.remove("dragging");
     setDraggedTabId(doc, null);
     setDragSourceCategoryId(doc, null);
+    setDraggedRowHeight(doc, null);
+    // Drop the per-drag row-height cache. A CANCELED drag leaves the collapsed
+    // source rows out of the cached sums, and nothing re-renders them back to
+    // their natural height — a following EXTERNAL library drag must re-measure
+    // or it would reserve a preview short by the dragged rows.
+    invalidateRowHeightCache();
     // Multi mode: clear the drag keys; on cancel the selected rows
     // fade/expand back. No-op for single drags.
     endMultiDrag(doc, isDropRenderPending(doc));
@@ -1412,8 +1389,8 @@ function createCategoryElement(
     const draggedTabId = getDraggedTabId(doc);
     if (!draggedTabId) return;
 
-    const preview = getDragPreviewParams(doc);
-    applyCategoryPreview(doc, wrapper, preview.source, 1);
+    const exclude = getDragExcludeIds(doc);
+    applyCategoryPreview(doc, wrapper);
     setWrapperDragOver(wrapper, doc);
 
     const visibleItems = getContainerVisibleItems(itemsContainer);
@@ -1425,12 +1402,15 @@ function createCategoryElement(
     if (visibleItems.length === 0) {
       clearItemShiftPreview(doc);
       clearAllItemDropIndicators(doc);
-      setTopGapIndicator(itemsContainer, getDefaultItemHeight(itemsContainer));
+      setTopGapIndicator(
+        itemsContainer,
+        getPlaceholderHeight(doc, itemsContainer),
+      );
     } else if (insertIndex >= visibleItems.length) {
       // Append-to-end: no item shift, indicator centered below the last item.
       clearItemShiftPreview(doc);
       const lastItem = visibleItems[visibleItems.length - 1];
-      const shiftHeight = getDropPreviewRowHeight(doc, lastItem);
+      const shiftHeight = getPlaceholderHeight(doc, itemsContainer);
       clearAllItemDropIndicators(doc);
       setItemDropIndicator(lastItem, false, shiftHeight);
     } else {
@@ -1444,7 +1424,7 @@ function createCategoryElement(
           before: true,
           draggedTabId,
         },
-        preview.exclude,
+        exclude,
       );
 
       clearAllItemDropIndicators(doc);
@@ -1547,8 +1527,8 @@ function createCategoryElement(
     setGapPreviewAnchor(doc, wrapper, 0);
 
     const draggedTabId = getDraggedTabId(doc) || data;
-    const preview = getDragPreviewParams(doc);
-    applyCategoryPreview(doc, wrapper, preview.source, 1);
+    const exclude = getDragExcludeIds(doc);
+    applyCategoryPreview(doc, wrapper);
     const shiftHeight = applyDropPreview(
       doc,
       {
@@ -1556,18 +1536,16 @@ function createCategoryElement(
         categoryWrapper: wrapper,
         draggedTabId,
       },
-      preview.exclude,
+      exclude,
     );
 
     // Explicit first-gap green bar, vertically centered in the blank that
     // opened under the header — deterministic instead of relying on an
     // indicator left over from a previous row hover. Empty category (or all
-    // rows dragged away): center in the virtual first slot.
+    // rows dragged away): center in the virtual first slot, which is exactly
+    // the one-row gap height.
     clearAllItemDropIndicators(doc);
-    setTopGapIndicator(
-      itemsContainer,
-      shiftHeight > 0 ? shiftHeight : getDefaultItemHeight(itemsContainer),
-    );
+    setTopGapIndicator(itemsContainer, shiftHeight);
   };
   const onDragLeave = (e: DragEvent) => {
     const related = e.relatedTarget as Node | null;
@@ -2250,6 +2228,7 @@ export function renderCategories(
     loadedReaderTabIds: showReaderIndicator
       ? getLoadedReaderTabIds()
       : new Set<string>(),
+    subtitleFields: getSubtitleFields(),
   };
 
   const sortedCategories = [...data.categories].sort(

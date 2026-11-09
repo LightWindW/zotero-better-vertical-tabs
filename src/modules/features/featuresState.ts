@@ -2,9 +2,9 @@
  * 新功能的「已读 / 未读」状态。
  *
  * - 已读版本集合存在 pref `newFeatures.readVersions`（逗号分隔）；
- * - 首次运行（`newFeatures.initialized` 为 false）时，把「当前版本之前」的
- *   条目全部视为已读，只提示当前版本，避免新装用户一次弹出所有历史；
  * - 未读判定：数据里有内容、版本号 ≤ 当前安装版本、且不在已读集合里；
+ * - **不做首次基线**：本提示功能从 v1.2.62 才开始存在，此前版本的新功能用户
+ *   从未读过，所以首次运行时它们也会被当作未读，直到用户点开「新功能介绍」；
  * - 状态变化后向所有主窗口广播 `vertical-tabs:features-changed`，绿点据此刷新。
  */
 
@@ -21,23 +21,6 @@ function compareToCurrent(version: string): number | null {
     return Zotero.Utilities.semverCompare(version, PLUGIN_VERSION);
   } catch {
     return null;
-  }
-}
-
-/** 首次运行时建立基线：当前版本之前的全部视为已读。 */
-export function ensureFeaturesBaseline(): void {
-  if (getPref("newFeatures.initialized")) return;
-  try {
-    const readVersions = getFeatureVersions()
-      .map((item) => item.version)
-      .filter((version) => {
-        const comparison = compareToCurrent(version);
-        return comparison !== null && comparison < 0;
-      });
-    setPref("newFeatures.readVersions", readVersions.join(","));
-    setPref("newFeatures.initialized", true);
-  } catch (error) {
-    ztoolkit.log("Failed to initialize new-features baseline:", error);
   }
 }
 

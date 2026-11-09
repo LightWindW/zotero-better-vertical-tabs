@@ -73,3 +73,4 @@ pref-changelog-last-checked = Última comprobación { $time }
 pref-changelog-never-checked = Sin comprobar todavía
 pref-changelog-empty = Sin entradas de changelog
 pref-changelog-new-version-hint = Haz clic para ver la nueva versión
+pref-vertical-tabs-custom-subtitle = Subtítulo personalizado

@@ -22,10 +22,12 @@ function fakeItem(
     fieldMode?: number;
   }> = [],
   tags: string[] = [],
+  itemType?: string,
 ): FakeItem {
   let getFieldCalls = 0;
   const item = {
     id,
+    itemType,
     getField: (name: string) => {
       getFieldCalls++;
       return fields[name] ?? "";
@@ -56,7 +58,8 @@ describe("itemInfoCache", function () {
       );
       const info = computeItemInfo(item);
       assert.equal(info.title, "Deep Learning");
-      assert.equal(info.year, "2020");
+      // year 保持既有 YYYY-MM 语义（纯年份用 yearOnly）。
+      assert.equal(info.year, "2020-05");
       assert.equal(info.journal, "Nature");
       assert.equal(info.extra, "note");
       assert.deepEqual(info.tags, ["ml", "ai"]);
@@ -92,6 +95,56 @@ describe("itemInfoCache", function () {
       ]);
       const info = computeItemInfo(item);
       assert.equal(info.authors, "Plato");
+      // 副标题字段复用同一套 creator 显示名规则。
+      assert.equal(info.firstAuthorLastName, "Plato");
+      assert.equal(info.firstAuthor, "Plato");
+      assert.equal(info.allAuthors, "Plato");
+    });
+
+    it("computes the custom subtitle fields", function () {
+      const { item } = fakeItem(
+        5,
+        {
+          date: "2020-05-01",
+          publicationTitle: "Nature",
+          journalAbbreviation: "Nat.",
+          shortTitle: "DL",
+        },
+        [
+          { lastName: "Zhang", firstName: "San" },
+          { lastName: "Li", firstName: "Si" },
+        ],
+      );
+      const info = computeItemInfo(item);
+      assert.equal(info.firstAuthorLastName, "Zhang");
+      assert.equal(info.firstAuthor, "Zhang San");
+      assert.equal(info.allAuthors, "Zhang San, Li Si");
+      assert.equal(info.venue, "Nature");
+      assert.equal(info.journalShort, "Nat.");
+      assert.equal(info.shortTitle, "DL");
+      assert.equal(info.dateRaw, "2020-05-01");
+      assert.equal(info.yearOnly, "2020");
+    });
+
+    it("uses conferenceName as venue for conference papers", function () {
+      const { item } = fakeItem(
+        6,
+        { conferenceName: "CVPR", proceedingsTitle: "Proc. CVPR" },
+        [],
+        [],
+        "conferencePaper",
+      );
+      const info = computeItemInfo(item);
+      assert.equal(info.venue, "CVPR");
+      // 会议论文没有 journalAbbreviation：刊名简称回落到 venue。
+      assert.equal(info.journalShort, "CVPR");
+    });
+
+    it("uses university as venue for theses", function () {
+      const { item } = fakeItem(7, { university: "MIT" }, [], [], "thesis");
+      const info = computeItemInfo(item);
+      assert.equal(info.venue, "MIT");
+      assert.equal(info.journalShort, "MIT");
     });
   });
 

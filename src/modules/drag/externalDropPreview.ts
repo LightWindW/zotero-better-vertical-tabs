@@ -26,7 +26,6 @@ import {
   applyDropPreview,
   clearDropPreview,
   clearItemShiftPreview,
-  getDropPreviewRowHeight,
   isSameGapPreviewAnchor,
   isSameRowPreviewAnchor,
   setGapPreviewAnchor,
@@ -35,11 +34,11 @@ import {
 import { applyCategoryPreview } from "./categoryPreview";
 import {
   clearAllItemDropIndicators,
-  getDefaultItemHeight,
   setEmptyDropZoneIndicator,
   setItemDropIndicator,
   setTopGapIndicator,
 } from "./dropZoneIndicator";
+import { getPlaceholderHeight } from "./dragRowMetrics";
 import { clearAllDropVisuals } from "./dropTarget";
 import { isNewCategoryZonePointer } from "./newCategoryDrop";
 import {
@@ -170,7 +169,7 @@ function applyRowPreview(
   const wrapper = (row.closest(".vertical-tabs-category") ||
     row.closest(".vertical-tabs-drop-zone")) as HTMLElement | null;
   if (wrapper) {
-    applyCategoryPreview(doc, wrapper, null, 1);
+    applyCategoryPreview(doc, wrapper);
     setWrapperDragOver(wrapper, doc);
   }
 
@@ -217,20 +216,19 @@ function applyGapPreview(
     clearItemShiftPreview(doc);
     clearAllItemDropIndicators(doc);
     if (container.classList.contains("vertical-tabs-drop-zone")) {
-      setEmptyDropZoneIndicator(container);
+      setEmptyDropZoneIndicator(
+        container,
+        getPlaceholderHeight(doc, container),
+      );
     } else {
-      setTopGapIndicator(container, getDefaultItemHeight(container));
+      setTopGapIndicator(container, getPlaceholderHeight(doc, container));
     }
   } else if (insertIndex >= visibleItems.length) {
     // Append-to-end: no item shift, bar centered below the last item.
     clearItemShiftPreview(doc);
     const lastItem = visibleItems[visibleItems.length - 1];
     clearAllItemDropIndicators(doc);
-    setItemDropIndicator(
-      lastItem,
-      false,
-      getDropPreviewRowHeight(doc, lastItem),
-    );
+    setItemDropIndicator(lastItem, false, getPlaceholderHeight(doc, container));
   } else {
     const targetRow = visibleItems[insertIndex];
     const shiftHeight = applyDropPreview(doc, {
@@ -260,7 +258,7 @@ function applyCategoryHeaderPreview(doc: Document, wrapper: HTMLElement): void {
   // Early-exit: the whole-category preview only changes on enter/leave.
   if (isSameGapPreviewAnchor(doc, wrapper, 0)) return;
 
-  applyCategoryPreview(doc, wrapper, null, 1);
+  applyCategoryPreview(doc, wrapper);
   const shiftHeight = applyDropPreview(doc, {
     type: "category",
     categoryWrapper: wrapper,
@@ -274,10 +272,7 @@ function applyCategoryHeaderPreview(doc: Document, wrapper: HTMLElement): void {
     ":scope > .vertical-tabs-items",
   ) as HTMLElement | null;
   if (itemsContainer) {
-    setTopGapIndicator(
-      itemsContainer,
-      shiftHeight > 0 ? shiftHeight : getDefaultItemHeight(itemsContainer),
-    );
+    setTopGapIndicator(itemsContainer, shiftHeight);
   }
   setGapPreviewAnchor(doc, wrapper, 0);
 }
@@ -310,7 +305,7 @@ export function applyExternalDropPreview(doc: Document, e: DragEvent): void {
       ".vertical-tabs-category",
     ) as HTMLElement | null;
     if (wrapper) {
-      applyCategoryPreview(doc, wrapper, null, 1);
+      applyCategoryPreview(doc, wrapper);
       setWrapperDragOver(wrapper, doc);
     }
     applyGapPreview(doc, itemsContainer, e.clientY);
@@ -319,7 +314,7 @@ export function applyExternalDropPreview(doc: Document, e: DragEvent): void {
 
   const dropZone = el.closest(".vertical-tabs-drop-zone") as HTMLElement | null;
   if (dropZone) {
-    applyCategoryPreview(doc, dropZone, null, 1);
+    applyCategoryPreview(doc, dropZone);
     setWrapperDragOver(dropZone, doc);
     applyGapPreview(doc, dropZone, e.clientY);
     return;

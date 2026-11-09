@@ -40,6 +40,41 @@
           "es": "La vista previa está asociada al ID de la pestaña, así que sigue ahí la próxima vez que se restaure tras cerrarla. La imagen mantiene el ancho de la tarjeta pero tiene una altura máxima: lo que sobresale se recorta, por lo que las imágenes muy alargadas solo muestran la parte superior. Se recomienda capturar en horizontal."
         }
       ]
+    },
+    {
+      "version": "1.2.0",
+      "entries": [
+        {
+          "type": "paragraph",
+          "zh": "1. 新增**隐藏原生标签栏**功能。在\"更多\"->“隐藏原生标签”处可以隐藏Zotero自带的横标签栏。",
+          "en": "1. Added a **hide native tab bar** feature. Use More → “Hide native tabs” to hide Zotero’s built-in horizontal tab bar.",
+          "es": "1. Añadida la función **ocultar la barra de pestañas nativa**. En Más → «Ocultar pestañas nativas» puedes ocultar la barra horizontal integrada de Zotero."
+        },
+        {
+          "type": "paragraph",
+          "zh": "2. 新增**阅读器高亮及阅读器内存优化**功能。",
+          "en": "2. Added **reader highlighting and reader memory optimization**.",
+          "es": "2. Añadidos el **resaltado del lector y la optimización de memoria del lector**."
+        },
+        {
+          "type": "paragraph",
+          "zh": "现在打开文献阅读时标签左侧会显示绿色条表示该文献已经在阅读器打开。由于Zotero开启过多阅读器会占用更多内存，支持在首选项内自定义XX分钟后自动关闭阅读器，而不关闭标签，以此来优化内存。",
+          "en": "When a paper is open in the reader, a green bar appears on the left of its tab. Because having many readers open uses more memory, you can set in Preferences how many minutes of inactivity should auto-close the reader without closing the tab, which keeps memory usage down.",
+          "es": "Cuando un documento está abierto en el lector, aparece una barra verde a la izquierda de su pestaña. Como tener muchos lectores abiertos consume más memoria, en Preferencias puedes definir tras cuántos minutos de inactividad se cierra el lector automáticamente sin cerrar la pestaña, para reducir el consumo de memoria."
+        },
+        {
+          "type": "paragraph",
+          "zh": "同时用户可以自主在标签处右键->“关闭阅读器”来自主关闭阅读器",
+          "en": "You can also right-click a tab and choose “Close reader” to close the reader yourself.",
+          "es": "También puedes hacer clic derecho en una pestaña y elegir «Cerrar lector» para cerrarlo manualmente."
+        },
+        {
+          "type": "paragraph",
+          "zh": "3. 新增三中侧边栏展开模式。在\"更多\"->里可以选择三种展开模式，分别是\"自动展开\"、“手动展开”、“精简模式”",
+          "en": "3. Added three sidebar expand modes. In the More menu you can choose between “Auto expand”, “Manual expand”, and “Minimal”.",
+          "es": "3. Añadidos tres modos de expansión de la barra lateral. En el menú Más puedes elegir entre «Expansión automática», «Expansión manual» y «Minimalista»."
+        }
+      ]
     }
   ]
 }
