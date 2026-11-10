@@ -9,7 +9,7 @@
  *   0.25, 0.2, 1)，起始斜率非 0）+ 浮影飞行 220ms 同曲线；落位后浮影 110ms 淡出收尾。
  *
  * 交互语义：
- * - 池 → 预览区：插入（满 3 个拒绝：回弹 + onMaxReached 提示）。
+ * - 池 → 预览区：插入（满 4 个拒绝：回弹 + onMaxReached 提示）。
  * - 预览区内部：换序（目标索引与当前位置相同 = 取消）。
  * - 预览区 → 区域外松手：删除（回池）。
  * - 区域外松手 / 满员 / Esc：取消，同一个浮影连续飞回原位。
@@ -71,7 +71,7 @@ export interface DragControllerOptions {
   chipRow: ChipRow;
   pool: Pool;
   state: SubtitleState;
-  /** 落点在预览区但已满 3 个时回调（弹窗据此播提示动画）。 */
+  /** 落点在预览区但已满 4 个时回调（弹窗据此播提示动画）。 */
   onMaxReached?: () => void;
 }
 

@@ -1,0 +1,172 @@
+{
+  "versions": [
+    {
+      "version": "1.2.63",
+      "date": "2026-11-10",
+      "entries": [
+        {
+          "type": "new",
+          "zh": "自定义标签副标题：首选项「标签高度」下方新增「自定义副标题」按钮，现在可拖拽组合最多 4 个副标题标签（默认：上次阅读时间 + 第一作者（姓）+ 刊名简称）",
+          "en": "Custom tab subtitles: a new \"Custom Subtitle\" button under Preferences → Now you can build a subtitle from up to 4 tags by drag and drop (default: last read time + first author (surname) + journal abbreviation)",
+          "es": "Subtítulos de pestaña personalizados: el nuevo botón «Subtítulo personalizado» bajo la altura de pestaña ahora permite componer el subtítulo con hasta 4 etiquetas arrastrando y soltando (predeterminado: última lectura + primer autor (apellido) + abreviatura de la revista)"
+        },
+        {
+          "type": "fix",
+          "zh": "修复把标签拖到折叠分类时分类突然弹开、移开或取消时折叠生硬的问题；拖拽预览的展开/折叠现在与平时点击分类头同速同曲线",
+          "en": "Fixed categories popping open abruptly when dragging a tab onto a collapsed category, and harsh collapsing when moving away or cancelling; drag-preview expand/collapse now matches the normal category-header animation in speed and easing",
+          "es": "Corregido que las categorías se abrieran de golpe al arrastrar una pestaña sobre una categoría contraída y que el plegado fuera brusco al alejarse o cancelar; ahora la vista previa al arrastrar se expande y pliega con la misma velocidad y curva que la animación normal del encabezado"
+        },
+        {
+          "type": "fix",
+          "zh": "修复开启「显示 Extra」后拖拽标签时分类预览高度计算错误的问题：预览偏矮裁掉底部标签，或从分类内部开始拖拽时该分类突然变高、底部出现大片空白",
+          "en": "Fixed incorrect category preview heights when \"Show Extra\" is enabled: the preview could be too short and clip the last tab, or the source category could suddenly grow with a large blank area at the bottom when the drag started inside it",
+          "es": "Corregidas las alturas de vista previa de categoría con «Mostrar Extra» activado: la vista previa podía quedar corta y recortar la última pestaña, o la categoría de origen podía crecer de golpe dejando un gran espacio vacío al iniciar el arrastre dentro de ella"
+        }
+      ]
+    },
+    {
+      "version": "1.2.62",
+      "date": "2026-11-09",
+      "entries": [
+        {
+          "type": "new",
+          "zh": "插件更新检查与一键更新：首选项可自动检查新版本（24 小时节流、支持手动刷新），并可直接在首选项内下载安装最新版",
+          "en": "Plugin update check & one-click update: the preferences pane checks for newer versions (24-hour throttle, manual refresh available) and can download and install the latest release right there",
+          "es": "Comprobación de actualizaciones y actualización con un clic: las preferencias comprueban si hay versiones nuevas (límite de 24 horas y actualización manual) y permiten descargar e instalar la última versión desde ahí"
+        },
+        {
+          "type": "new",
+          "zh": "首选项新增更新日志面板：可按版本查看更新记录，当前版本高亮、旧版本可折叠",
+          "en": "New changelog panel in preferences: review per-version changelogs, with the current version highlighted and older versions collapsible",
+          "es": "Nuevo panel de registro de cambios en las preferencias: consulta los cambios por versión, con la versión actual resaltada y las anteriores plegables"
+        },
+        {
+          "type": "new",
+          "zh": "更新与新功能提醒：有新版本时「更多」按钮显示红点，有新功能时显示绿点，「更多」菜单新增「新功能介绍」入口；提醒读过后消失，只有新版本带来新功能时才再次出现",
+          "en": "Update and new-feature reminders: a red dot on the \"More\" button when a version is available, a green dot when a version ships new features, plus a \"What's New\" entry in the More menu; notices disappear once read and return only when a new version brings new features",
+          "es": "Avisos de actualización y de novedades: punto rojo en el botón «Más» cuando hay una versión nueva, punto verde cuando esa versión trae novedades, y una entrada «Novedades» en el menú Más; los avisos desaparecen al leerlos y solo vuelven cuando una nueva versión trae novedades"
+        },
+        {
+          "type": "fix",
+          "zh": "修复展开/折叠动画期间「暂无打开的标签」占位文案换行的问题",
+          "en": "Fixed the \"No opened PDFs\" placeholder wrapping onto multiple lines during the expand/collapse animation",
+          "es": "Corregido el salto de línea del texto «No hay PDFs abiertos» durante la animación de expansión/contracción"
+        }
+      ]
+    },
+    {
+      "version": "1.2.61",
+      "date": "2026-11-06",
+      "entries": [
+        {
+          "type": "fix",
+          "zh": "点击已折叠的分类标题时，可能误触上方分类内的标签",
+          "en": "Clicking a collapsed category header could accidentally trigger a tab in the section above it",
+          "es": "Al hacer clic en el encabezado de una categoría contraída se podía activar por error una pestaña de la sección superior"
+        },
+        {
+          "type": "fix",
+          "zh": "重启 Zotero 后标签高度设置会恢复默认",
+          "en": "Tab height setting reverting to the default after restarting Zotero",
+          "es": "La altura de pestaña volvía a la predeterminada tras reiniciar Zotero"
+        },
+        {
+          "type": "fix",
+          "zh": "重启 Zotero 后分类可能丢失的隐患",
+          "en": "Categories could disappear after restarting Zotero",
+          "es": "Las categorías podían desaparecer tras reiniciar Zotero"
+        },
+        {
+          "type": "fix",
+          "zh": "拖动调整侧边栏宽度时会触发自动折叠",
+          "en": "Dragging to resize the sidebar could trigger auto-collapse",
+          "es": "Arrastrar para cambiar el ancho de la barra lateral podía activar el colapso automático"
+        },
+        {
+          "type": "optimize",
+          "zh": "阅读时间持久化更稳健：清理已关闭标签的过期记录，避免重启后阅读时间被重置为「刚刚」",
+          "en": "Reading-time persistence is more robust: stale entries are cleaned up and times no longer reset to \"just now\" after a restart",
+          "es": "La persistencia del tiempo de lectura es más robusta: se limpian las entradas obsoletas y los tiempos ya no se reinician a \"ahora mismo\""
+        },
+        {
+          "type": "fix",
+          "zh": "拖动标签时绿色占位指示条可能消失",
+          "en": "The green drag placeholder could disappear while dragging tabs",
+          "es": "El indicador verde de arrastre podía desaparecer al arrastrar pestañas"
+        }
+      ]
+    },
+    {
+      "version": "1.2.6",
+      "date": "2026-10-10",
+      "entries": [
+        {
+          "type": "new",
+          "zh": "悬浮卡片预览图：可为文献自定义代表图并保存为悬浮卡缩略图",
+          "en": "Hover card preview images: pick a representative figure for an item and save it as a hover card thumbnail",
+          "es": "Imágenes de vista previa en la tarjeta flotante: elige una figura representativa y guárdala como miniatura"
+        },
+        {
+          "type": "optimize",
+          "zh": "悬浮卡字段改为图标显示，观感更简洁",
+          "en": "Hover card fields replaced with icons for a cleaner look",
+          "es": "Los campos de la tarjeta flotante se muestran con iconos para un aspecto más limpio"
+        },
+        {
+          "type": "optimize",
+          "zh": "自动展开模式支持嵌入式展开",
+          "en": "Auto-expand mode now supports embedded expansion",
+          "es": "El modo de expansión automática ahora admite la expansión integrada"
+        },
+        {
+          "type": "optimize",
+          "zh": "可在首选项中关闭侧边栏展开/折叠动画",
+          "en": "Sidebar expand/collapse animation can be disabled in Preferences",
+          "es": "La animación de expansión/colapso de la barra lateral se puede desactivar en Ajustes"
+        },
+        {
+          "type": "fix",
+          "zh": "修复 macOS 原生标签关闭按钮与侧边栏元素重叠",
+          "en": "Fixed macOS native tab close button overlapping sidebar elements",
+          "es": "Corregido el solapamiento del botón nativo de cerrar pestaña en macOS con la barra lateral"
+        },
+        {
+          "type": "fix",
+          "zh": "手动展开模式下图标右侧不触发悬停",
+          "en": "Hover not triggering on the right side of icons in manual expand mode",
+          "es": "El hover no se activaba en el lado derecho de los iconos en modo de expansión manual"
+        },
+        {
+          "type": "fix",
+          "zh": "右键标签后侧边栏意外自动折叠",
+          "en": "Sidebar unexpectedly auto-collapsing after right-clicking a tab",
+          "es": "La barra lateral se contraía inesperadamente tras hacer clic derecho en una pestaña"
+        },
+        {
+          "type": "fix",
+          "zh": "右键标签后高亮消失",
+          "en": "Highlight disappearing after right-clicking a tab",
+          "es": "El resaltado desaparecía tras hacer clic derecho en una pestaña"
+        }
+      ]
+    },
+    {
+      "version": "1.2.5",
+      "date": "2026-09-27",
+      "entries": [
+        {
+          "type": "new",
+          "zh": "适配 Zotero 10",
+          "en": "Ready for Zotero 10",
+          "es": "Compatible con Zotero 10"
+        },
+        {
+          "type": "new",
+          "zh": "全新圆角界面，间距更柔和、观感更轻",
+          "en": "New rounded interface with softer spacing and a lighter feel",
+          "es": "Nueva interfaz redondeada con espaciado más suave y una sensación más ligera"
+        }
+      ]
+    }
+  ]
+}

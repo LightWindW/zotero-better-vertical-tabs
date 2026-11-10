@@ -29,18 +29,16 @@ const PREVIEW_HOST_CLASS = "vt-prefs-subtitle-preview-host";
 const POOL_HOST_CLASS = "vt-prefs-subtitle-pool-host";
 const RESTORE_CLASS = "vt-prefs-subtitle-restore";
 const NOTES_CLASS = "vt-prefs-subtitle-notes";
-const NOTES_HEADING_CLASS = "vt-prefs-subtitle-notes-heading";
 const NOTE_CLASS = "vt-prefs-subtitle-note";
 
 const CLOSE_FALLBACK_MS = 300;
-/** 满额提示：「最多 3 个」段红色样式淡入 + 横向振动，约 1.1s 后淡出还原。 */
+/** 满额提示：「最多 4 个」段红色样式淡入 + 横向振动，约 1.1s 后淡出还原。 */
 const HINT_MAX_CLASS = "vt-prefs-subtitle-hint-max";
 const HINT_MAX_MS = 1100;
 
 const NOTE_IDS = [
   "vertical-tabs-subtitle-note-venue",
-  "vertical-tabs-subtitle-note-journal-short",
-  "vertical-tabs-subtitle-note-short-title",
+  "vertical-tabs-subtitle-note-fields",
 ] as const;
 
 export interface DialogShellOptions {
@@ -57,7 +55,7 @@ export interface DialogShell {
   poolHost: HTMLElement;
   restoreButton: HTMLButtonElement;
   closeButton: HTMLButtonElement;
-  /** 已满 3 个仍尝试放入：只让「最多 3 个」段变红加粗（淡入）+ 振动后淡回。 */
+  /** 已满 4 个仍尝试放入：只让「最多 4 个」段变红加粗（淡入）+ 振动后淡回。 */
   playMaxReachedHint(): void;
   close(): void;
   destroy(): void;
@@ -92,7 +90,7 @@ export function createDialogShell(options: DialogShellOptions): DialogShell {
   closeButton.setAttribute("aria-label", closeLabel);
   header.append(title, closeButton);
 
-  // 提示文案拆两段：前缀 + 「最多 3 个」段。红色段叠两层同样文本（normal 层在
+  // 提示文案拆两段：前缀 + 「最多 4 个」段。红色段叠两层同样文本（normal 层在
   // 流内撑宽，em 层 absolute 覆盖），满额时只让 em 层淡入，实现「文字样式淡入淡出」。
   const hint = createPrefsElement(doc, "div", HINT_CLASS);
   hint.appendChild(
@@ -124,9 +122,6 @@ export function createDialogShell(options: DialogShellOptions): DialogShell {
   );
 
   const notes = createPrefsElement(doc, "div", NOTES_CLASS);
-  const notesHeading = createPrefsElement(doc, "div", NOTES_HEADING_CLASS);
-  notesHeading.textContent = getString("vertical-tabs-subtitle-notes-heading");
-  notes.appendChild(notesHeading);
   for (const noteId of NOTE_IDS) {
     const note = createPrefsElement(doc, "div", NOTE_CLASS);
     note.textContent = getString(noteId);

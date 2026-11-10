@@ -45,6 +45,28 @@ export function isCurrentVersion(version: string): boolean {
   }
 }
 
+/** 该版本号比当前安装版本更新（已发布但用户尚未升级）。 */
+export function isPendingVersion(version: string): boolean {
+  try {
+    return Zotero.Utilities.semverCompare(version, PLUGIN_VERSION) > 0;
+  } catch {
+    return false;
+  }
+}
+
+/** 按版本号从新到旧排序（远程数据合并后统一排序）。 */
+export function sortChangelogVersions(
+  versions: ChangelogVersion[],
+): ChangelogVersion[] {
+  return [...versions].sort((a, b) => {
+    try {
+      return Zotero.Utilities.semverCompare(b.version, a.version);
+    } catch {
+      return b.version.localeCompare(a.version);
+    }
+  });
+}
+
 /** 按当前界面语言取正文；缺失时回落到英文。 */
 export function getEntryText(entry: ChangelogEntry, locale: string): string {
   if (locale.startsWith("zh")) return entry.zh || entry.en;

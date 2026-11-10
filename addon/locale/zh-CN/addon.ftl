@@ -171,7 +171,7 @@ vertical-tabs-help-section-6-content = - “更多>关闭/打开原生标签”�
 # 自定义标签副标题（首选项弹窗）
 vertical-tabs-subtitle-dialog-title = Better Vertical Tabs 自定义标签副标题
 vertical-tabs-subtitle-hint = 请将需要展示的标签拖拽到上方副标题区域，
-vertical-tabs-subtitle-hint-max-part = 最多显示 3 个标签
+vertical-tabs-subtitle-hint-max-part = 最多显示 4 个标签
 vertical-tabs-subtitle-close = 关闭
 vertical-tabs-subtitle-restore-default = 恢复默认
 vertical-tabs-subtitle-empty-hint = 从下方拖拽标签到此处
@@ -189,7 +189,5 @@ vertical-tabs-subtitle-field-date = 日期
 vertical-tabs-subtitle-field-journal-short = 刊名简称
 vertical-tabs-subtitle-field-journal = 期刊名
 vertical-tabs-subtitle-field-short-title = 短标题
-vertical-tabs-subtitle-notes-heading = 注释：
 vertical-tabs-subtitle-note-venue = 期刊名标签同时适配会议论文、学位论文。会议论文显示会议名称，学位论文显示大学名称。
-vertical-tabs-subtitle-note-journal-short = 若刊名简称为空，自动返回到完整期刊名。
-vertical-tabs-subtitle-note-short-title = 若短标题为空，则不显示。
+vertical-tabs-subtitle-note-fields = 若刊名简称为空，自动返回到完整期刊名；若短标题为空，则不显示。

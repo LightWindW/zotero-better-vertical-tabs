@@ -3,6 +3,7 @@ import {
   clearItemInfoCache,
   clearItemTypeImageSrc,
   computeItemInfo,
+  getCreatorFamilyName,
   getItemInfo,
   getItemTypeImageSrc,
   invalidateItemInfo,
@@ -236,6 +237,117 @@ describe("itemInfoCache", function () {
         },
       };
       assert.equal(getItemTypeImageSrc("bogusType"), "");
+    });
+  });
+
+  describe("getCreatorFamilyName", function () {
+    it("uses lastName directly in two-field mode", function () {
+      assert.equal(
+        getCreatorFamilyName({
+          lastName: "Zhang",
+          firstName: "San",
+          fieldMode: 0,
+        }),
+        "Zhang",
+      );
+    });
+
+    it("takes the last word for single-field western names", function () {
+      assert.equal(
+        getCreatorFamilyName({
+          lastName: "John Smith",
+          firstName: "",
+          fieldMode: 1,
+        }),
+        "Smith",
+      );
+      assert.equal(
+        getCreatorFamilyName({
+          lastName: "Jean van der Waals",
+          firstName: "",
+          fieldMode: 1,
+        }),
+        "Waals",
+      );
+    });
+
+    it("supports the Last, First single-field form", function () {
+      assert.equal(
+        getCreatorFamilyName({
+          lastName: "Smith, John",
+          firstName: "",
+          fieldMode: 1,
+        }),
+        "Smith",
+      );
+    });
+
+    it("takes the first character for single-field Chinese names", function () {
+      assert.equal(
+        getCreatorFamilyName({
+          lastName: "张三",
+          firstName: "",
+          fieldMode: 1,
+        }),
+        "张",
+      );
+      // 按用户约定：中文单栏默认第一个字为姓（复姓也取第一字）。
+      assert.equal(
+        getCreatorFamilyName({
+          lastName: "欧阳修",
+          firstName: "",
+          fieldMode: 1,
+        }),
+        "欧",
+      );
+    });
+
+    it("takes the first segment for CJK names containing a space", function () {
+      assert.equal(
+        getCreatorFamilyName({
+          lastName: "山田 太郎",
+          firstName: "",
+          fieldMode: 1,
+        }),
+        "山田",
+      );
+      assert.equal(
+        getCreatorFamilyName({
+          lastName: "张 三",
+          firstName: "",
+          fieldMode: 1,
+        }),
+        "张",
+      );
+    });
+
+    it("falls back to the whole single-word name", function () {
+      assert.equal(
+        getCreatorFamilyName({
+          lastName: "Plato",
+          firstName: "",
+          fieldMode: 1,
+        }),
+        "Plato",
+      );
+    });
+
+    it("returns empty string when lastName is empty", function () {
+      assert.equal(
+        getCreatorFamilyName({ lastName: "", firstName: "San", fieldMode: 1 }),
+        "",
+      );
+      assert.equal(
+        getCreatorFamilyName({ lastName: "", firstName: "", fieldMode: 0 }),
+        "",
+      );
+    });
+
+    it("is used for the firstAuthorLastName subtitle field", function () {
+      const { item } = fakeItem(6, {}, [
+        { lastName: "John Smith", firstName: "", fieldMode: 1 },
+      ]);
+      assert.equal(computeItemInfo(item).firstAuthorLastName, "Smith");
     });
   });
 });

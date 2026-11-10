@@ -238,11 +238,20 @@
   color: var(--fill-tertiary);
 }
 
+/* 远程数据状态提示（loading / offline），位于 body 顶部 */
+.vt-prefs-changelog-remote-hint {
+  padding: 8px 16px 2px;
+  color: var(--fill-tertiary);
+  font-size: 11px;
+  font-style: italic;
+}
+
 .vt-prefs-changelog-version {
   border-top: 1px solid var(--fill-quinary);
 }
 
-.vt-prefs-changelog-body > .vt-prefs-changelog-version:first-child {
+.vt-prefs-changelog-body > .vt-prefs-changelog-version:first-child,
+.vt-prefs-changelog-remote-hint[hidden] + .vt-prefs-changelog-version {
   border-top: 0;
 }
 
@@ -278,6 +287,21 @@
   color: var(--accent-green);
   font-size: 11px;
   line-height: 1.5;
+}
+
+/* 已发布但用户尚未升级的版本：版本号标红 + 「（待更新）」徽标 */
+.vt-prefs-changelog-version.is-pending .vt-prefs-changelog-version-num {
+  color: var(--accent-red);
+}
+
+.vt-prefs-changelog-pending {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-red) 14%, transparent);
+  color: var(--accent-red);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: nowrap;
 }
 
 .vt-prefs-changelog-date {
@@ -650,7 +674,8 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px 16px 16px;
+  /* 整体高度比上一版略低：收上下内边距（标题条/chip 尺寸不变）。 */
+  padding: 10px 16px 12px;
   border: 1px solid transparent;
   border-radius: 8px;
   background: var(--fill-quinary);
@@ -966,12 +991,6 @@
   color: var(--fill-secondary);
   font-size: 12px;
   line-height: 1.6;
-}
-
-.vt-prefs-subtitle-notes-heading {
-  margin-bottom: 2px;
-  color: var(--fill-secondary);
-  font-weight: 600;
 }
 
 .vt-prefs-subtitle-note {

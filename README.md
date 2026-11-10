@@ -93,7 +93,15 @@ To prevent tab clutter from long-unread tabs, the plugin can automatically close
 - A configurable day threshold — tabs unread beyond this limit are automatically closed.
 - Tabs inside categories are protected from automatic closure by default because they are commonly used and categories can be collapsed. This protection can be disabled.
 
-## 6️⃣ Preferences
+## 6️⃣ Custom Subtitles
+
+Click **"Custom Subtitle"** in Preferences to customize the subtitle displayed below each tab title. Apply and reorder tags by dragging — intuitive and convenient.
+
+<img src=".\doc\figs\custom-subtitle.jpg" width="700" />
+
+The current default subtitle is **"Last read time" + "First author (surname)" + "Journal abbreviation"**.
+
+## 7️⃣ Preferences
 
 The plugin provides the following preferences (`Edit` → `Preferences` → `Better Vertical Tabs`):
 

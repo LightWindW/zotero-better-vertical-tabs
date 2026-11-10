@@ -93,7 +93,15 @@ Para evitar la acumulación de pestañas no leídas durante mucho tiempo, el com
 - Se puede configurar un umbral de días — las pestañas no leídas más allá de este límite se cierran automáticamente.
 - Las pestañas dentro de categorías están protegidas contra el cierre automático de forma predeterminada, porque se usan con frecuencia y las categorías se pueden contraer. Esta protección se puede desactivar.
 
-## 6️⃣ Preferencias
+## 6️⃣ Subtítulos personalizados
+
+Haga clic en **«Subtítulo personalizado»** en Preferencias para personalizar el subtítulo que se muestra bajo el título de cada pestaña. Aplique y reordene las etiquetas arrastrándolas: intuitivo y cómodo.
+
+<img src=".\figs\custom-subtitle.jpg" width="700" />
+
+El subtítulo predeterminado actual es **«Última lectura» + «Primer autor (apellido)» + «Abreviatura de la revista»**.
+
+## 7️⃣ Preferencias
 
 El complemento ofrece las siguientes preferencias (`Editar` → `Preferencias` → `Better Vertical Tabs`):
 

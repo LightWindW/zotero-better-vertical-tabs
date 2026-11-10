@@ -51,7 +51,7 @@ export const DEFAULT_SUBTITLE_FIELDS: SubtitleFieldId[] = [
 ];
 
 /** 副标题最多显示的标签数。 */
-export const MAX_SUBTITLE_FIELDS = 3;
+export const MAX_SUBTITLE_FIELDS = 4;
 
 const SUBTITLE_FIELDS_PREF = "verticalTabs.subtitleFields";
 

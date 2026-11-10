@@ -1,6 +1,30 @@
 {
   "versions": [
     {
+      "version": "1.2.63",
+      "entries": [
+        {
+          "type": "paragraph",
+          "zh": "新增**自定义副标题**功能，在插件首选项->自定义选项内点击自定义副标题按钮进入自定义设置。",
+          "en": "Added **custom tab subtitles**. Go to the plugin preferences → Custom options and click the “Custom subtitle” button to open the settings.",
+          "es": "Añadido el **subtítulo de pestaña personalizado**. Ve a las preferencias del complemento → Opciones personalizadas y haz clic en el botón «Subtítulo personalizado» para abrir la configuración."
+        },
+        {
+          "type": "image",
+          "file": "custom-subtitle.jpg",
+          "zh": "预览图说明",
+          "en": "Example of a custom preview image",
+          "es": "Ejemplo de imagen de vista previa personalizada"
+        },
+        {
+          "type": "paragraph",
+          "zh": "目前默认的副标题已经修改为上次阅读时间+第一作者（姓）+刊名简称。",
+          "en": "The default subtitle is now: last read time + first author (surname) + journal abbreviation.",
+          "es": "El subtítulo predeterminado ahora es: última lectura + primer autor (apellido) + abreviatura de la revista."
+        }
+      ]
+    },
+    {
       "version": "1.2.62",
       "entries": [
         {

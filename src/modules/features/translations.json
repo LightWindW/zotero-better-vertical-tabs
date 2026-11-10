@@ -38,5 +38,13 @@
   "3. 新增三中侧边栏展开模式。在\"更多\"->里可以选择三种展开模式，分别是\"自动展开\"、“手动展开”、“精简模式”": {
     "en": "3. Added three sidebar expand modes. In the More menu you can choose between “Auto expand”, “Manual expand”, and “Minimal”.",
     "es": "3. Añadidos tres modos de expansión de la barra lateral. En el menú Más puedes elegir entre «Expansión automática», «Expansión manual» y «Minimalista»."
+  },
+  "新增**自定义副标题**功能，在插件首选项->自定义选项内点击自定义副标题按钮进入自定义设置。": {
+    "en": "Added **custom tab subtitles**. Go to the plugin preferences → Custom options and click the “Custom subtitle” button to open the settings.",
+    "es": "Añadido el **subtítulo de pestaña personalizado**. Ve a las preferencias del complemento → Opciones personalizadas y haz clic en el botón «Subtítulo personalizado» para abrir la configuración."
+  },
+  "目前默认的副标题已经修改为上次阅读时间+第一作者（姓）+刊名简称。": {
+    "en": "The default subtitle is now: last read time + first author (surname) + journal abbreviation.",
+    "es": "El subtítulo predeterminado ahora es: última lectura + primer autor (apellido) + abreviatura de la revista."
   }
 }

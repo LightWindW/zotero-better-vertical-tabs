@@ -1,7 +1,7 @@
 {
   "name": "Zotero-Better-Vertical-Tabs",
   "type": "module",
-  "version": "1.2.62",
+  "version": "1.2.63",
   "description": "Light vertical tabs, clear and fluent",
   "config": {
     "addonName": "Better Vertical Tabs",
@@ -29,6 +29,8 @@
     "test": "zotero-plugin test",
     "features:sync": "node scripts/sync-features.mjs",
     "features:check": "node scripts/sync-features.mjs --check",
+    "changelog:sync": "node scripts/sync-changelog.mjs",
+    "changelog:check": "node scripts/sync-changelog.mjs --check",
     "update-deps": "npm update --save"
   },
   "dependencies": {

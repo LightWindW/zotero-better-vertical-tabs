@@ -12,8 +12,11 @@ import {
   getChangelogVersions,
   getEntryText,
   isCurrentVersion,
+  isPendingVersion,
+  sortChangelogVersions,
   type ChangelogVersion,
 } from "./changelogData";
+import { loadRemoteChangelog } from "./changelogRemote";
 import { RELEASES_PAGE, getCachedStatus } from "../update/versionInfo";
 import {
   appendPrefsIcon,
@@ -32,6 +35,9 @@ import {
 
 const BEAK_MIN_MARGIN = 14;
 const BEAK_WIDTH = 11;
+
+/** 最近一次打开的面板标记：旧请求返回时据此丢弃结果。 */
+let latestPanelToken = 0;
 
 export interface ChangelogPanelOptions {
   doc: Document;
@@ -92,6 +98,7 @@ function buildPanel(
   l10n: PrefsL10n,
   requestClose: () => void,
 ): HTMLElement {
+  const panelToken = ++latestPanelToken;
   const panel = createPrefsElement(doc, "div", "vt-prefs-changelog-panel");
   panel.setAttribute("role", "dialog");
   panel.setAttribute("aria-label", l10n.get("pref-changelog-title"));
@@ -112,16 +119,15 @@ function buildPanel(
   head.append(title, closeBtn);
 
   const body = createPrefsElement(doc, "div", "vt-prefs-changelog-body");
-  const versions = getChangelogVersions();
-  if (versions.length === 0) {
-    const empty = createPrefsElement(doc, "div", "vt-prefs-changelog-empty");
-    empty.textContent = l10n.get("pref-changelog-empty");
-    body.appendChild(empty);
-  } else {
-    for (const version of versions) {
-      body.appendChild(buildVersionSection(doc, l10n, version));
-    }
-  }
+  // 先用内置数据立即渲染（离线也完整可用）；随后异步拉远程，成功后整块替换。
+  const remoteHint = createPrefsElement(
+    doc,
+    "div",
+    "vt-prefs-changelog-remote-hint",
+  );
+  remoteHint.textContent = l10n.get("pref-changelog-loading");
+  body.appendChild(remoteHint);
+  renderVersions(doc, l10n, body, getChangelogVersions());
 
   const footer = createPrefsElement(doc, "div", "vt-prefs-changelog-footer");
   const synced = createPrefsElement(doc, "span", "vt-prefs-changelog-synced");
@@ -157,7 +163,61 @@ function buildPanel(
     });
   }
 
+  void refreshVersionsFromRemote(doc, l10n, body, remoteHint, panelToken);
+
   return panel;
+}
+
+/** 版本列表整块渲染：清掉旧版本/空态节点，保留 body 顶部的远程提示。 */
+function renderVersions(
+  doc: Document,
+  l10n: PrefsL10n,
+  body: HTMLElement,
+  versions: ChangelogVersion[],
+): void {
+  for (const child of Array.from(body.children)) {
+    if (
+      child.classList.contains("vt-prefs-changelog-version") ||
+      child.classList.contains("vt-prefs-changelog-empty")
+    ) {
+      child.remove();
+    }
+  }
+
+  const sorted = sortChangelogVersions(versions);
+  if (sorted.length === 0) {
+    const empty = createPrefsElement(doc, "div", "vt-prefs-changelog-empty");
+    empty.textContent = l10n.get("pref-changelog-empty");
+    body.appendChild(empty);
+    return;
+  }
+  for (const version of sorted) {
+    body.appendChild(buildVersionSection(doc, l10n, version));
+  }
+}
+
+/**
+ * 异步拉远程数据并整块替换版本列表。关闭/重开面板后，旧请求的结果直接丢弃
+ * （面板已断开，或已有更新的 panel token），避免写进已销毁的 DOM。
+ */
+async function refreshVersionsFromRemote(
+  doc: Document,
+  l10n: PrefsL10n,
+  body: HTMLElement,
+  remoteHint: HTMLElement,
+  panelToken: number,
+): Promise<void> {
+  let versions: ChangelogVersion[];
+  try {
+    versions = await loadRemoteChangelog();
+  } catch {
+    if (panelToken !== latestPanelToken || !remoteHint.isConnected) return;
+    remoteHint.textContent = l10n.get("pref-changelog-offline");
+    return;
+  }
+  if (panelToken !== latestPanelToken || !body.isConnected) return;
+  renderVersions(doc, l10n, body, versions);
+  remoteHint.hidden = true;
 }
 
 function buildVersionSection(
@@ -166,11 +226,13 @@ function buildVersionSection(
   version: ChangelogVersion,
 ): HTMLElement {
   const current = isCurrentVersion(version.version);
+  const pending = isPendingVersion(version.version);
   const section = createPrefsElement(
     doc,
     "section",
     "vt-prefs-changelog-version",
   );
+  if (pending) section.classList.add("is-pending");
 
   const head = createPrefsElement(
     doc,
@@ -185,6 +247,12 @@ function buildVersionSection(
   if (current) {
     const badge = createPrefsElement(doc, "span", "vt-prefs-changelog-current");
     badge.textContent = l10n.get("pref-changelog-current");
+    head.appendChild(badge);
+  }
+
+  if (pending) {
+    const badge = createPrefsElement(doc, "span", "vt-prefs-changelog-pending");
+    badge.textContent = l10n.get("pref-changelog-pending");
     head.appendChild(badge);
   }
 

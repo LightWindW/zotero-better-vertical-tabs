@@ -168,14 +168,48 @@ import {
 import { getPopupStyleSheet } from "./popupStyleUtils";
 import { promptCategoryName } from "../ui/categoryNameDialog";
 import { promptEditExtra } from "../ui/editExtraDialog";
+import {
+  isDragRenderLocked,
+  markRenderDeferred,
+  takeDeferredRender,
+} from "./dragRenderGate";
 
 const DROP_RENDER_PENDING_KEY = "__vtDropRenderPending";
 const DROP_RENDER_TIMEOUT_KEY = "__vtDropRenderPendingTimeout";
 const DROP_RENDER_FALLBACK_MS = 500;
 const SMOOTH_COLLAPSE_KEY = "__vtSmoothCollapseCategoryId";
 const RENDER_SCHEDULED_KEY = "__vtRenderScheduled";
+const RENDER_FRAME_KEY = "__vtRenderFrame";
 const RENDER_HOLD_KEY = "__vtRenderHoldCount";
 const RENDER_HELD_KEY = "__vtRenderHeldPending";
+
+/**
+ * A render coalesced into a rAF must not fire while a drag is in progress: it
+ * would rebuild the rows from data, dropping the collapsed drag-source class
+ * (the dragged row pops back at its original position). Cancel it and park it
+ * for the drag's dragend instead.
+ */
+function deferScheduledRenderWhileDragging(doc: Document): void {
+  const win = doc.defaultView;
+  const frame = (doc as any)[RENDER_FRAME_KEY] as number | undefined;
+  if (frame !== undefined && win) {
+    win.cancelAnimationFrame(frame);
+    delete (doc as any)[RENDER_FRAME_KEY];
+  }
+  if ((doc as any)[RENDER_SCHEDULED_KEY]) {
+    delete (doc as any)[RENDER_SCHEDULED_KEY];
+    markRenderDeferred(doc);
+  }
+}
+
+/** Replay the render parked while the drag was active (once). */
+function flushDeferredRender(doc: Document): void {
+  if (!takeDeferredRender(doc)) return;
+  const scheduleRender = (doc as any).__verticalTabsRenderHandler as
+    | (() => void)
+    | undefined;
+  scheduleRender?.();
+}
 
 /**
  * Hold/release re-renders around a multi-step operation (category import):
@@ -1076,6 +1110,10 @@ function createItemElement(
     // container is the one the row started in, without relying on the
     // collapsed class (the first dragover can arrive before the collapse rAF).
     setDragSourceCategoryId(doc, categoryId || "__uncategorized__");
+    // No re-render may land mid-drag: it would recreate the row and make it
+    // pop back at its original position. A render already coalesced into a rAF
+    // (e.g. the startup one on the first drag) is cancelled and replayed later.
+    deferScheduledRenderWhileDragging(doc);
 
     // Multi mode: dragging a SELECTED tab while the selection has 2+ entries.
     const multiIds =
@@ -1161,6 +1199,9 @@ function createItemElement(
       clearAllItemDropIndicators(doc);
       clearDropPreview(doc);
     }
+    // The row DOM was frozen for the whole drag; replay whatever render was
+    // parked meanwhile (drop renders included).
+    flushDeferredRender(doc);
   });
 
   // Click to switch to this tab — unless a selection modifier is held:
@@ -1258,6 +1299,9 @@ function createCategoryElement(
     // wrapper out so the original slot disappears. Persisted state is left
     // untouched; the pre-drag collapsed flag drives the release animation.
     startCategoryDragSource(doc, wrapper, category.id);
+    // Freeze the row DOM while the category reorder drag is active (same
+    // rationale as the item drag: a rebuild kills the drag previews).
+    deferScheduledRenderWhileDragging(doc);
   });
 
   header.addEventListener("dragend", () => {
@@ -1269,6 +1313,7 @@ function createCategoryElement(
     const dropped = isCategoryDragDropped(doc);
     endCategoryDragSource(doc);
     if (!dropped) clearCategoryGapPreview(doc, true);
+    flushDeferredRender(doc);
   });
 
   wrapper.addEventListener("dragover", (e: DragEvent) => {
@@ -2420,6 +2465,14 @@ export function subscribeToRenderEvents(
     const container = getCategoriesContainer(doc);
     if (!container) return;
     const data = await getData();
+    // The data load is async: a drag may have STARTED while it was in flight.
+    // Committing the rebuild now would recreate the rows and make the dragged
+    // row reappear at its original position (the first-drag-after-startup
+    // case). Park the render for the drag's dragend instead.
+    if (isDragRenderLocked(doc)) {
+      markRenderDeferred(doc);
+      return;
+    }
     let pdfs = getPDFs();
     // Filter by search query (matches title or publication info)
     if (_searchQuery) {
@@ -2512,6 +2565,14 @@ export function subscribeToRenderEvents(
   // several pdfs-changed/data-changed events in the same tick, and each used
   // to trigger its own full rebuild.
   const scheduleRender = () => {
+    // Freeze the row DOM for the duration of a drag: a rebuild would recreate
+    // the rows without the collapsed drag-source class (and without the drag
+    // previews), making the dragged row reappear at its original position. Park
+    // the render and replay it after dragend.
+    if (isDragRenderLocked(doc)) {
+      markRenderDeferred(doc);
+      return;
+    }
     // Renders held by holdRenders (e.g. during a category import) coalesce
     // into a single render on release.
     if ((doc as any)[RENDER_HOLD_KEY]) {
@@ -2523,10 +2584,11 @@ export function subscribeToRenderEvents(
     const win = doc.defaultView;
     const run = () => {
       delete (doc as any)[RENDER_SCHEDULED_KEY];
+      delete (doc as any)[RENDER_FRAME_KEY];
       void renderOnce();
     };
     if (win) {
-      win.requestAnimationFrame(run);
+      (doc as any)[RENDER_FRAME_KEY] = win.requestAnimationFrame(run);
     } else {
       run();
     }
@@ -2653,8 +2715,10 @@ export function unsubscribeFromRenderEvents(doc: Document): void {
     delete (doc as any).__verticalTabsReaderRestoredHandler;
   }
   delete (doc as any)[RENDER_SCHEDULED_KEY];
+  delete (doc as any)[RENDER_FRAME_KEY];
   delete (doc as any)[RENDER_HOLD_KEY];
   delete (doc as any)[RENDER_HELD_KEY];
+  takeDeferredRender(doc);
   _searchQuery = "";
 }
 

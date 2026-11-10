@@ -30,6 +30,7 @@
 
 import { getPopupColors, getPopupStyleSheet } from "../render/popupStyleUtils";
 import { isDarkMode } from "../render/colorUtils";
+import { resolveLiveCardTarget } from "./cardTargetResolver";
 
 export const HOVER_CARD_ID = "vertical-tabs-hover-card";
 export type HoverCardOwner = "item" | "category";
@@ -244,6 +245,11 @@ export function moveCardToTarget(
 ): void {
   const card = doc.getElementById(HOVER_CARD_ID) as HTMLElement | null;
   if (!card || card.style.display !== "block") return;
+  // A re-render can detach the row a delayed caller captured: retarget to the
+  // live row instead of positioning against a zero-rect dead element.
+  const live = resolveLiveCardTarget(target);
+  if (!live) return;
+  _currentTarget = live;
   const transition =
     card.style.transition === "none"
       ? card.dataset.vtCardTransition || ""
@@ -252,7 +258,7 @@ export function moveCardToTarget(
   const rect = card.getBoundingClientRect();
   positionCard(
     card,
-    target,
+    live,
     { width: rect.width, height: rect.height },
     opts,
     false,
@@ -273,6 +279,14 @@ export async function showCard(
   opts: CardShowOptions,
   render: (cardContent: HTMLElement) => void | Promise<void>,
 ): Promise<void> {
+  // The caller may have captured the row before a re-render replaced it (the
+  // common case right after a drag-drop re-render). Never position a card
+  // against a detached/zero-rect element — that pinned it to the top-left.
+  const liveTarget = resolveLiveCardTarget(target);
+  if (!liveTarget) {
+    if (getCardOwner() === owner) hideCard(doc, owner, 0);
+    return;
+  }
   const showSequence = ++_showSequence;
   const card = getCardEl(doc);
   // Cancel any pending fade-out/display-none — a show during the fade-out
@@ -280,7 +294,7 @@ export async function showCard(
   cancelHide();
   const isSwitch = card.style.display === "block";
   _owner = owner;
-  _currentTarget = target;
+  _currentTarget = liveTarget;
   applyCardTheme(doc);
 
   const originalTransition =
@@ -325,7 +339,7 @@ export async function showCard(
     // Calculate the target position while the card has its final size. This
     // matters for figure cards because their title anchor is at the bottom
     // of the image and its offset changes with the card height.
-    const toPosition = positionCard(card, target, size, opts, false);
+    const toPosition = positionCard(card, liveTarget, size, opts, false);
 
     // Restore the current rendered geometry, commit it, then transition to
     // the already-calculated target size and position in one frame.
@@ -359,7 +373,7 @@ export async function showCard(
   }
   const size = measureTargetSize(card, opts);
   card.style.height = `${size.height}px`;
-  positionCard(card, target, size, opts, true);
+  positionCard(card, liveTarget, size, opts, true);
   void card.offsetWidth;
   card.style.transition = originalTransition;
   card.style.opacity = "1";

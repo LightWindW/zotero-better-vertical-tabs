@@ -21,7 +21,7 @@ export interface ItemInfo {
   university: string;
   extra: string;
   tags: string[];
-  /** 副标题字段：第一作者姓氏（fieldMode=1 时即完整姓名）。 */
+  /** 副标题字段：第一作者姓氏（双栏=lastName；单栏按中/外文规则推断，见 getCreatorFamilyName）。 */
   firstAuthorLastName: string;
   /** 副标题字段：第一作者（族名在前，与 authors 的格式一致）。 */
   firstAuthor: string;
@@ -74,6 +74,38 @@ function formatCreatorName(creator: {
   return `${creator.lastName} ${creator.firstName}`.trim();
 }
 
+/** 中日韩汉字（基本区 + 扩展 A/F 区），用于区分「中文名」和「外文名」。 */
+const CJK_RE = /[\u3400-\u9FFF\uF900-\uFAFF]/;
+
+/**
+ * 取 creator 的「姓」。
+ *
+ * Zotero 作者有两种输入模式：
+ * - 双栏（firstName + lastName，fieldMode=0）：`lastName` 就是姓；
+ * - 单栏（fieldMode=1，完整姓名都存在 `lastName`）：需要从整串推断——
+ *   - 中文/日韩汉字名：默认**第一个字**是姓（有空格时取第一段，如「山田 太郎」→ 山田）；
+ *   - 外文名：默认**最后一个空格分隔词**是姓（如「John Smith」→ Smith）；
+ *     兼容「Last, First」写法（取逗号前）。
+ */
+export function getCreatorFamilyName(creator: {
+  lastName: string;
+  firstName: string;
+  fieldMode?: number;
+}): string {
+  const lastName = (creator.lastName || "").trim();
+  if (creator.fieldMode !== 1) return lastName;
+  if (!lastName) return "";
+  const tokens = lastName.split(/\s+/).filter(Boolean);
+  if (CJK_RE.test(lastName)) {
+    return tokens.length > 1 ? tokens[0] : (Array.from(lastName)[0] ?? "");
+  }
+  if (lastName.includes(",")) {
+    const beforeComma = lastName.split(",")[0].trim();
+    if (beforeComma) return beforeComma;
+  }
+  return tokens.length ? tokens[tokens.length - 1] : "";
+}
+
 /** Pure computation of a row's display fields from a Zotero item. */
 export function computeItemInfo(item: Zotero.Item): ItemInfo {
   const title = (item.getField("title") as string) || "Untitled";
@@ -86,7 +118,9 @@ export function computeItemInfo(item: Zotero.Item): ItemInfo {
   const authorsLabel = creators.length > 3 ? `${authors} et al.` : authors;
 
   const firstCreator = creators[0];
-  const firstAuthorLastName = firstCreator?.lastName ?? "";
+  const firstAuthorLastName = firstCreator
+    ? getCreatorFamilyName(firstCreator)
+    : "";
   const firstAuthor = firstCreator ? formatCreatorName(firstCreator) : "";
   const allAuthors = creators
     .map((creator) => formatCreatorName(creator))
